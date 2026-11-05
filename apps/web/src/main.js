@@ -1,5 +1,6 @@
 import './styles.css';
 import { PixiStageRenderer } from './renderer.js';
+import { coalescedPointerEvents, normalizePointerPressure, pressureToWidth, stabilizePoint } from './brush/brush-engine.js';
 import { expandRegionMask, findConnectedRegion } from './fill/flood-fill.js';
 import { animateLineStrokes, lineBoilPhase } from './line/line-boil.js';
 import { activeFrame, addFrame, createTimeline, deleteFrame, frameAtTime, getOnionSkin, selectFrame, updateFrameCels, updateFrameStrokes } from './animation/timeline.js';
@@ -23,6 +24,9 @@ let size = 7;
 let down = false;
 let last = null;
 let strokeCursor = null;
+let lastPressure = 0.5;
+let pressureEnabled = true;
+let brushSmoothing = 0.28;
 let lineStartPoint = null;
 let drawingPoints = null;
 let movingStroke = false;
@@ -260,12 +264,12 @@ function position(event) {
   };
 }
 
-function withBrushContext(draw) {
+function withBrushContext(draw, lineWidth = size) {
   const context = layers[active].canvas.getContext('2d');
   context.save();
   context.lineCap = 'round';
   context.lineJoin = 'round';
-  context.lineWidth = size;
+  context.lineWidth = lineWidth;
   context.globalCompositeOperation = tool === 'eraser' ? 'destination-out' : 'source-over';
   context.strokeStyle = color;
   context.beginPath();
@@ -274,18 +278,18 @@ function withBrushContext(draw) {
   context.restore();
 }
 
-function stroke(from, to) {
+function stroke(from, to, lineWidth = size) {
   withBrushContext(context => {
     context.moveTo(from.x, from.y);
     context.lineTo(to.x, to.y);
-  });
+  }, lineWidth);
 }
 
-function strokeCurve(from, control, to) {
+function strokeCurve(from, control, to, lineWidth = size) {
   withBrushContext(context => {
     context.moveTo(from.x, from.y);
     context.quadraticCurveTo(control.x, control.y, to.x, to.y);
-  });
+  }, lineWidth);
 }
 
 function parseHex(hex) {
@@ -548,6 +552,13 @@ function bindControls() {
     size = Number(event.target.value);
     document.getElementById('sizeOut').value = size + 'px';
   };
+  document.getElementById('pressureEnabled').onchange = event => {
+    pressureEnabled = event.target.checked;
+  };
+  document.getElementById('brushSmoothing').oninput = event => {
+    brushSmoothing = Number(event.target.value) / 100;
+    document.getElementById('brushSmoothingOut').value = event.target.value + '%';
+  };
   document.getElementById('tolerance').oninput = event => {
     document.getElementById('tolOut').value = event.target.value;
   };
@@ -665,9 +676,13 @@ function bindCanvasEvents() {
     down = true;
     lineStartPoint = last = point;
     strokeCursor = point;
+    lastPressure = normalizePointerPressure(event, pressureEnabled);
     save(layers[active]);
     if (tool === 'pen' || tool === 'eraser') {
-      stroke(point, { x: point.x + 0.01, y: point.y + 0.01 });
+      const initialWidth = event.pointerType === 'pen' && pressureEnabled
+        ? pressureToWidth(size, lastPressure)
+        : size;
+      stroke(point, { x: point.x + 0.01, y: point.y + 0.01 }, initialWidth);
       render([active]);
     }
   });
@@ -703,13 +718,27 @@ function bindCanvasEvents() {
 
     if (tool === 'line') {
       renderer.previewLine(lineStartPoint, point, Number.parseInt(color.slice(1), 16), size);
-    } else if (tool === 'pen' || tool === 'eraser') {
-      const midpoint = { x: (last.x + point.x) / 2, y: (last.y + point.y) / 2 };
-      strokeCurve(strokeCursor || last, last, midpoint);
-      strokeCursor = midpoint;
+      return;
+    }
+
+    if (tool === 'pen' || tool === 'eraser') {
+      const samples = coalescedPointerEvents(event);
+      for (const sample of samples) {
+        const rawPoint = position(sample);
+        const smoothPoint = stabilizePoint(last, rawPoint, brushSmoothing);
+        const pressure = normalizePointerPressure(sample, pressureEnabled);
+        const midpoint = { x: (last.x + smoothPoint.x) / 2, y: (last.y + smoothPoint.y) / 2 };
+        const averagePressure = (lastPressure + pressure) / 2;
+        const width = sample.pointerType === 'pen' && pressureEnabled
+          ? pressureToWidth(size, averagePressure)
+          : size;
+        strokeCurve(strokeCursor || last, last, midpoint, width);
+        strokeCursor = midpoint;
+        last = smoothPoint;
+        lastPressure = pressure;
+      }
       render([active]);
     }
-    last = point;
   });
 
   const end = event => {
@@ -751,10 +780,16 @@ function bindCanvasEvents() {
       renderer.clearPreview();
       render([active]);
     } else if (tool === 'pen' || tool === 'eraser') {
-      strokeCurve(strokeCursor || last, last, point);
+      const endPressure = normalizePointerPressure(event, pressureEnabled);
+      const averagePressure = (lastPressure + endPressure) / 2;
+      const width = event.pointerType === 'pen' && pressureEnabled
+        ? pressureToWidth(size, averagePressure)
+        : size;
+      strokeCurve(strokeCursor || last, last, point, width);
       render([active]);
     }
     strokeCursor = null;
+    lastPressure = 0.5;
     down = false;
   };
 
