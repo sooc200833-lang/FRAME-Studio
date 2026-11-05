@@ -414,7 +414,7 @@ function drawTimeline() {
     const button = document.createElement('button');
     button.className = 'frame-cell' + (frame.id === timeline.activeFrameId ? ' active' : '');
     button.textContent = String(index + 1).padStart(2, '0');
-    button.title = `프레임 ${index + 1} · ${frame.strokes.length}개 선`;
+    button.title = `프레임 ${index + 1} · ${Math.round(frame.durationMs)}ms · ${frame.strokes.length}개 선`;
     button.onclick = () => loadTimelineFrame(frame.id);
     strip.append(button);
   });
