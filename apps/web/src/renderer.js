@@ -52,7 +52,7 @@ export class PixiStageRenderer {
     graphics.stroke({ color, width, alpha, cap: 'round', join: 'round' });
   }
 
-  sync(layers, dirtyIndices = [], strokes = [], selectedStrokeId = null, onionSkin = [], selectionRect = null) {
+  sync(layers, dirtyIndices = [], strokes = [], selectedStrokeId = null, onionSkin = [], selectionRect = null, selectionPolygon = null) {
     if (!this.app) return;
 
     // Rebuild vector overlays after paint-layer sprites and before the live preview.
@@ -138,6 +138,26 @@ export class PixiStageRenderer {
       drawDash(left, bottom, left, top);
       outline.stroke({ color: 0x268cff, width: 1.5, alpha: 0.95 });
       outline.rect(right - 5, bottom - 5, 10, 10).fill(0xffffff).stroke({ color: 0x268cff, width: 1.5 });
+      this.app.stage.addChildAt(outline, this.app.stage.children.length - 1);
+      this.strokeGraphics.push(outline);
+    }
+
+    if (selectionPolygon && selectionPolygon.length > 2) {
+      const outline = new Graphics();
+      const drawDash = (from, to) => {
+        const length = Math.hypot(to.x - from.x, to.y - from.y);
+        const steps = Math.max(1, Math.ceil(length / 9));
+        for (let index = 0; index < steps; index += 2) {
+          const start = index / steps;
+          const end = Math.min(1, (index + 1) / steps);
+          outline.moveTo(from.x + (to.x - from.x) * start, from.y + (to.y - from.y) * start);
+          outline.lineTo(from.x + (to.x - from.x) * end, from.y + (to.y - from.y) * end);
+        }
+      };
+      for (let index = 0; index < selectionPolygon.length; index++) {
+        drawDash(selectionPolygon[index], selectionPolygon[(index + 1) % selectionPolygon.length]);
+      }
+      outline.stroke({ color: 0x268cff, width: 1.7, alpha: 0.98 });
       this.app.stage.addChildAt(outline, this.app.stage.children.length - 1);
       this.strokeGraphics.push(outline);
     }
