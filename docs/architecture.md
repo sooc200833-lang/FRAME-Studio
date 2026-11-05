@@ -72,3 +72,10 @@ The web prototype includes raster drawing, connected-region fill, PixiJS renderi
 - Folder groups provide visibility, opacity, and blend-mode controls; layers can be moved into or out of the selected folder without rasterizing their content.
 - Effective group visibility, opacity, and blend settings are applied to PixiJS presentation and the raster composite used for fill and PNG export.
 - Current group implementation is a flat folder list. Isolated group compositing, nested folders, and per-frame group metadata are not implemented yet.
+
+
+## Raster selection and transform
+- The marquee tool stores a rectangular selection in document coordinates and renders a dashed boundary plus a bottom-right resize handle in the PixiJS overlay.
+- Dragging inside the boundary moves the selected raster pixels; dragging the handle scales the selected pixel region. The original pixels are extracted before clearing and redrawing, avoiding overlap corruption.
+- Selection geometry helpers are isolated in `apps/web/src/selection/selection.js` and covered by Node tests.
+- The current tool operates on the active raster layer only. Freeform/lasso selection, transform rotation, multi-layer transforms, and vector selection remain separate capabilities.
