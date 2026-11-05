@@ -732,9 +732,12 @@ function bindCanvasEvents() {
         });
         last = smoothPoint;
       }
+      const profile = currentBrushPreset();
       const outline = createBrushOutline(strokeSamples, {
         size, stylus: strokeIsStylus, pressureEnabled,
-        smoothing: 0.58, streamline: brushSmoothing,
+        preset: brushPreset,
+        smoothing: profile.smoothing,
+        streamline: brushSmoothing,
         complete: false,
       });
       renderer.previewPolygon(outline, tool === 'eraser' ? 0xf4f0e8 : Number.parseInt(color.slice(1), 16), tool === 'eraser' ? 0.9 : currentBrushPreset().opacity);
