@@ -2,7 +2,7 @@
 
 ## Status
 
-This document defines the first data-model increment for non-destructive selection transforms. The affine math module and its unit tests are implemented independently; selection commits are **not yet wired** to this model.
+The affine model, transform-stack compositor, and per-frame transform metadata are implemented. The renderer and export/fill composite now read a separate presentation canvas, and frame switching hydrates each transform source. Selection commits are **not yet wired** to append transform records; existing selection gestures remain destructive until that integration lands.
 
 ## Why the current workflow needs a model change
 
@@ -47,4 +47,17 @@ Operations are replayed in order over the layer's original raster canvas. Each o
 
 ## Current implementation boundary
 
-`apps/web/src/selection/raster-transform.js` provides validated affine matrix operations, bounds calculation, and serializable transform records. The main interaction, frame persistence, renderer, and export integrations remain the next implementation step.
+Implemented:
+- `apps/web/src/selection/raster-transform.js`: validated affine matrix operations, bounds calculation, serializable records, stack composition, and an explicit rasterize helper.
+- `apps/web/src/animation/frame-cels.js` and `timeline.js`: deep-cloned per-layer transform metadata stored and duplicated per animation frame.
+- `main.js`: layers maintain an original canvas and a separate presentation canvas; frame save/load serializes transform records and hydrates their source images.
+- `renderer.js`: PixiJS layer sprites consume the composed presentation canvas.
+- `composite()`: fill-boundary and PNG export composites use the presentation canvas, with layer masks applied afterward.
+
+Not yet implemented:
+- Selection drag and inspector transform commits do not yet append transform records.
+- A user-facing rasterize command is not yet exposed.
+- Drawing/eraser behavior while a transform stack is active needs a defined editing workflow before the stack is enabled in the UI.
+- Browser interaction and physical iPad/Apple Pencil testing remain outstanding.
+
+The next integration must address those editing semantics before enabling non-destructive transforms in normal drawing workflows.
