@@ -56,15 +56,17 @@
 - Keep API credentials out of browser code, project files, and Git history.
 - Add explicit user controls for model choice and usage limits.
 
-## Phase 7 — Native iPad
-- PencilKit/Metal-based input and rendering where appropriate.
-- Pressure, tilt, palm rejection, and low-latency interaction.
+## Phase 7 — Native iPad and input quality
+- [x] Add browser Pointer Events stylus pressure mapping for raster pen and eraser strokes.
+- [x] Add configurable stroke stabilization with speed-responsive smoothing.
+- [x] Consume coalesced pointer samples when the browser provides them.
+- [ ] Add tilt/azimuth response, palm rejection, and native low-latency PencilKit/Metal input.
 - Maintain compatibility with the shared project document format.
 
-## Current status — v0.9
+## Current status — v1.0
 
-The drawing stage now uses distance-based Line Boil displacement along the local centerline normal, quadratic vector-path rendering, an expanded palette with custom color, and per-layer opacity/blend modes. The Motion Studio MVP stores independent vector-line and raster paint-layer snapshots per frame and supports playback, FPS adjustment, and onion skin. Keyframes and interpolation remain future work.
+The browser drawing engine now maps Apple Pencil-compatible Pointer Events pressure to raster pen/eraser width, applies adjustable speed-responsive stabilization, and consumes coalesced stylus samples where available. Line Boil uses arc-length sampling and local centerline normals. The stage supports smooth vector paths, custom colors, layer opacity/blend modes, independent raster cels, playback, and onion skin. Native PencilKit, tilt, advanced brush textures, keyframes, and interpolation remain future work.
 
 ## Current next action
 
-Run visual checks on desktop and iPad browsers, especially curved Line Boil paths, pressure feel, layer blend compositing, frame switching, and PNG export. Add visual regression fixtures for antialiased fill boundaries before calling fill cleanup production-ready.
+Next: test the pressure curve and stabilization on a real Apple Pencil/iPad; add native pencil/ink/marker texture presets; then implement layer masks and comic screentones. Add visual regression fixtures for antialiased fill boundaries before calling fill cleanup production-ready.
