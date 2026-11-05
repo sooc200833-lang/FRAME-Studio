@@ -1223,7 +1223,7 @@ function bindCanvasEvents() {
       : [];
     if (!maskEditing) save(layers[active]);
     if (tool === 'pen' || tool === 'eraser') {
-      const outline = createBrushOutline(strokeSamples, currentStrokeOptions(false));
+      const outline = createBrushOutline(strokeSamples, currentStrokeOptions(true));
       if (!maskEditing && tool === 'pen') {
         renderer.previewBrush(outline, color, currentBrushPreset().opacity * brushOpacity, strokeSamples, { preset: brushPreset, size, color });
       } else {
@@ -1306,7 +1306,7 @@ function bindCanvasEvents() {
         });
         last = smoothPoint;
       }
-      const outline = createBrushOutline(strokeSamples, currentStrokeOptions(false));
+      const outline = createBrushOutline(strokeSamples, currentStrokeOptions(true));
       if (!maskEditing && tool === 'pen') {
         renderer.previewBrush(outline, color, currentBrushPreset().opacity * brushOpacity, strokeSamples, { preset: brushPreset, size, color });
       } else {
