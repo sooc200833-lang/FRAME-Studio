@@ -995,6 +995,20 @@ function bindControls() {
     const hidden = document.getElementById('inspector').classList.toggle('hidden');
     document.querySelector('.workspace').classList.toggle('inspector-collapsed', hidden);
   };
+  document.getElementById('timelineToggle').onclick = () => {
+    const app = document.querySelector('.app');
+    const collapsed = app.classList.toggle('timeline-collapsed');
+    document.getElementById('timelineToggle').setAttribute('aria-expanded', String(!collapsed));
+  };
+  document.querySelectorAll('[data-open-panel]').forEach(button => {
+    button.onclick = () => {
+      const inspector = document.getElementById('inspector');
+      inspector.classList.remove('hidden');
+      document.querySelector('.workspace').classList.remove('inspector-collapsed');
+      selectInspectorPanel(button.dataset.openPanel);
+      document.querySelectorAll('[data-open-panel]').forEach(item => item.classList.toggle('active', item === button));
+    };
+  });
   document.getElementById('inspectorClose').onclick = () => {
     document.getElementById('inspector').classList.add('hidden');
     document.querySelector('.workspace').classList.add('inspector-collapsed');
