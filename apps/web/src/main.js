@@ -2,7 +2,7 @@ import './styles.css';
 import { PixiStageRenderer } from './renderer.js';
 import { expandRegionMask, findConnectedRegion } from './fill/flood-fill.js';
 import { animateLineStrokes, lineBoilPhase } from './line/line-boil.js';
-import { activeFrame, addFrame, createTimeline, deleteFrame, getOnionSkin, selectFrame, updateFrameStrokes } from './animation/timeline.js';
+import { activeFrame, addFrame, createTimeline, deleteFrame, frameAtTime, getOnionSkin, selectFrame, updateFrameStrokes } from './animation/timeline.js';
 import {
   createLineStroke,
   hitTestLineStrokes,
@@ -31,6 +31,10 @@ let boilEnabled = false;
 let boilStartedAt = 0;
 let animationFrame = 0;
 let lastAnimationPaint = 0;
+let playbackActive = false;
+let playbackStartedAt = 0;
+let playbackStartOffset = 0;
+let playbackRaf = 0;
 
 const palette = ['#24242a', '#ffffff', '#e95d4f', '#e8b64f', '#6c9c85', '#6f86c9', '#b78bc7'];
 const vectorStrokes = [];
@@ -162,6 +166,46 @@ function drawTimeline() {
   });
   const label = document.getElementById('frameCounter');
   if (label) label.textContent = `${timeline.frames.findIndex(frame => frame.id === timeline.activeFrameId) + 1} / ${timeline.frames.length}`;
+}
+
+function setPlaybackEnabled(enabled) {
+  playbackActive = enabled;
+  const button = document.getElementById('playToggle');
+  button.textContent = enabled ? 'Ⅱ 일시정지' : '▶ 재생';
+  button.classList.toggle('active', enabled);
+
+  if (enabled) {
+    if (boilEnabled) setBoilEnabled(false);
+    updateFrameStrokes(timeline, timeline.activeFrameId, vectorStrokes);
+    const activeIndex = timeline.frames.findIndex(frame => frame.id === timeline.activeFrameId);
+    playbackStartOffset = timeline.frames.slice(0, Math.max(0, activeIndex))
+      .reduce((sum, frame) => sum + frame.durationMs, 0);
+    playbackStartedAt = performance.now();
+    if (!playbackRaf) playbackRaf = requestAnimationFrame(playbackTick);
+  } else {
+    if (playbackRaf) cancelAnimationFrame(playbackRaf);
+    playbackRaf = 0;
+    updateFrameStrokes(timeline, timeline.activeFrameId, vectorStrokes);
+    render();
+  }
+}
+
+function playbackTick(timestamp) {
+  if (!playbackActive) {
+    playbackRaf = 0;
+    return;
+  }
+  const elapsed = timestamp - playbackStartedAt + playbackStartOffset;
+  const frame = frameAtTime(timeline, elapsed);
+  if (frame && frame.id !== timeline.activeFrameId) loadTimelineFrame(frame.id);
+  playbackRaf = requestAnimationFrame(playbackTick);
+}
+
+function updateTimelineFPS(value) {
+  const fps = Math.max(1, Math.min(60, Number(value) || 12));
+  timeline.fps = fps;
+  timeline.frames.forEach(frame => { frame.durationMs = 1000 / fps; });
+  document.getElementById('fpsOut').value = fps + ' FPS';
 }
 
 function position(event) {
@@ -411,17 +455,24 @@ function bindControls() {
   }
   updateBoilOutputs();
 
+  document.getElementById('playToggle').onclick = () => setPlaybackEnabled(!playbackActive);
+  document.getElementById('fps').oninput = event => updateTimelineFPS(event.target.value);
+  updateTimelineFPS(document.getElementById('fps').value);
+
   document.getElementById('frameAdd').onclick = () => {
+    if (playbackActive) setPlaybackEnabled(false);
     updateFrameStrokes(timeline, timeline.activeFrameId, vectorStrokes);
     const frame = addFrame(timeline);
     loadTimelineFrame(frame.id, false);
   };
   document.getElementById('frameDuplicate').onclick = () => {
+    if (playbackActive) setPlaybackEnabled(false);
     updateFrameStrokes(timeline, timeline.activeFrameId, vectorStrokes);
     const frame = addFrame(timeline, { duplicate: true });
     loadTimelineFrame(frame.id, false);
   };
   document.getElementById('frameDelete').onclick = () => {
+    if (playbackActive) setPlaybackEnabled(false);
     const current = timeline.activeFrameId;
     updateFrameStrokes(timeline, current, vectorStrokes);
     if (deleteFrame(timeline, current)) loadTimelineFrame(timeline.activeFrameId, false);
@@ -468,6 +519,7 @@ function bindControls() {
 function bindCanvasEvents() {
   inputSurface.addEventListener('pointerdown', event => {
     if (event.button !== 0) return;
+    if (playbackActive) setPlaybackEnabled(false);
     if (boilEnabled) setBoilEnabled(false);
     inputSurface.setPointerCapture(event.pointerId);
     const point = position(event);
