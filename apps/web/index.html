@@ -47,6 +47,12 @@
 
     <section class="panel-content active" id="toolsPanel">
       <h3>BRUSH</h3>
+      <div class="brush-library" role="group" aria-label="브러시 라이브러리">
+        <button class="brush-card" data-brush-preset="pencil" aria-pressed="false"><span class="brush-thumb pencil-thumb"></span><strong>연필</strong><small>거친 입자</small></button>
+        <button class="brush-card active" data-brush-preset="ink" aria-pressed="true"><span class="brush-thumb ink-thumb"></span><strong>잉크 펜</strong><small>선명한 선</small></button>
+        <button class="brush-card" data-brush-preset="marker" aria-pressed="false"><span class="brush-thumb marker-thumb"></span><strong>마커</strong><small>반투명 면</small></button>
+        <button class="brush-card" data-brush-preset="brush" aria-pressed="false"><span class="brush-thumb paint-thumb"></span><strong>브러시</strong><small>유연한 획</small></button>
+      </div>
       <div class="field"><label for="brushPreset">브러시 종류</label><select id="brushPreset"><option value="pencil">연필 · Pencil</option><option value="ink" selected>잉크 펜 · Ink</option><option value="marker">마커 · Marker</option><option value="brush">브러시 · Brush</option></select></div>
       <div class="size-control">
         <div class="size-heading"><label for="size">선 굵기</label><strong id="sizeOut">7 px</strong></div>

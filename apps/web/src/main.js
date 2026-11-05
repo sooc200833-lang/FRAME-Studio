@@ -1021,6 +1021,18 @@ function bindControls() {
     document.getElementById('pressureCurve').value = String(Math.round(pressureCurve * 100));
     document.getElementById('pressureCurveOut').value = pressureCurve.toFixed(2);
   };
+  document.querySelectorAll('[data-brush-preset]').forEach(card => {
+    card.onclick = () => {
+      const selector = document.getElementById('brushPreset');
+      selector.value = card.dataset.brushPreset;
+      selector.dispatchEvent(new Event('change'));
+      document.querySelectorAll('[data-brush-preset]').forEach(item => {
+        const selected = item === card;
+        item.classList.toggle('active', selected);
+        item.setAttribute('aria-pressed', String(selected));
+      });
+    };
+  });
   document.getElementById('brushOpacity').oninput = event => {
     brushOpacity = Number(event.target.value) / 100;
     document.getElementById('brushOpacityOut').value = event.target.value + '%';
