@@ -674,8 +674,8 @@ function appendLayerRow(list, layer, index, nested) {
     target.type = 'checkbox';
     target.className = 'transform-layer-check';
     target.checked = selectedTransformLayers.has(layer);
-    target.title = '다중 변형 대상에 포함';
-    target.setAttribute('aria-label', layer.name + ' 다중 변형 대상');
+    target.title = '선택 영역 드래그 변형에도 포함';
+    target.setAttribute('aria-label', layer.name + ' 선택 영역 다중 변형 대상');
     target.onclick = event => event.stopPropagation();
     target.onchange = () => {
       if (target.checked) selectedTransformLayers.add(layer);
