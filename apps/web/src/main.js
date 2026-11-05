@@ -463,11 +463,27 @@ function updateTimelineFPS(value) {
   document.getElementById('fpsOut').value = fps + ' FPS';
 }
 
+const viewport = { scale: 1, rotation: 0 };
+
+function applyViewport() {
+  if (!inputSurface) return;
+  inputSurface.style.transform = `rotate(${viewport.rotation}deg) scale(${viewport.scale})`;
+  document.getElementById('zoomLevel').value = Math.round(viewport.scale * 100) + '%';
+}
+
 function position(event) {
   const rect = inputSurface.getBoundingClientRect();
+  const width = inputSurface.clientWidth || W;
+  const height = inputSurface.clientHeight || H;
+  const dx = event.clientX - (rect.left + rect.width / 2);
+  const dy = event.clientY - (rect.top + rect.height / 2);
+  const radians = viewport.rotation * Math.PI / 180;
+  const cos = Math.cos(radians), sin = Math.sin(radians);
+  const localX = (cos * dx + sin * dy) / viewport.scale + width / 2;
+  const localY = (-sin * dx + cos * dy) / viewport.scale + height / 2;
   return {
-    x: Math.max(0, Math.min(W - 1, Math.floor((event.clientX - rect.left) * W / rect.width))),
-    y: Math.max(0, Math.min(H - 1, Math.floor((event.clientY - rect.top) * H / rect.height))),
+    x: Math.max(0, Math.min(W - 1, Math.floor(localX * W / width))),
+    y: Math.max(0, Math.min(H - 1, Math.floor(localY * H / height))),
   };
 }
 
@@ -802,6 +818,26 @@ function applySelectionTransform() {
   document.getElementById('selectionScaleOut').value = '100%';
   saveActiveFrame();
   render(layers.map((_, index) => index));
+}
+
+function bindViewportControls() {
+  document.getElementById('zoomIn').onclick = () => {
+    viewport.scale = Math.min(4, Number((viewport.scale * 1.2).toFixed(3)));
+    applyViewport();
+  };
+  document.getElementById('zoomOut').onclick = () => {
+    viewport.scale = Math.max(0.25, Number((viewport.scale / 1.2).toFixed(3)));
+    applyViewport();
+  };
+  document.getElementById('rotateCanvas').onclick = () => {
+    viewport.rotation = (viewport.rotation + 15) % 360;
+    applyViewport();
+  };
+  document.getElementById('resetViewport').onclick = () => {
+    viewport.scale = 1;
+    viewport.rotation = 0;
+    applyViewport();
+  };
 }
 
 function bindControls() {
@@ -1468,6 +1504,7 @@ function bindCanvasEvents() {
 async function start() {
   inputSurface = await renderer.init(host);
   bindControls();
+  bindViewportControls();
   bindCanvasEvents();
 
   const lineContext = layers[1].canvas.getContext('2d');
