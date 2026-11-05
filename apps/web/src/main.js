@@ -971,7 +971,7 @@ function recordSelectionDragCommit(sources) {
 function commitSelectionDragSources(drag, getTransform) {
   const sources = getSelectionDragSources(drag);
   const transform = getTransform?.();
-  if (!sources.length || !transform?.matrix || !transform.clipPolygon?.length) return;
+  if ((!sources.length && !drag?.vectorBefore) || !transform?.matrix || !transform.clipPolygon?.length) return;
   for (const source of sources) {
     save(source.layer);
     source.layer.transformRecords = [...(source.layer.transformRecords || []), {
@@ -984,13 +984,22 @@ function commitSelectionDragSources(drag, getTransform) {
     refreshLayerPresentation(source.layer);
   }
   recordSelectionDragCommit(sources);
+  if (drag.vectorBefore) {
+    groupedTransformUndo = groupedTransformUndo || { entries: [], vectorBefore: null, vectorAfter: null };
+    groupedTransformUndo.vectorBefore = drag.vectorBefore;
+    groupedTransformUndo.vectorAfter = lineSnapshot();
+  }
   render(sources.map(source => layers.indexOf(source.layer)).filter(index => index >= 0));
 }
 
 function updateSelectionDragPreview(drag) {
   const sources = getSelectionDragSources(drag);
   const transform = getSelectionDragTransform(drag);
-  if (!sources.length || !transform?.matrix) return;
+  if ((!sources.length && !drag?.vectorBefore) || !transform?.matrix) return;
+  if (drag.vectorBefore) {
+    const previewStrokes = transformLineStrokesByMatrix(drag.vectorBefore, transform.clipPolygon, transform.matrix);
+    vectorStrokes.splice(0, vectorStrokes.length, ...previewStrokes);
+  }
   for (const source of sources) {
     const previewCanvas = source.previewCanvas || document.createElement('canvas');
     composeRasterTransformStack(source.layer.presentationCanvas || source.layer.canvas, [{
@@ -1515,7 +1524,7 @@ function bindCanvasEvents() {
         const center = getPolygonCentroid(originalPolygon);
         const mode = handle === 'rotate' ? 'lassoRotate' : (handle ? 'lassoResize' : 'lassoMove');
         selectionDrag = {
-          mode, handle, start: point, originalPolygon, sources,
+          mode, handle, start: point, originalPolygon, sources, vectorBefore: lineSnapshot(),
           sourceCanvas: activeSource?.sourceCanvas,
           startAngle: Math.atan2(point.y - center.y, point.x - center.x),
           rotation: 0,
@@ -1543,7 +1552,7 @@ function bindCanvasEvents() {
       const activeSource = sources.find(source => source.layer === layers[active]) || sources[0];
       selectionDrag = {
         mode, handle, start: point, originalRect: existing ? { ...existing } : null,
-        sources, sourceCanvas: activeSource?.sourceCanvas,
+        sources, sourceCanvas: activeSource?.sourceCanvas, vectorBefore: lineSnapshot(),
         startAngle: existing ? Math.atan2(point.y - (existing.y + existing.height / 2), point.x - (existing.x + existing.width / 2)) : 0,
       };
       if (mode === 'new') {
@@ -1738,6 +1747,7 @@ function bindCanvasEvents() {
       const drag = selectionDrag;
       if (event.type === 'pointercancel') {
         clearSelectionDragPreviews(drag);
+        if (drag.vectorBefore) vectorStrokes.splice(0, vectorStrokes.length, ...drag.vectorBefore);
         selectionPolygon = drag.originalPolygon
           ? drag.originalPolygon.map(point => ({ ...point }))
           : null;
@@ -1786,6 +1796,7 @@ function bindCanvasEvents() {
     if (tool === 'marquee' && down && selectionDrag) {
       if (event.type === 'pointercancel') {
         clearSelectionDragPreviews(selectionDrag);
+        if (selectionDrag.vectorBefore) vectorStrokes.splice(0, vectorStrokes.length, ...selectionDrag.vectorBefore);
         selectionDrag = null;
         down = false;
         render(layers.map((_, index) => index));
@@ -1806,7 +1817,7 @@ function bindCanvasEvents() {
         selectionRect = { ...drag.originalRect };
         selectionPolygon = null;
       }
-      if (drag.mode === 'rotate' && Math.abs(drag.rotation || 0) > 0.1 && drag.originalRect) {
+      if (drag.mode === 'rotate' && Math.abs(drag.rotation || 0) > 0.1 && drag.originalRect)
         const original = drag.originalRect;
         const center = { x: original.x + original.width / 2, y: original.y + original.height / 2 };
         commitSelectionDragSources(drag, () => getSelectionDragTransform(drag))
