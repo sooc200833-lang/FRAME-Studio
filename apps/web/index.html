@@ -40,9 +40,21 @@
     </main>
 
     <aside class="inspector" id="inspector">
-      <h3>BRUSH & FILL</h3>
-      <div class="field"><label for="brushPreset">브러시</label><select id="brushPreset"><option value="pencil">연필 · Pencil</option><option value="ink" selected>잉크 펜 · Ink</option><option value="marker">마커 · Marker</option><option value="brush">브러시 · Brush</option></select></div>
-      <div class="field"><label for="size">크기</label><input id="size" type="range" min="1" max="60" value="7"><output id="sizeOut">7px</output></div>
+    <div class="inspector-heading"><div><h2>작업 패널</h2><span>TOOLS · COLOR · LAYERS</span></div><button id="inspectorClose" class="panel-close" aria-label="패널 닫기">×</button></div>
+    <nav class="panel-tabs" aria-label="속성 패널 탭">
+      <button class="panel-tab active" data-panel="toolsPanel">도구</button>
+      <button class="panel-tab" data-panel="colorPanel">색상</button>
+      <button class="panel-tab" data-panel="layersPanel">레이어</button>
+    </nav>
+
+    <section class="panel-content active" id="toolsPanel">
+      <h3>BRUSH</h3>
+      <div class="field"><label for="brushPreset">브러시 종류</label><select id="brushPreset"><option value="pencil">연필 · Pencil</option><option value="ink" selected>잉크 펜 · Ink</option><option value="marker">마커 · Marker</option><option value="brush">브러시 · Brush</option></select></div>
+      <div class="size-control">
+        <div class="size-heading"><label for="size">선 굵기</label><strong id="sizeOut">7 px</strong></div>
+        <input id="size" type="range" min="1" max="100" value="7">
+        <div class="size-presets" id="sizePresets" aria-label="선 굵기 빠른 선택"></div>
+      </div>
       <label class="check-field"><input id="pressureEnabled" type="checkbox" checked><span>Apple Pencil 필압 반영</span></label>
       <div class="field"><label for="brushSmoothing">획 안정화</label><input id="brushSmoothing" type="range" min="0" max="80" value="28"><output id="brushSmoothingOut">28%</output></div>
       <div class="field"><label for="tolerance">채우기 허용 오차</label><input id="tolerance" type="range" min="0" max="100" value="24"><output id="tolOut">24</output></div>
@@ -56,25 +68,37 @@
         <p class="note">원본 벡터 선은 유지하고 화면에만 흔들림을 적용합니다. PNG 내보내기는 원본 선을 사용합니다.</p>
       </section>
       <section id="lineTools" hidden>
-        <h3 class="section-title">SELECTED LINE</h3>
+        <h3 class="section-title">선 스타일</h3>
         <div class="field"><label for="lineColor">선 색상</label><input id="lineColor" type="color" value="#24242a"></div>
-        <div class="field"><label for="lineWidth">선 굵기</label><input id="lineWidth" type="range" min="1" max="60" value="7"><output id="lineWidthOut">7px</output></div>
+        <div class="field"><label for="lineWidth">선 굵기</label><input id="lineWidth" type="range" min="1" max="100" value="7"><output id="lineWidthOut">7px</output></div>
         <button id="deleteLine" class="delete-line">선 삭제</button>
       </section>
-      <h3 class="section-title">COLOR</h3>
-      <div class="color-picker-row"><label for="customColor">직접 선택</label><input id="customColor" type="color" value="#24242a"></div>
-      <div class="swatches" id="palette"></div>
-      <h3 class="section-title">SELECTION</h3>
+      <h3 class="section-title">선택 및 변형</h3>
       <div class="layer-actions"><button id="selectionDeselect">선택 해제</button></div>
       <div class="field"><label for="selectionAngle">회전 각도</label><input id="selectionAngle" type="range" min="-180" max="180" value="0"><output id="selectionAngleOut">0°</output></div>
       <div class="field"><label for="selectionScale">크기 조절</label><input id="selectionScale" type="range" min="25" max="200" value="100"><output id="selectionScaleOut">100%</output></div>
       <button id="selectionTransform" class="transform-apply">변형 적용</button>
-      <p class="note">사각형·올가미 선택 영역을 회전·확대/축소합니다. 영역과 교차하는 벡터 선은 선 전체가 함께 변형되며, 굵기도 배율에 맞춰 조정됩니다. 레이어 체크박스로 여러 래스터 레이어를 함께 변형할 수 있습니다.</p>
-      <h3 class="section-title">LAYERS</h3>
+      <p class="note">사각형·올가미 선택 영역을 회전·확대/축소합니다. 교차하는 벡터 선은 전체가 함께 변형됩니다.</p>
+    </section>
+
+    <section class="panel-content" id="colorPanel">
+      <h3>COLOR STUDIO</h3>
+      <div class="active-color-card"><div id="activeColorPreview"></div><div><span>현재 선택 색상</span><strong id="activeColorHex">#24242A</strong></div></div>
+      <div class="color-picker-row"><label for="customColor">색상 직접 선택</label><input id="customColor" type="color" value="#24242a"></div>
+      <div class="palette-actions"><button id="addPaletteColor">＋ 현재 색상 저장</button><button id="resetPalette">기본 팔레트</button></div>
+      <div class="palette-categories" id="paletteCategories" aria-label="색상 팔레트 종류"></div>
+      <div class="swatches" id="palette" aria-label="색상 선택"></div>
+      <div class="recent-colors-wrap"><h3 class="section-title">최근 사용 색상</h3><div class="swatches" id="recentPalette"></div></div>
+      <p class="note">색상을 누르면 바로 현재 브러시에 적용됩니다. 직접 고른 색은 팔레트에 저장해 다시 사용할 수 있습니다.</p>
+    </section>
+
+    <section class="panel-content" id="layersPanel">
+      <h3>LAYERS</h3>
+      <div class="layer-actions"><button id="addLayer">＋ 레이어 추가</button><button id="layerDuplicate">복제</button></div>
       <div class="layer-actions"><button id="groupAdd">그룹 만들기</button><button id="groupRemove">그룹 해제</button></div>
       <div class="layer-actions"><button id="layerToGroup">선택 그룹에 넣기</button><button id="layerOutGroup">그룹에서 꺼내기</button></div>
       <div id="layers"></div>
-      <div class="layer-actions"><button id="layerDuplicate">레이어 복제</button><button id="layerDelete">레이어 삭제</button></div>
+      <div class="layer-actions"><button id="layerDelete">레이어 삭제</button><button id="clear">레이어 비우기</button></div>
       <section id="groupInspector" hidden>
         <h3 class="section-title">GROUP</h3>
         <div class="field"><label for="groupOpacity">그룹 불투명도</label><input id="groupOpacity" type="range" min="0" max="100" value="100"><output id="groupOpacityOut">100%</output></div>
@@ -84,8 +108,9 @@
       <p id="maskState" class="note">일반 그림 편집 중</p>
       <div class="field"><label for="layerOpacity">불투명도</label><input id="layerOpacity" type="range" min="0" max="100" value="100"><output id="layerOpacityOut">100%</output></div>
       <div class="field"><label for="layerBlend">혼합 모드</label><select id="layerBlend"><option value="normal">일반</option><option value="multiply">곱하기</option><option value="screen">스크린</option><option value="add">더하기</option><option value="darken">어둡게</option><option value="lighten">밝게</option></select></div>
-      <p class="note">PixiJS가 화면 렌더링을 담당하고, 채색 데이터는 독립적인 Canvas 레이어에 보관합니다. 면 채우기는 표시 중인 레이어를 합성해 경계를 판독하고 선택한 레이어에 기록합니다.</p>
-    </aside>
+      <p class="note">채색 데이터는 독립적인 Canvas 레이어에 보관됩니다. 눈 아이콘으로 표시 여부를, 체크박스로 변형 대상을 선택합니다.</p>
+    </section>
+  </aside>
   </div>
 
   <div class="timeline">
