@@ -1229,11 +1229,13 @@ function bindControls() {
     if (layers.length <= 1) return;
     if (playbackActive) setPlaybackEnabled(false);
     saveActiveFrame();
-    layers.splice(active, 1);
     timeline.frames.forEach(frame => {
-      frame.cels?.splice(active, 1);
-      frame.transformCels?.splice(active, 1);
+      frame.cels = normalizeRasterCels(frame.cels, layers.length);
+      frame.transformCels = normalizeRasterTransformCels(frame.transformCels, layers.length);
+      frame.cels.splice(active, 1);
+      frame.transformCels.splice(active, 1);
     });
+    layers.splice(active, 1);
     active = Math.min(active, layers.length - 1);
     saveActiveFrame();
     render(layers.map((_, index) => index));
