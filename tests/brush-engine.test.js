@@ -2,6 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   coalescedPointerEvents,
+  getBrushPreset,
+  listBrushPresets,
   createBrushOutline,
   normalizePointerPressure,
   pressureToWidth,
@@ -77,4 +79,24 @@ test('disabled stylus pressure keeps a steady-width outline', () => {
   ], { size: 12, stylus: true, pressureEnabled: false });
   const thickness = outlineThickness(outline);
   assert.ok(thickness > 8 && thickness < 16);
+});
+
+
+test('brush presets expose distinct, stable drawing profiles', () => {
+  const presets = listBrushPresets();
+  assert.deepEqual(presets.map(item => item.id), ['pencil', 'ink', 'marker', 'brush']);
+  assert.ok(getBrushPreset('marker').sizeMultiplier > getBrushPreset('ink').sizeMultiplier);
+  assert.ok(getBrushPreset('marker').opacity < getBrushPreset('ink').opacity);
+  assert.equal(getBrushPreset('unknown'), getBrushPreset('ink'));
+});
+
+test('preset choice changes generated brush geometry', () => {
+  const samples = [
+    { x: 0, y: 0, pressure: 0.6 },
+    { x: 20, y: 0, pressure: 0.6 },
+    { x: 40, y: 0, pressure: 0.6 },
+  ];
+  const pencil = createBrushOutline(samples, { size: 12, stylus: true, preset: 'pencil' });
+  const marker = createBrushOutline(samples, { size: 12, stylus: true, preset: 'marker' });
+  assert.ok(outlineThickness(marker) > outlineThickness(pencil));
 });
