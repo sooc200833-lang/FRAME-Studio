@@ -59,14 +59,14 @@
 ## Phase 7 — Native iPad and input quality
 - [x] Add browser Pointer Events stylus pressure mapping for raster pen and eraser strokes.
 - [x] Integrate MIT perfect-freehand 1.2.3 to generate variable-width pressure-aware raster brush polygons.
-- [x] Add configurable stroke stabilization with speed-responsive smoothing.
+- [x] Add configurable stroke stabilization with speed-responsive smoothing.\n- [x] Add four brush profiles (pencil, ink, marker, brush) with distinct size, pressure, opacity, smoothing, and streamline dynamics.
 - [x] Consume coalesced pointer samples when the browser provides them.
 - [ ] Add tilt/azimuth response, palm rejection, and native low-latency PencilKit/Metal input.
 - Maintain compatibility with the shared project document format.
 
 ## Current status — v1.0
 
-The browser drawing engine uses perfect-freehand 1.2.3 to generate pressure-aware variable-width raster pen and eraser polygons. It applies adjustable speed-responsive stabilization and consumes coalesced stylus samples where available. PixiJS displays the live brush outline. Line Boil uses arc-length sampling and local centerline normals. The stage supports smooth vector paths, custom colors, layer opacity/blend modes, independent raster cels, playback, and onion skin. Native PencilKit, tilt, advanced brush textures, layer masks, keyframes, and interpolation remain future work.
+The browser drawing engine uses perfect-freehand 1.2.3 to generate pressure-aware variable-width raster pen and eraser polygons, with pencil, ink, marker, and brush profiles. It applies adjustable speed-responsive stabilization and consumes coalesced stylus samples where available. PixiJS displays the live brush outline. Line Boil uses arc-length sampling and local centerline normals. The stage supports smooth vector paths, custom colors, layer opacity/blend modes, independent raster cels, playback, and onion skin. Native PencilKit, tilt, advanced brush textures, layer masks, keyframes, and interpolation remain future work.
 
 ## Current next action
 
