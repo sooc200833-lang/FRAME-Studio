@@ -129,10 +129,11 @@ test('ink preset does not add artificial surface texture', () => {
 
 test('texture painting clips marks to the brush outline and restores context', () => {
   const calls = [];
+  const stateStack = [];
   const context = {
     globalAlpha: 0.6,
-    save() { calls.push('save'); },
-    restore() { calls.push('restore'); },
+    save() { stateStack.push(this.globalAlpha); calls.push('save'); },
+    restore() { this.globalAlpha = stateStack.pop(); calls.push('restore'); },
     beginPath() { calls.push('beginPath'); },
     moveTo() {},
     lineTo() {},
