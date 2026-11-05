@@ -178,3 +178,21 @@ test('stroke option resolver supplies the selected preset defaults', () => {
   assert.equal(options.smoothing, profile.smoothing);
   assert.equal(options.streamline, profile.streamline);
 });
+
+
+test('coalesced pointer events retain the latest dispatched coordinate and pressure', () => {
+  const samples = [{ clientX: 10, clientY: 20, pressure: 0.3 }];
+  const latest = { clientX: 14, clientY: 24, pressure: 0.7 };
+  assert.deepEqual(coalescedPointerEvents({
+    ...latest,
+    getCoalescedEvents: () => samples,
+  }), [...samples, latest]);
+});
+
+test('coalesced pointer events do not duplicate an identical dispatched sample', () => {
+  const sample = { clientX: 10, clientY: 20, pressure: 0.3 };
+  assert.deepEqual(coalescedPointerEvents({
+    ...sample,
+    getCoalescedEvents: () => [sample],
+  }), [sample]);
+});
