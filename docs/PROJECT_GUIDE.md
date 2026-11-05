@@ -62,7 +62,8 @@ Always distinguish code-level tests from visual browser checks and physical iPad
 - Active-layer pixel movement and rectangular resize with eight edge/corner handles and a rotation control.
 - Move, resize, and rotation gestures show a live raster-content preview without mutating the source layer until pointer release.
 - Pointer cancellation restores the source display; the committed operation remains covered by the existing layer undo snapshot.
-- Rectangular marquee rotation converts the boundary to a freeform polygon; lasso-specific resize/rotate handles remain future work.
+- Rectangular marquee rotation converts the boundary to a freeform polygon; lasso movement now previews the clipped raster pixels live and commits on release.
+- Lasso pointer cancellation restores the original polygon and source pixels; lasso-specific resize/rotate handles remain future work.
 - Rotation/scale transform across selected raster layers.
 - Intersecting vector strokes can participate as whole objects.
 - Grouped raster/vector undo and redo for multi-target transforms.
