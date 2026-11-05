@@ -1538,6 +1538,10 @@ function bindCanvasEvents() {
         const currentAngle = Math.atan2(point.y - center.y, point.x - center.x);
         drag.rotation = (currentAngle - drag.startAngle) * 180 / Math.PI;
       }
+      if (drag.mode === 'rotate' && Math.abs(drag.rotation || 0) <= 0.1) {
+        selectionRect = { ...drag.originalRect };
+        selectionPolygon = null;
+      }
       if (drag.mode === 'rotate' && Math.abs(drag.rotation || 0) > 0.1 && drag.sourceCanvas && drag.originalRect) {
         const original = drag.originalRect;
         const center = { x: original.x + original.width / 2, y: original.y + original.height / 2 };
@@ -1572,6 +1576,7 @@ function bindCanvasEvents() {
           const context = layer.canvas.getContext('2d');
           context.clearRect(original.x, original.y, original.width, original.height);
           context.drawImage(source, target.x, target.y, target.width, target.height);
+          saveActiveFrame();
         }
       }
       if (drag.mode === 'new' && (!selectionRect || selectionRect.width < 2 || selectionRect.height < 2)) selectionRect = null;
