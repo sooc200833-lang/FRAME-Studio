@@ -24,7 +24,7 @@ let drawingPoints = null;
 let movingStroke = false;
 let moveSnapshot = null;
 let moveChanged = false;
-let nextLineId = 1;
+let nextLineId = 1;\nlet boilEnabled = false;\nlet boilStartedAt = 0;\nlet animationFrame = 0;\nlet lastAnimationPaint = 0;
 
 const palette = ['#24242a', '#ffffff', '#e95d4f', '#e8b64f', '#6c9c85', '#6f86c9', '#b78bc7'];
 const vectorStrokes = [];
@@ -243,6 +243,47 @@ function drawLayers() {
   });
 }
 
+function updateBoilOutputs() {
+  document.getElementById('boilAmplitudeOut').value = document.getElementById('boilAmplitude').value + 'px';
+  document.getElementById('boilFrequencyOut').value = Number(document.getElementById('boilFrequency').value).toFixed(2);
+  document.getElementById('boilSpeedOut').value = Number(document.getElementById('boilSpeed').value).toFixed(1) + '×';
+}
+
+function animationTick(timestamp) {
+  if (!boilEnabled) {
+    animationFrame = 0;
+    return;
+  }
+  if (timestamp - lastAnimationPaint >= 1000 / 30) {
+    const elapsed = timestamp - boilStartedAt;
+    const phase = lineBoilPhase(elapsed, Number(document.getElementById('boilSpeed').value));
+    const displayStrokes = animateLineStrokes(vectorStrokes, {
+      phase,
+      amplitude: Number(document.getElementById('boilAmplitude').value),
+      frequency: Number(document.getElementById('boilFrequency').value),
+    });
+    render([], displayStrokes);
+    lastAnimationPaint = timestamp;
+  }
+  animationFrame = requestAnimationFrame(animationTick);
+}
+
+function setBoilEnabled(enabled) {
+  boilEnabled = enabled;
+  const button = document.getElementById('boilToggle');
+  button.textContent = enabled ? '미리보기 중지' : 'Line Boil 미리보기';
+  button.classList.toggle('active', enabled);
+  if (enabled) {
+    boilStartedAt = performance.now();
+    lastAnimationPaint = 0;
+    if (!animationFrame) animationFrame = requestAnimationFrame(animationTick);
+  } else {
+    if (animationFrame) cancelAnimationFrame(animationFrame);
+    animationFrame = 0;
+    render();
+  }
+}
+
 function updateLineInspector() {
   const stroke = selectedStroke();
   const panel = document.getElementById('lineTools');
@@ -265,7 +306,7 @@ function applySelectedStyle(changes) {
 function bindControls() {
   document.querySelectorAll('[data-tool]').forEach(button => {
     button.onclick = () => {
-      tool = button.dataset.tool;
+      if (boilEnabled) setBoilEnabled(false);\n      tool = button.dataset.tool;
       document.querySelectorAll('[data-tool]').forEach(item => {
         item.classList.toggle('active', item === button);
       });
@@ -321,6 +362,12 @@ function bindControls() {
   document.getElementById('edge').oninput = event => {
     document.getElementById('edgeOut').value = event.target.value + 'px';
   };
+
+  document.getElementById('boilToggle').onclick = () => setBoilEnabled(!boilEnabled);
+  for (const id of ['boilAmplitude', 'boilFrequency', 'boilSpeed']) {
+    document.getElementById(id).oninput = updateBoilOutputs;
+  }
+  updateBoilOutputs();
 
   document.getElementById('lineColor').oninput = event => applySelectedStyle({ color: event.target.value });
   document.getElementById('lineWidth').oninput = event => {
