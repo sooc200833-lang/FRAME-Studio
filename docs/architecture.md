@@ -78,12 +78,12 @@ The web prototype includes raster drawing, connected-region fill, PixiJS renderi
 - The marquee tool stores a rectangular selection in document coordinates and renders a dashed boundary plus a bottom-right resize handle in the PixiJS overlay.
 - Dragging inside the boundary moves the selected raster pixels; dragging the handle scales the selected pixel region. The original pixels are extracted before clearing and redrawing, avoiding overlap corruption.
 - Selection geometry helpers are isolated in `apps/web/src/selection/selection.js` and covered by Node tests.
-- The rectangular selection currently operates on the active raster layer only. Freeform selection and rotation are documented in their dedicated sections below; multi-layer and vector transforms remain future work.
+- A newly drawn rectangular selection is non-destructive until a move or resize is committed on pointer release. The rectangular selection currently operates on the active raster layer only; multi-layer support applies to the separate rotation/scale transform operation.
 
 
 ## Freeform lasso selection
 - The lasso tool records a polygon in document coordinates and displays a dashed PixiJS overlay.
-- Clicking inside an existing lasso extracts the active raster layer through a polygon clip; dragging moves those pixels while clearing only the original polygon area.
+- Clicking inside an existing lasso extracts the active raster layer through a polygon clip; dragging previews the polygon's new position and commits the pixel move on pointer release, clearing only the original polygon area. The move currently affects the active raster layer only.
 - Polygon hit testing and bounded translation are pure helpers covered by unit tests.
 - The lasso currently transforms the active raster layer only. Rotation and scaling are documented below; feathering, vector inclusion, and multi-layer transforms remain future work.
 
@@ -93,7 +93,7 @@ The web prototype includes raster drawing, connected-region fill, PixiJS renderi
 - Transform applies to the active raster layer: pixels inside the selection are extracted to a temporary canvas, transformed, and composited back after clearing the original selected area.
 - The transformed boundary is retained as a polygon selection, including after rotating a rectangular selection.
 - Rotation range is -180° to 180° and scale range is 25% to 200%. Pixels transformed beyond the canvas are clipped by the canvas bounds.
-- This is a committed transform, not a live preview; multi-layer and vector selection transforms remain future work.
+- This is a committed transform, not a live preview. Multi-layer raster and vector-stroke transforms are implemented below; masks are not transformed.
 
 
 ## Multi-layer raster selection transform
@@ -107,4 +107,4 @@ The web prototype includes raster drawing, connected-region fill, PixiJS renderi
 - Vector strokes whose centerline intersects or enters the active polygon selection are included as whole strokes; a stroke crossing the selection boundary is not split into partial segments.
 - Selected stroke points are transformed around the same selection centroid as raster pixels. Stroke width scales with the selected scale factor; color and other stroke metadata remain unchanged.
 - Raster and vector snapshots are stored in one grouped transform undo/redo record so the operation can be reverted together. The vector selection is evaluated against the polygon at apply time.
-- Vector stroke selection currently uses centerline intersection, not stroke-width-aware edge overlap; partially intersecting strokes move in full.
+- Vector stroke selection currently uses centerline intersection, not stroke-width-aware edge overlap; partially intersecting strokes move in full. Transform changes are committed immediately rather than shown as a live preview.
