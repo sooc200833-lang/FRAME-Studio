@@ -27,6 +27,9 @@
 - [x] Smooth vector path rendering with quadratic curves in the stage and PNG export.
 - [x] Add expanded color palette and custom color picker.
 - [x] Add layer opacity, blend modes, duplication, and deletion.
+- [x] Add non-destructive alpha masks with pen-to-hide and eraser-to-reveal editing.
+- [x] Apply layer masks in PixiJS display compositing and PNG export.
+- [ ] Add layer groups, nested hierarchy, and group-level blend/opacity.
 - [x] Add frame-based vector-line snapshots with stable frame IDs.\n- [x] Add frame insertion, duplication, deletion, and selection.\n- [x] Add previous/next onion-skin ghost rendering.\n- [x] Add frame-based vector-line snapshots with stable frame IDs.
 - [x] Add frame insertion, duplication, deletion, and selection.
 - [x] Add previous/next onion-skin ghost rendering.
@@ -66,8 +69,8 @@
 
 ## Current status — v1.0
 
-The browser drawing engine uses perfect-freehand 1.2.3 to generate pressure-aware variable-width raster pen and eraser polygons, with pencil, ink, marker, and brush profiles. It applies adjustable speed-responsive stabilization and consumes coalesced stylus samples where available. PixiJS displays the live brush outline. Line Boil uses arc-length sampling and local centerline normals. The stage supports smooth vector paths, custom colors, layer opacity/blend modes, independent raster cels, playback, and onion skin. Native PencilKit, tilt, advanced brush textures, layer masks, keyframes, and interpolation remain future work.
+The browser drawing engine uses perfect-freehand 1.2.3 to generate pressure-aware variable-width raster pen and eraser polygons, with pencil, ink, marker, and brush profiles. It applies adjustable speed-responsive stabilization and consumes coalesced stylus samples where available. PixiJS displays the live brush outline. Line Boil uses arc-length sampling and local centerline normals. The stage supports smooth vector paths, custom colors, layer opacity/blend modes, independent raster cels, playback, and onion skin. Native PencilKit, tilt, advanced brush textures, layer groups, per-frame masks, keyframes, and interpolation remain future work.
 
 ## Current next action
 
-Next: test the pressure curve and stabilization on a real Apple Pencil/iPad; add native pencil/ink/marker texture presets; then implement layer masks and comic screentones. Add visual regression fixtures for antialiased fill boundaries before calling fill cleanup production-ready.
+Next: test mask editing and export visually; add layer groups and group compositing; then implement comic screentones and gradients. Add visual regression fixtures for antialiased fill boundaries before calling fill cleanup production-ready.
