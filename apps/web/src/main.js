@@ -856,6 +856,17 @@ function recordSelectionDragCommit(sources) {
   saveActiveFrame();
 }
 
+function commitSelectionDragSources(drag, applyTransform) {
+  const sources = getSelectionDragSources(drag);
+  if (!sources.length) return;
+  for (const source of sources) {
+    save(source.layer);
+    applyTransform(source);
+  }
+  recordSelectionDragCommit(sources);
+  render(sources.map(source => layers.indexOf(source.layer)).filter(index => index >= 0));
+}
+
 function updateSelectionDragPreview(drag) {
   const isLassoTransform = drag?.originalPolygon?.length >= 3
     && ['lassoMove', 'lassoResize', 'lassoRotate'].includes(drag.mode);
