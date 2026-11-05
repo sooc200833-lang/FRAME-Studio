@@ -4,7 +4,7 @@ body{margin:0;background:var(--bg);color:var(--text);font:14px -apple-system,Bli
 button,input{font:inherit}
 button{color:inherit;background:#29292d;border:1px solid var(--line);border-radius:8px;padding:8px 11px;cursor:pointer}
 button.active{border-color:var(--accent);color:#ffe0a0;background:#51452e}
-.app{height:100dvh;display:grid;grid-template-rows:52px minmax(0,1fr) 76px}
+.app{height:100dvh;display:grid;grid-template-rows:52px minmax(0,1fr) 112px}
 header{display:flex;align-items:center;gap:10px;padding:0 14px;background:#1c1c1f;border-bottom:1px solid var(--line)}
 .brand{font-weight:800;letter-spacing:.12em}.brand span{color:var(--accent)}
 .version{color:var(--muted);font-size:11px}.spacer{flex:1}
@@ -35,7 +35,7 @@ output{color:var(--accent);min-width:35px;text-align:right}
 .note{font-size:11px;color:var(--muted);line-height:1.5;margin-top:12px}
 @media(max-width:760px){
   .workspace{grid-template-columns:46px minmax(0,1fr)}
-  .inspector{position:absolute;z-index:3;right:0;top:52px;bottom:76px;width:235px;box-shadow:-10px 0 30px #0008}
+  .inspector{position:absolute;z-index:3;right:0;top:52px;bottom:112px;width:235px;box-shadow:-10px 0 30px #0008}
   .inspector.hidden{display:none}
   .tool{width:37px;height:37px}
   header{padding:0 7px}.brand{font-size:12px}.version{font-size:10px}
