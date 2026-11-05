@@ -63,8 +63,14 @@
       <div class="color-picker-row"><label for="customColor">직접 선택</label><input id="customColor" type="color" value="#24242a"></div>
       <div class="swatches" id="palette"></div>
       <h3 class="section-title">LAYERS</h3>
+      <div class="layer-actions"><button id="groupAdd">그룹 만들기</button><button id="groupRemove">그룹 해제</button></div>
       <div id="layers"></div>
       <div class="layer-actions"><button id="layerDuplicate">레이어 복제</button><button id="layerDelete">레이어 삭제</button></div>
+      <section id="groupInspector" hidden>
+        <h3 class="section-title">GROUP</h3>
+        <div class="field"><label for="groupOpacity">그룹 불투명도</label><input id="groupOpacity" type="range" min="0" max="100" value="100"><output id="groupOpacityOut">100%</output></div>
+        <div class="field"><label for="groupBlend">그룹 혼합 모드</label><select id="groupBlend"><option value="normal">일반</option><option value="multiply">곱하기</option><option value="screen">스크린</option><option value="add">더하기</option><option value="darken">어둡게</option><option value="lighten">밝게</option></select></div>
+      </section>
       <div class="layer-actions"><button id="maskAdd">마스크 추가</button><button id="maskEdit">마스크 편집</button></div>
       <p id="maskState" class="note">일반 그림 편집 중</p>
       <div class="field"><label for="layerOpacity">불투명도</label><input id="layerOpacity" type="range" min="0" max="100" value="100"><output id="layerOpacityOut">100%</output></div>
