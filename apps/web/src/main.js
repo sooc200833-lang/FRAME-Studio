@@ -34,6 +34,8 @@ let selectionRect = null;
 let selectionPolygon = null;
 let selectionDrag = null;
 const selectedTransformLayers = new Set();
+let groupedTransformUndo = null;
+let groupedTransformRedo = null;
 let lineStartPoint = null;
 let drawingPoints = null;
 let movingStroke = false;
@@ -94,6 +96,8 @@ function selectedStroke() {
 }
 
 function save(layer) {
+  groupedTransformUndo = null;
+  groupedTransformRedo = null;
   layer.undo.push(layer.canvas.toDataURL());
   if (layer.undo.length > 25) layer.undo.shift();
   layer.redo = [];
@@ -110,6 +114,27 @@ function restore(layer, stack, other) {
     render([active]);
   };
   image.src = stack.pop();
+}
+
+async function restoreGroupedTransform(record, direction) {
+  if (!record) return;
+  const key = direction === 'undo' ? 'before' : 'after';
+  const entries = record.entries.filter(entry => layers.includes(entry.layer));
+  const images = await Promise.all(entries.map(entry => new Promise(resolve => {
+    const image = new Image();
+    image.onload = () => resolve({ entry, image });
+    image.onerror = () => resolve(null);
+    image.src = entry[key];
+  })));
+  for (const item of images) {
+    if (!item) continue;
+    const { entry, image } = item;
+    const context = entry.layer.canvas.getContext('2d');
+    context.clearRect(0, 0, W, H);
+    context.drawImage(image, 0, 0);
+  }
+  saveActiveFrame();
+  render(layers.map((_, index) => index));
 }
 
 function restoreMask(layer, stack, other) {
@@ -588,6 +613,7 @@ function applySelectionTransform() {
   // Prepare every layer before mutating any of them so all targets share
   // exactly the same transform origin and selection boundary.
   const prepared = targets.map(layer => {
+    const before = layer.canvas.toDataURL('image/png');
     const source = document.createElement('canvas');
     source.width = W; source.height = H;
     const sourceContext = source.getContext('2d');
@@ -606,7 +632,7 @@ function applySelectionTransform() {
     transformedContext.rotate(radians);
     transformedContext.scale(scale, scale);
     transformedContext.drawImage(source, -center.x, -center.y);
-    return { layer, transformed };
+    return { layer, transformed, before };
   });
 
   for (const { layer, transformed } of prepared) {
@@ -621,6 +647,10 @@ function applySelectionTransform() {
     context.restore();
     context.drawImage(transformed, 0, 0);
   }
+  groupedTransformUndo = targets.length > 1 ? {
+    entries: prepared.map(({ layer, before }) => ({ layer, before, after: layer.canvas.toDataURL('image/png') })),
+  } : null;
+  groupedTransformRedo = null;
 
   selectionRect = null;
   selectionPolygon = transformedPolygon;
@@ -790,12 +820,32 @@ function bindControls() {
 
   document.getElementById('undo').onclick = () => {
     if (maskEditing) restoreMask(layers[active], layers[active].maskUndo, layers[active].maskRedo);
-    else if ((tool === 'vector' || tool === 'select') && lineUndo.length) restoreLines(lineUndo, lineRedo);
+    else if (groupedTransformUndo) {
+      const record = groupedTransformUndo;
+      groupedTransformUndo = null;
+      groupedTransformRedo = record;
+      for (const entry of record.entries) {
+        if (!layers.includes(entry.layer)) continue;
+        entry.layer.redo.push(entry.layer.canvas.toDataURL('image/png'));
+        if (entry.layer.undo.length) entry.layer.undo.pop();
+      }
+      restoreGroupedTransform(record, 'undo');
+    } else if ((tool === 'vector' || tool === 'select') && lineUndo.length) restoreLines(lineUndo, lineRedo);
     else restore(layers[active], layers[active].undo, layers[active].redo);
   };
   document.getElementById('redo').onclick = () => {
     if (maskEditing) restoreMask(layers[active], layers[active].maskRedo, layers[active].maskUndo);
-    else if ((tool === 'vector' || tool === 'select') && lineRedo.length) restoreLines(lineRedo, lineUndo);
+    else if (groupedTransformRedo) {
+      const record = groupedTransformRedo;
+      groupedTransformRedo = null;
+      groupedTransformUndo = record;
+      for (const entry of record.entries) {
+        if (!layers.includes(entry.layer)) continue;
+        entry.layer.undo.push(entry.layer.canvas.toDataURL('image/png'));
+        if (entry.layer.redo.length) entry.layer.redo.pop();
+      }
+      restoreGroupedTransform(record, 'redo');
+    } else if ((tool === 'vector' || tool === 'select') && lineRedo.length) restoreLines(lineRedo, lineUndo);
     else restore(layers[active], layers[active].redo, layers[active].undo);
   };
 
