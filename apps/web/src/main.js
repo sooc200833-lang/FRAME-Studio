@@ -446,7 +446,6 @@ function appendLayerRow(list, layer, index, nested) {
     item.onclick = event => {
       if (event.target !== visibility) {
         active = index;
-        activeGroupId = layer.groupId || null;
         maskEditing = false;
         document.getElementById('maskEdit')?.classList.remove('active');
         document.getElementById('maskState').textContent = '일반 그림 편집 중';
@@ -563,6 +562,15 @@ function bindControls() {
     layerGroups.push({ id, name: '그룹 ' + (layerGroups.length + 1), visible: true, opacity: 1, blendMode: 'normal' });
     layers[active].groupId = id;
     activeGroupId = id;
+    render();
+  };
+  document.getElementById('layerToGroup').onclick = () => {
+    if (!activeGroupId || !layerGroups.some(group => group.id === activeGroupId)) return;
+    layers[active].groupId = activeGroupId;
+    render();
+  };
+  document.getElementById('layerOutGroup').onclick = () => {
+    delete layers[active].groupId;
     render();
   };
   document.getElementById('groupRemove').onclick = () => {
