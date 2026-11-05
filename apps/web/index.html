@@ -4,13 +4,13 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
 <meta name="theme-color" content="#171719">
-<title>FRAME Studio — v0.3</title>
+<title>FRAME Studio — v0.4</title>
 </head>
 <body>
 <div class="app">
   <header>
     <div class="brand">FRAME<span>•</span>STUDIO</div>
-    <span class="version">v0.3 · PIXI RENDERER</span>
+    <span class="version">v0.4 · VECTOR LINE STUDIO</span>
     <div class="spacer"></div>
     <button id="undo" aria-label="실행 취소">↶</button>
     <button id="redo" aria-label="다시 실행">↷</button>
@@ -40,6 +40,12 @@
       <div class="field"><label for="size">크기</label><input id="size" type="range" min="1" max="60" value="7"><output id="sizeOut">7px</output></div>
       <div class="field"><label for="tolerance">채우기 허용 오차</label><input id="tolerance" type="range" min="0" max="100" value="24"><output id="tolOut">24</output></div>
       <div class="field"><label for="edge">선화 아래 확장</label><input id="edge" type="range" min="0" max="4" value="1"><output id="edgeOut">1px</output></div>
+      <section id="lineTools" hidden>
+        <h3 class="section-title">SELECTED LINE</h3>
+        <div class="field"><label for="lineColor">선 색상</label><input id="lineColor" type="color" value="#24242a"></div>
+        <div class="field"><label for="lineWidth">선 굵기</label><input id="lineWidth" type="range" min="1" max="60" value="7"><output id="lineWidthOut">7px</output></div>
+        <button id="deleteLine" class="delete-line">선 삭제</button>
+      </section>
       <h3 class="section-title">COLOR</h3>
       <div class="swatches" id="palette"></div>
       <h3 class="section-title">LAYERS</h3>
@@ -48,7 +54,7 @@
     </aside>
   </div>
 
-  <div class="timeline">FRAME 01 · PIXI GPU RENDERER<br><span>렌더링과 페인트 데이터를 분리한 첫 단계입니다.</span></div>
+  <div class="timeline">FRAME 01 · VECTOR LINE STUDIO<br><span>벡터 펜으로 그리고 선택 도구로 선을 이동·수정할 수 있습니다.</span></div>
 </div>
 
 <!-- The hidden canvas elements are the editable paint buffers, not the display surface. -->
