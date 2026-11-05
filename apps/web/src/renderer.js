@@ -210,18 +210,24 @@ export class PixiStageRenderer {
       return;
     }
 
-    const xs = outline.map(point => point[0]);
-    const ys = outline.map(point => point[1]);
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    for (const point of outline) {
+      if (point[0] < minX) minX = point[0];
+      if (point[0] > maxX) maxX = point[0];
+      if (point[1] < minY) minY = point[1];
+      if (point[1] > maxY) maxY = point[1];
+    }
     const padding = 3;
-    const left = Math.max(0, Math.floor(Math.min(...xs) - padding));
-    const top = Math.max(0, Math.floor(Math.min(...ys) - padding));
-    const right = Math.min(this.width, Math.ceil(Math.max(...xs) + padding));
-    const bottom = Math.min(this.height, Math.ceil(Math.max(...ys) + padding));
+    const left = Math.max(0, Math.floor(minX - padding));
+    const top = Math.max(0, Math.floor(minY - padding));
+    const right = Math.min(this.width, Math.ceil(maxX + padding));
+    const bottom = Math.min(this.height, Math.ceil(maxY + padding));
     const canvasWidth = Math.max(1, right - left);
     const canvasHeight = Math.max(1, bottom - top);
 
     if (this.previewTextureCanvas.width !== canvasWidth) this.previewTextureCanvas.width = canvasWidth;
     if (this.previewTextureCanvas.height !== canvasHeight) this.previewTextureCanvas.height = canvasHeight;
+    context.clearRect(0, 0, canvasWidth, canvasHeight);
     context.save();
     context.translate(-left, -top);
     context.globalAlpha = alpha;
