@@ -6,7 +6,7 @@ This document tracks projects that FRAME Studio may use, study, or interoperate 
 
 | Project | License reported by upstream | Potential role | Decision |
 |---|---|---|---|
-| [PixiJS](https://github.com/pixijs/pixijs) | MIT | GPU-accelerated 2D stage renderer, sprites, textures, filters | Primary renderer candidate |
+| [PixiJS](https://github.com/pixijs/pixijs) | MIT | GPU-accelerated 2D stage renderer, sprites, textures, blend modes, filters | Integrated: stage rendering, smooth vector path display, layer opacity and standard blend modes |
 | [Paper.js](https://github.com/paperjs/paper.js) | MIT | Vector paths, Bezier geometry, editable line objects | Candidate for Line Studio |
 | [Three.js](https://github.com/mrdoob/three.js) | MIT | 3D primitives, camera, geometry, model preview | Primary web 3D candidate |
 | [libmypaint](https://github.com/mypaint/libmypaint) | ISC | Natural brush engine and stroke dynamics | Research for a later native/WASM integration |
@@ -36,4 +36,4 @@ This document tracks projects that FRAME Studio may use, study, or interoperate 
 
 ## Current status
 
-The v0.2 browser prototype remains a standalone HTML file. The projects above are evaluated candidates, not yet bundled dependencies. No upstream source code has been copied into the prototype.
+PixiJS 8 is installed and integrated as the web stage renderer. Its built-in sprite alpha and standard blend modes are used for layer compositing. Paper.js, Three.js, and libmypaint remain candidates for isolated evaluation; none is treated as integrated until an adapter, tests, and license review are complete. No upstream source code has been copied into the prototype.
