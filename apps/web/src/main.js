@@ -3,7 +3,7 @@ import { PixiStageRenderer } from './renderer.js';
 import { applyBrushTexture, coalescedPointerEvents, createBrushOutline, getBrushPreset, normalizePointerPressure, stabilizePoint } from './brush/brush-engine.js';
 import { expandRegionMask, findConnectedRegion } from './fill/flood-fill.js';
 import { animateLineStrokes, lineBoilPhase } from './line/line-boil.js';
-import { activeFrame, addFrame, createTimeline, deleteFrame, frameAtTime, getOnionSkin, selectFrame, updateFrameCels, updateFrameStrokes } from './animation/timeline.js';
+import { activeFrame, addFrame, createTimeline, deleteFrame, frameAtTime, getOnionSkin, moveFrame, selectFrame, setFrameDuration, updateFrameCels, updateFrameStrokes } from './animation/timeline.js';
 import { normalizeRasterCels } from './animation/frame-cels.js';
 import { containsSelectionPoint, moveSelectionRect, normalizeSelectionRect, lineStrokeIntersectsPolygon, pointInPolygon, resizeSelectionRect, resolveSelectionTargets, transformLineStrokes, transformPolygon, translatePolygon } from './selection/selection.js';
 import {
@@ -414,10 +414,15 @@ function drawTimeline() {
     const button = document.createElement('button');
     button.className = 'frame-cell' + (frame.id === timeline.activeFrameId ? ' active' : '');
     button.textContent = String(index + 1).padStart(2, '0');
-    button.title = `프레임 ${index + 1} · ${frame.strokes.length}개 선`;
+    button.title = `프레임 ${index + 1} · ${Math.round(frame.durationMs)}ms · ${frame.strokes.length}개 선`;
     button.onclick = () => loadTimelineFrame(frame.id);
     strip.append(button);
   });
+  const active = activeFrame(timeline);
+  const durationInput = document.getElementById('frameDuration');
+  const durationOutput = document.getElementById('frameDurationOut');
+  if (active && durationInput) durationInput.value = String(Math.round(active.durationMs));
+  if (active && durationOutput) durationOutput.value = `${Math.round(active.durationMs)} ms · ${(1000 / active.durationMs).toFixed(1)} FPS`;
   const label = document.getElementById('frameCounter');
   if (label) label.textContent = `${timeline.frames.findIndex(frame => frame.id === timeline.activeFrameId) + 1} / ${timeline.frames.length}`;
 }
@@ -1074,6 +1079,12 @@ function bindControls() {
 
   document.getElementById('playToggle').onclick = () => setPlaybackEnabled(!playbackActive);
   document.getElementById('fps').oninput = event => updateTimelineFPS(event.target.value);
+  document.getElementById('frameDuration').oninput = event => {
+    if (playbackActive) setPlaybackEnabled(false);
+    const frame = activeFrame(timeline);
+    if (frame) setFrameDuration(timeline, frame.id, event.target.value);
+    drawTimeline();
+  };
   updateTimelineFPS(document.getElementById('fps').value);
 
   document.getElementById('frameAdd').onclick = () => {
@@ -1087,6 +1098,16 @@ function bindControls() {
     saveActiveFrame();
     const frame = addFrame(timeline, { duplicate: true });
     loadTimelineFrame(frame.id, false);
+  };
+  document.getElementById('frameMoveLeft').onclick = () => {
+    if (playbackActive) setPlaybackEnabled(false);
+    saveActiveFrame();
+    if (moveFrame(timeline, timeline.activeFrameId, -1)) drawTimeline();
+  };
+  document.getElementById('frameMoveRight').onclick = () => {
+    if (playbackActive) setPlaybackEnabled(false);
+    saveActiveFrame();
+    if (moveFrame(timeline, timeline.activeFrameId, 1)) drawTimeline();
   };
   document.getElementById('frameDelete').onclick = () => {
     if (playbackActive) setPlaybackEnabled(false);
