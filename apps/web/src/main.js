@@ -1,6 +1,6 @@
 import './styles.css';
 import { PixiStageRenderer } from './renderer.js';
-import { coalescedPointerEvents, createBrushOutline, getBrushPreset, normalizePointerPressure, stabilizePoint } from './brush/brush-engine.js';
+import { applyBrushTexture, coalescedPointerEvents, createBrushOutline, getBrushPreset, normalizePointerPressure, stabilizePoint } from './brush/brush-engine.js';
 import { expandRegionMask, findConnectedRegion } from './fill/flood-fill.js';
 import { animateLineStrokes, lineBoilPhase } from './line/line-boil.js';
 import { activeFrame, addFrame, createTimeline, deleteFrame, frameAtTime, getOnionSkin, selectFrame, updateFrameCels, updateFrameStrokes } from './animation/timeline.js';
@@ -1440,6 +1440,9 @@ function bindCanvasEvents() {
         }
         context.closePath();
         context.fill();
+        if (!drawingMask && tool === 'pen') {
+          applyBrushTexture(context, outline, strokeSamples, { preset: brushPreset, size, color, opacity: currentBrushPreset().opacity * brushOpacity });
+        }
         context.restore();
       }
       strokeSamples = [];
