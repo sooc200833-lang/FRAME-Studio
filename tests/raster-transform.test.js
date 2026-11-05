@@ -12,6 +12,7 @@ import {
   multiplyAffineMatrices,
   normalizeAffineMatrix,
   transformAffinePoint,
+  rasterizeRasterTransformStack,
 } from '../apps/web/src/selection/raster-transform.js';
 
 const near = (actual, expected, epsilon = 1e-9) => assert.ok(Math.abs(actual - expected) <= epsilon, `${actual} != ${expected}`);
@@ -140,4 +141,33 @@ test('composes a transform by clearing its source polygon and drawing its snapsh
   assert.ok(calls.some(call => call[0] === 'clearRect' && call[1] === 0 && call[2] === 0 && call[3] === 32 && call[4] === 24));
   assert.ok(calls.some(call => call[0] === 'setTransform' && call[1] === 1 && call[5] === 5 && call[6] === 7));
   assert.ok(calls.some(call => call[0] === 'drawImage' && call[1] === 'source'));
+});
+
+test('rasterizes a composed presentation into the source canvas and clears its stack', () => {
+  const calls = [];
+  const makeContext = name => ({
+    clearRect(...args) { calls.push([name, 'clearRect', ...args]); },
+    drawImage(image, ...args) { calls.push([name, 'drawImage', image.name, ...args]); },
+    save() {},
+    restore() {},
+    setTransform() {},
+  });
+  const base = { width: 16, height: 12, name: 'base', getContext: () => makeContext('base') };
+  const presentation = { width: 16, height: 12, name: 'presentation', getContext: () => makeContext('presentation') };
+  const layer = {
+    canvas: base,
+    presentationCanvas: presentation,
+    transformRecords: [{
+      id: 'transform-1',
+      sourceDataUrl: 'data:image/png;base64,AA==',
+      clipPolygon: [{ x: 0, y: 0 }, { x: 8, y: 0 }, { x: 8, y: 8 }],
+      matrix: IDENTITY_AFFINE_MATRIX,
+      sourceCanvas: { name: 'source' },
+    }],
+  };
+  assert.equal(rasterizeRasterTransformStack(layer), true);
+  assert.deepEqual(layer.transformRecords, []);
+  assert.ok(calls.some(call => call[0] === 'base' && call[1] === 'drawImage' && call[2] === 'presentation'));
+  assert.ok(calls.some(call => call[0] === 'presentation' && call[1] === 'drawImage' && call[2] === 'base'));
+  assert.equal(rasterizeRasterTransformStack({ ...layer, presentationCanvas: base }), false);
 });
