@@ -449,9 +449,11 @@ function appendLayerRow(list, layer, index, nested) {
     item.onclick = event => {
       if (event.target !== visibility) {
         active = index;
+        activeGroupId = layer.groupId || null;
         maskEditing = false;
         document.getElementById('maskEdit')?.classList.remove('active');
         document.getElementById('maskState').textContent = '일반 그림 편집 중';
+        updateLayerInspector();
         drawLayers();
       }
     };
