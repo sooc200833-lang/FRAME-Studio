@@ -408,6 +408,9 @@ function drawLayers() {
     item.onclick = event => {
       if (event.target !== visibility) {
         active = index;
+        maskEditing = false;
+        document.getElementById('maskEdit')?.classList.remove('active');
+        document.getElementById('maskState').textContent = '일반 그림 편집 중';
         drawLayers();
       }
     };
@@ -568,8 +571,19 @@ function bindControls() {
   };
 
   document.getElementById('clear').onclick = () => {
-    save(layers[active]);
-    layers[active].canvas.getContext('2d').clearRect(0, 0, W, H);
+    const layer = layers[active];
+    if (maskEditing && layer.maskCanvas) {
+      layer.maskUndo.push(layer.maskCanvas.toDataURL());
+      if (layer.maskUndo.length > 25) layer.maskUndo.shift();
+      layer.maskRedo = [];
+      const context = layer.maskCanvas.getContext('2d');
+      context.clearRect(0, 0, W, H);
+      context.fillStyle = '#fff';
+      context.fillRect(0, 0, W, H);
+    } else {
+      save(layer);
+      layer.canvas.getContext('2d').clearRect(0, 0, W, H);
+    }
     render([active]);
   };
 
@@ -732,7 +746,7 @@ function bindCanvasEvents() {
     strokeSamples = (tool === 'pen' || tool === 'eraser')
       ? [{ ...point, pressure: normalizePointerPressure(event, pressureEnabled) }]
       : [];
-    save(layers[active]);
+    if (!maskEditing) save(layers[active]);
     if (tool === 'pen' || tool === 'eraser') {
       const outline = createBrushOutline(strokeSamples, {
         size, stylus: strokeIsStylus, pressureEnabled,
