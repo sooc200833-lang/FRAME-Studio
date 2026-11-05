@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { containsSelectionPoint, moveSelectionRect, normalizeSelectionRect, lineStrokeIntersectsPolygon, pointInPolygon, resizeSelectionRect, resolveSelectionTargets, transformLineStrokes, transformPolygon, translatePolygon } from '../apps/web/src/selection/selection.js';
+import { containsSelectionPoint, getSelectionRectHandles, hitTestSelectionHandle, moveSelectionRect, normalizeSelectionRect, lineStrokeIntersectsPolygon, pointInPolygon, resizeSelectionRect, resizeSelectionRectFromHandle, resolveSelectionTargets, transformLineStrokes, transformPolygon, translatePolygon } from '../apps/web/src/selection/selection.js';
 
 test('normalizes a drag rectangle in any direction', () => {
   assert.deepEqual(normalizeSelectionRect({ x: 90, y: 80 }, { x: 10, y: 20 }), { x: 10, y: 20, width: 80, height: 60 });
@@ -78,4 +78,26 @@ test('transforms selected vector strokes and preserves unrelated strokes', () =>
   assert.ok(Math.abs(result[0].points[0].x - 10) < 1e-9);
   assert.ok(Math.abs(result[0].points[0].y - (-6)) < 1e-9);
   assert.deepEqual(result[1], strokes[1]);
+});
+
+test('exposes eight resize handles and a rotation handle with hit testing', () => {
+  const rect = { x: 10, y: 20, width: 80, height: 60 };
+  const handles = getSelectionRectHandles(rect);
+  assert.equal(handles.length, 9);
+  assert.deepEqual(handles.find(handle => handle.id === 'rotate'), { id: 'rotate', x: 50, y: -8 });
+  assert.equal(hitTestSelectionHandle({ x: 10, y: 20 }, rect), 'nw');
+  assert.equal(hitTestSelectionHandle({ x: 50, y: -8 }, rect), 'rotate');
+  assert.equal(hitTestSelectionHandle({ x: 50, y: 50 }, rect), null);
+});
+
+test('resizes from edges and corners while preserving opposite anchors', () => {
+  const rect = { x: 10, y: 20, width: 80, height: 60 };
+  assert.deepEqual(resizeSelectionRectFromHandle(rect, 'nw', { x: 0, y: 5 }, { width: 120, height: 100 }), { x: 0, y: 5, width: 90, height: 75 });
+  assert.deepEqual(resizeSelectionRectFromHandle(rect, 'e', { x: 110, y: 60 }, { width: 120, height: 100 }), { x: 10, y: 20, width: 100, height: 60 });
+  assert.deepEqual(resizeSelectionRectFromHandle(rect, 's', { x: 50, y: 95 }, { width: 120, height: 100 }), { x: 10, y: 20, width: 80, height: 75 });
+});
+
+test('clamps resized handles to canvas and enforces a minimum size', () => {
+  const rect = { x: 10, y: 20, width: 80, height: 60 };
+  assert.deepEqual(resizeSelectionRectFromHandle(rect, 'nw', { x: 500, y: 500 }, { width: 120, height: 100 }), { x: 88, y: 78, width: 2, height: 2 });
 });
