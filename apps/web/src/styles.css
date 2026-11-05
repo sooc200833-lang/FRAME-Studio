@@ -96,3 +96,58 @@ output{color:var(--accent);min-width:35px;text-align:right}
 
 .layer .transform-layer-check{flex:0 0 auto;width:15px;height:15px;margin:0 1px;accent-color:var(--accent);cursor:pointer}
 .layer span{min-width:0}
+
+
+/* Workspace inspector: focused tabs and touch-friendly controls */
+.workspace{grid-template-columns:54px minmax(0,1fr) 276px}
+.inspector{padding:0;display:flex;flex-direction:column;min-width:0}
+.inspector.hidden{display:none}
+.inspector-heading{display:flex;align-items:center;justify-content:space-between;padding:13px 14px 10px;border-bottom:1px solid var(--line)}
+.inspector-heading h2{margin:0;color:var(--text);font-size:15px;letter-spacing:.01em}
+.inspector-heading span{display:block;margin-top:3px;color:var(--muted);font-size:9px;letter-spacing:.1em}
+.panel-close{display:none;width:30px;height:30px;padding:0;font-size:20px;line-height:1}
+.panel-tabs{display:grid;grid-template-columns:repeat(3,1fr);gap:5px;padding:8px 10px;border-bottom:1px solid var(--line);background:#1c1c1f}
+.panel-tab{padding:8px 4px;font-size:12px;border-color:transparent;background:transparent;color:var(--muted)}
+.panel-tab.active{background:#3a3428;border-color:#76613a;color:#ffe0a0}
+.panel-content{display:none;overflow:auto;min-height:0;padding:13px}
+.panel-content.active{display:block}
+.panel-content>h3:first-child{font-size:11px;letter-spacing:.1em;margin:2px 0 15px;color:#c9c9d0}
+#brushPreset{width:150px;max-width:58%;font-size:12px}
+.size-control{margin:14px 0 16px;padding:11px;background:#29292d;border:1px solid #3b3b42;border-radius:10px}
+.size-heading{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;font-size:12px}
+.size-heading strong{font-size:14px;color:#f0c979;font-variant-numeric:tabular-nums}
+#size{display:block;width:100%;accent-color:var(--accent)}
+.size-presets{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:5px;margin-top:9px}
+.size-presets button{padding:6px 2px;font-size:11px;background:#202023;border-color:#414149;color:#c5c5cd}
+.size-presets button.active{background:#51452e;border-color:var(--accent);color:#ffe0a0}
+.panel-content .field{margin:14px 0}
+.panel-content .field input[type=range]{max-width:45%;accent-color:var(--accent)}
+.active-color-card{display:flex;align-items:center;gap:12px;padding:12px;border:1px solid var(--line);border-radius:10px;background:#29292d;margin-bottom:14px}
+#activeColorPreview{width:42px;height:42px;flex:0 0 42px;border-radius:9px;border:1px solid #ffffff55;background:#24242a;box-shadow:inset 0 0 0 1px #0002}
+.active-color-card span{display:block;color:var(--muted);font-size:11px;margin-bottom:4px}
+.active-color-card strong{font-size:14px;letter-spacing:.06em;font-variant-numeric:tabular-nums}
+.color-picker-row{margin:12px 0;padding:10px 0;border-bottom:1px solid var(--line)}
+#customColor{width:64px;height:38px;cursor:pointer}
+.palette-actions{display:flex;gap:7px;margin:10px 0 14px}
+.palette-actions button{flex:1;padding:8px 5px;font-size:11px}
+.palette-categories{display:flex;gap:6px;overflow-x:auto;padding:2px 1px 9px;margin-bottom:8px;scrollbar-width:thin}
+.palette-category{white-space:nowrap;padding:7px 10px;font-size:11px;color:var(--muted);background:#29292d}
+.palette-category.active{background:#51452e;border-color:var(--accent);color:#ffe0a0}
+.swatches{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:9px;padding:5px 2px}
+.swatch{width:100%;height:auto;aspect-ratio:1;padding:0;border-radius:8px;border:1px solid #ffffff30;min-width:0}
+.swatch.selected{outline:2px solid var(--accent);outline-offset:2px;transform:scale(.94)}
+.recent-colors-wrap{border-top:1px solid var(--line);margin-top:16px;padding-top:12px}
+.recent-colors-wrap .section-title{margin:0 0 8px}
+#layers{max-height:42vh;overflow:auto}
+#layers .layer{min-height:42px}
+#layerBlend,#groupBlend{max-width:145px}
+.panel-content .note{line-height:1.6}
+#toolsPanel .section-title{padding-top:10px;border-top:1px solid var(--line)}
+#toolsPanel .transform-apply{padding:10px}
+@media(max-width:760px){
+  .workspace{grid-template-columns:46px minmax(0,1fr)}
+  .inspector{position:absolute;z-index:5;right:0;top:52px;bottom:112px;width:min(300px,calc(100vw - 54px));box-shadow:-10px 0 30px #0009}
+  .panel-close{display:block}
+  .tool{width:37px;height:37px}
+  .panel-content{padding:12px}
+}
