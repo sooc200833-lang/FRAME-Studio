@@ -62,9 +62,12 @@ export function coalescedPointerEvents(event) {
     if (samples?.length) {
       const last = samples[samples.length - 1];
       const coordinate = (sample, primary, fallback) => sample?.[primary] ?? sample?.[fallback];
+      const eventX = coordinate(event, 'clientX', 'x');
+      const eventY = coordinate(event, 'clientY', 'y');
+      if (eventX === undefined && eventY === undefined) return samples;
       const samePosition =
-        coordinate(last, 'clientX', 'x') === coordinate(event, 'clientX', 'x') &&
-        coordinate(last, 'clientY', 'y') === coordinate(event, 'clientY', 'y');
+        coordinate(last, 'clientX', 'x') === eventX &&
+        coordinate(last, 'clientY', 'y') === eventY;
       const samePressure = Number(last?.pressure ?? 0.5) === Number(event?.pressure ?? 0.5);
       if (samePosition && samePressure) return samples;
 
