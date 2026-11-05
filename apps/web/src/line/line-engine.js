@@ -56,3 +56,76 @@ export function cloneLineStrokes(strokes) {
     points: stroke.points.map(point => ({ x: point.x, y: point.y })),
   }));
 }
+
+
+/** Return the closest point and segment index for an editable vector path. */
+export function projectPointToLineStroke(stroke, point) {
+  if (!stroke?.points || stroke.points.length < 2) return null;
+  let best = { distance: Infinity, segmentIndex: -1, point: null, t: 0 };
+  for (let index = 0; index < stroke.points.length - 1; index++) {
+    const a = stroke.points[index], b = stroke.points[index + 1];
+    const dx = b.x - a.x, dy = b.y - a.y;
+    const lengthSquared = dx * dx + dy * dy;
+    const t = lengthSquared
+      ? Math.max(0, Math.min(1, ((point.x - a.x) * dx + (point.y - a.y) * dy) / lengthSquared))
+      : 0;
+    const projected = { x: a.x + dx * t, y: a.y + dy * t };
+    const distance = Math.hypot(point.x - projected.x, point.y - projected.y);
+    if (distance < best.distance) best = { distance, segmentIndex: index, point: projected, t };
+  }
+  return best;
+}
+
+/** Insert a node at the nearest segment projection without changing stroke identity. */
+export function insertLineStrokePoint(stroke, point) {
+  if (!stroke?.points || stroke.points.length < 2) return stroke;
+  const projection = projectPointToLineStroke(stroke, point);
+  if (!projection) return stroke;
+  const points = stroke.points.map(item => ({ x: item.x, y: item.y }));
+  points.splice(projection.segmentIndex + 1, 0, projection.point);
+  return { ...stroke, points };
+}
+
+/** Remove a node while always retaining the two endpoints of a valid stroke. */
+export function removeLineStrokePoint(stroke, pointIndex) {
+  if (!stroke?.points || stroke.points.length <= 2) return stroke;
+  const index = Math.floor(Number(pointIndex));
+  if (!Number.isInteger(index) || index <= 0 || index >= stroke.points.length - 1) return stroke;
+  const points = stroke.points.filter((_, point) => point !== index).map(item => ({ x: item.x, y: item.y }));
+  return { ...stroke, points };
+}
+
+/**
+ * Smooth a polyline with Catmull-Rom interpolation. The output remains a
+ * polyline for compatibility with existing renderers and editable node tools.
+ */
+export function smoothLineStroke(stroke, subdivisions = 5, tension = 0.5) {
+  if (!stroke?.points || stroke.points.length < 3) return stroke;
+  const steps = Math.max(2, Math.min(16, Math.floor(Number(subdivisions) || 5)));
+  const alpha = Math.max(0, Math.min(1, Number(tension) || 0));
+  const source = stroke.points;
+  const points = [{ x: source[0].x, y: source[0].y }];
+  for (let index = 0; index < source.length - 1; index++) {
+    const p0 = source[Math.max(0, index - 1)];
+    const p1 = source[index];
+    const p2 = source[index + 1];
+    const p3 = source[Math.min(source.length - 1, index + 2)];
+    const m1x = (p2.x - p0.x) * alpha * 0.5;
+    const m1y = (p2.y - p0.y) * alpha * 0.5;
+    const m2x = (p3.x - p1.x) * alpha * 0.5;
+    const m2y = (p3.y - p1.y) * alpha * 0.5;
+    for (let step = 1; step <= steps; step++) {
+      const t = step / steps, t2 = t * t, t3 = t2 * t;
+      const h00 = 2 * t3 - 3 * t2 + 1;
+      const h10 = t3 - 2 * t2 + t;
+      const h01 = -2 * t3 + 3 * t2;
+      const h11 = t3 - t2;
+      points.push({
+        x: h00 * p1.x + h10 * m1x + h01 * p2.x + h11 * m2x,
+        y: h00 * p1.y + h10 * m1y + h01 * p2.y + h11 * m2y,
+      });
+    }
+  }
+  points[points.length - 1] = { x: source.at(-1).x, y: source.at(-1).y };
+  return { ...stroke, points };
+}
