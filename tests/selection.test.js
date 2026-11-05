@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { containsSelectionPoint, getSelectionRectHandles, hitTestSelectionHandle, moveSelectionRect, normalizeSelectionRect, lineStrokeIntersectsPolygon, pointInPolygon, resizeSelectionRect, resizeSelectionRectFromHandle, resolveSelectionTargets, transformLineStrokes, transformPolygon, translatePolygon } from '../apps/web/src/selection/selection.js';
+import { containsSelectionPoint, getSelectionRectHandles, hitTestSelectionHandle, moveSelectionRect, normalizeSelectionRect, lineStrokeIntersectsPolygon, pointInPolygon, resizeSelectionRect, resizeSelectionRectFromHandle, resolveSelectionTargets, transformLineStrokes, transformPolygon, translatePolygon, getSelectionPreviewTransform } from '../apps/web/src/selection/selection.js';
 
 test('normalizes a drag rectangle in any direction', () => {
   assert.deepEqual(normalizeSelectionRect({ x: 90, y: 80 }, { x: 10, y: 20 }), { x: 10, y: 20, width: 80, height: 60 });
@@ -100,4 +100,15 @@ test('resizes from edges and corners while preserving opposite anchors', () => {
 test('clamps resized handles to canvas and enforces a minimum size', () => {
   const rect = { x: 10, y: 20, width: 80, height: 60 };
   assert.deepEqual(resizeSelectionRectFromHandle(rect, 'nw', { x: 500, y: 500 }, { width: 120, height: 100 }), { x: 88, y: 78, width: 2, height: 2 });
+});
+
+test('computes a stable center and independent scale factors for live transform previews', () => {
+  const original = { x: 10, y: 20, width: 80, height: 40 };
+  const target = { x: 5, y: 15, width: 160, height: 20 };
+  const transform = getSelectionPreviewTransform(original, target, 90);
+  assert.deepEqual(transform.center, { x: 50, y: 40 });
+  assert.equal(transform.scaleX, 2);
+  assert.equal(transform.scaleY, 0.5);
+  assert.ok(Math.abs(transform.rotationRadians - Math.PI / 2) < 1e-9);
+  assert.equal(getSelectionPreviewTransform(null), null);
 });
