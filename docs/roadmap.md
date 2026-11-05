@@ -11,8 +11,9 @@
 - [x] Flood-fill the connected region at the tapped pixel.
 - [x] Write the result to the active paint layer without modifying source line art.
 - [x] Expose fill tolerance.
-- [ ] Implement edge expansion and anti-alias cleanup.
-- [ ] Add undo/redo coverage and automated fill tests.
+- [x] Add protected edge expansion beneath upper line art.
+- [x] Add Node unit tests for fill region detection and edge protection.
+- [ ] Refine antialias cleanup with visual regression fixtures.
 
 ## Phase 2 — Line Studio
 - [x] Store new vector strokes as independently identified line objects.
