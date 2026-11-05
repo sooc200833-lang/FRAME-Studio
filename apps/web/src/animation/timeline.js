@@ -110,3 +110,14 @@ export function setFrameDuration(timeline, frameId, durationMs) {
   frame.durationMs = Math.max(20, Math.min(10000, duration));
   return true;
 }
+
+/** Move a frame by one slot; its identity and exposure stay attached to it. */
+export function moveFrame(timeline, frameId, offset) {
+  const from = timeline.frames.findIndex(frame => frame.id === frameId);
+  if (from < 0) return false;
+  const step = Math.sign(Number(offset) || 0);
+  const to = from + step;
+  if (!step || to < 0 || to >= timeline.frames.length) return false;
+  [timeline.frames[from], timeline.frames[to]] = [timeline.frames[to], timeline.frames[from]];
+  return true;
+}
