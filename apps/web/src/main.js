@@ -1071,7 +1071,7 @@ function bindControls() {
   });
 
   document.getElementById('selectionDeselect').onclick = () => {
-    if (selectionDrag?.previewCanvas) renderer.clearLayerPreview(layers[active]);
+    if (selectionDrag) clearSelectionDragPreviews(selectionDrag);
     selectionRect = null;
     selectionPolygon = null;
     selectionDrag = null;
