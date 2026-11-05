@@ -136,6 +136,6 @@ test('composes a transform by clearing its source polygon and drawing its snapsh
   assert.equal(composeRasterTransformStack(base, [record], output), output);
   assert.ok(calls.some(call => call[0] === 'drawImage' && call[1] === 'base'));
   assert.ok(calls.some(call => call[0] === 'clearRect' && call[1] === 0 && call[2] === 0 && call[3] === 32 && call[4] === 24));
-  assert.ok(calls.some(call => call[0] === 'setTransform' && call[1] === 1 && call[4] === 5 && call[5] === 7));
+  assert.ok(calls.some(call => call[0] === 'setTransform' && call[1] === 1 && call[5] === 5 && call[6] === 7));
   assert.ok(calls.some(call => call[0] === 'drawImage' && call[1] === 'source'));
 });
