@@ -861,9 +861,9 @@ function bindCanvasEvents() {
           targetLayer.maskRedo = [];
         }
         context.save();
-        context.globalCompositeOperation = drawingMask ? 'source-over' : (tool === 'eraser' ? 'destination-out' : 'source-over');
+        context.globalCompositeOperation = drawingMask ? (tool === 'eraser' ? 'source-over' : 'destination-out') : (tool === 'eraser' ? 'destination-out' : 'source-over');
         context.globalAlpha = drawingMask ? 1 : (tool === 'eraser' ? 1 : currentBrushPreset().opacity);
-        context.fillStyle = drawingMask ? (tool === 'eraser' ? '#fff' : '#000') : color;
+        context.fillStyle = drawingMask ? '#fff' : color;
         context.beginPath();
         context.moveTo(outline[0][0], outline[0][1]);
         for (let index = 1; index < outline.length; index++) {
