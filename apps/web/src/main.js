@@ -28,6 +28,7 @@ let strokeSamples = [];
 let strokeIsStylus = false;
 let pressureEnabled = true;
 let brushSmoothing = 0.28;
+let maskEditing = false;
 let lineStartPoint = null;
 let drawingPoints = null;
 let movingStroke = false;
@@ -56,7 +57,13 @@ function makeLayer(name) {
   const canvas = document.createElement('canvas');
   canvas.width = W;
   canvas.height = H;
-  return { name, visible: true, opacity: 1, blendMode: 'normal', canvas, undo: [], redo: [] };
+  const maskCanvas = document.createElement('canvas');
+  maskCanvas.width = W;
+  maskCanvas.height = H;
+  const maskContext = maskCanvas.getContext('2d');
+  maskContext.fillStyle = '#fff';
+  maskContext.fillRect(0, 0, W, H);
+  return { name, visible: true, opacity: 1, blendMode: 'normal', canvas, maskCanvas, maskEnabled: false, maskUndo: [], maskRedo: [], undo: [], redo: [] };
 }
 
 const layers = [makeLayer('면 / 톤'), makeLayer('선화')];
@@ -145,7 +152,17 @@ function composite() {
     context.save();
     context.globalAlpha = layer.opacity ?? 1;
     context.globalCompositeOperation = layer.blendMode === 'add' ? 'lighter' : (layer.blendMode === 'normal' || !layer.blendMode ? 'source-over' : layer.blendMode);
-    context.drawImage(layer.canvas, 0, 0);
+    if (layer.maskEnabled && layer.maskCanvas) {
+      const masked = document.createElement('canvas');
+      masked.width = W; masked.height = H;
+      const maskedContext = masked.getContext('2d');
+      maskedContext.drawImage(layer.canvas, 0, 0);
+      maskedContext.globalCompositeOperation = 'destination-in';
+      maskedContext.drawImage(layer.maskCanvas, 0, 0);
+      context.drawImage(masked, 0, 0);
+    } else {
+      context.drawImage(layer.canvas, 0, 0);
+    }
     context.restore();
   });
   drawVectorStrokes(context);
@@ -373,7 +390,7 @@ function drawLayers() {
     };
 
     const name = document.createElement('span');
-    name.textContent = layer.name;
+    name.textContent = layer.name + (layer.maskEnabled ? ' · MASK' : '');
     item.append(visibility, name);
     item.onclick = event => {
       if (event.target !== visibility) {
@@ -479,6 +496,28 @@ function bindControls() {
     render(layers.map((_, index) => index));
   };
 
+  document.getElementById('maskAdd').onclick = () => {
+    const layer = layers[active];
+    if (!layer.maskCanvas) {
+      layer.maskCanvas = document.createElement('canvas');
+      layer.maskCanvas.width = W; layer.maskCanvas.height = H;
+      const context = layer.maskCanvas.getContext('2d');
+      context.fillStyle = '#fff'; context.fillRect(0, 0, W, H);
+      layer.maskUndo = []; layer.maskRedo = [];
+    }
+    layer.maskEnabled = true;
+    maskEditing = false;
+    document.getElementById('maskEdit').classList.remove('active');
+    render(layers.map((_, index) => index));
+  };
+  document.getElementById('maskEdit').onclick = event => {
+    const layer = layers[active];
+    if (!layer.maskCanvas || !layer.maskEnabled) return;
+    maskEditing = !maskEditing;
+    event.currentTarget.classList.toggle('active', maskEditing);
+    document.getElementById('maskState').textContent = maskEditing ? '마스크 편집 중 · 검정=숨김 / 흰색=표시' : '일반 그림 편집 중';
+  };
+
   document.getElementById('layerDuplicate').onclick = () => {
     if (playbackActive) setPlaybackEnabled(false);
     const source = layers[active];
@@ -486,6 +525,8 @@ function bindControls() {
     copy.opacity = source.opacity ?? 1;
     copy.blendMode = source.blendMode || 'normal';
     copy.canvas.getContext('2d').drawImage(source.canvas, 0, 0);
+    if (source.maskCanvas) copy.maskCanvas.getContext('2d').drawImage(source.maskCanvas, 0, 0);
+    copy.maskEnabled = source.maskEnabled;
     layers.push(copy);
     active = layers.length - 1;
     saveActiveFrame();
@@ -796,11 +837,18 @@ function bindCanvasEvents() {
         complete: true,
       });
       if (outline.length >= 3) {
-        const context = layers[active].canvas.getContext('2d');
+        const targetLayer = layers[active];
+        const drawingMask = maskEditing && targetLayer.maskEnabled && targetLayer.maskCanvas;
+        const context = (drawingMask ? targetLayer.maskCanvas : targetLayer.canvas).getContext('2d');
+        if (drawingMask) {
+          targetLayer.maskUndo.push(targetLayer.maskCanvas.toDataURL());
+          if (targetLayer.maskUndo.length > 25) targetLayer.maskUndo.shift();
+          targetLayer.maskRedo = [];
+        }
         context.save();
-        context.globalCompositeOperation = tool === 'eraser' ? 'destination-out' : 'source-over';
-        context.globalAlpha = tool === 'eraser' ? 1 : currentBrushPreset().opacity;
-        context.fillStyle = color;
+        context.globalCompositeOperation = drawingMask ? 'source-over' : (tool === 'eraser' ? 'destination-out' : 'source-over');
+        context.globalAlpha = drawingMask ? 1 : (tool === 'eraser' ? 1 : currentBrushPreset().opacity);
+        context.fillStyle = drawingMask ? (tool === 'eraser' ? '#fff' : '#000') : color;
         context.beginPath();
         context.moveTo(outline[0][0], outline[0][1]);
         for (let index = 1; index < outline.length; index++) {
