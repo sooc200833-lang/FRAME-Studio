@@ -33,6 +33,7 @@ let maskEditing = false;
 let selectionRect = null;
 let selectionPolygon = null;
 let selectionDrag = null;
+const selectedTransformLayers = new Set();
 let lineStartPoint = null;
 let drawingPoints = null;
 let movingStroke = false;
@@ -444,11 +445,23 @@ function appendLayerRow(list, layer, index, nested) {
       render();
     };
 
+    const target = document.createElement('input');
+    target.type = 'checkbox';
+    target.className = 'transform-layer-check';
+    target.checked = selectedTransformLayers.has(layer);
+    target.title = '다중 변형 대상에 포함';
+    target.setAttribute('aria-label', layer.name + ' 다중 변형 대상');
+    target.onclick = event => event.stopPropagation();
+    target.onchange = () => {
+      if (target.checked) selectedTransformLayers.add(layer);
+      else selectedTransformLayers.delete(layer);
+    };
+
     const name = document.createElement('span');
     name.textContent = layer.name + (layer.maskEnabled ? ' · MASK' : '');
-    item.append(visibility, name);
+    item.append(visibility, target, name);
     item.onclick = event => {
-      if (event.target !== visibility) {
+      if (event.target !== visibility && event.target !== target) {
         active = index;
         activeGroupId = layer.groupId || null;
         maskEditing = false;
@@ -562,41 +575,54 @@ function applySelectionTransform() {
   if (!Number.isFinite(angle) || !Number.isFinite(scale) || scale <= 0) return;
   if (playbackActive) setPlaybackEnabled(false);
 
-  const layer = layers[active];
-  const source = document.createElement('canvas');
-  source.width = W; source.height = H;
-  const sourceContext = source.getContext('2d');
-  sourceContext.save();
-  sourceContext.beginPath();
-  polygon.forEach((point, index) => index ? sourceContext.lineTo(point.x, point.y) : sourceContext.moveTo(point.x, point.y));
-  sourceContext.closePath();
-  sourceContext.clip();
-  sourceContext.drawImage(layer.canvas, 0, 0);
-  sourceContext.restore();
+  const targets = selectedTransformLayers.size
+    ? layers.filter(layer => selectedTransformLayers.has(layer))
+    : [layers[active]];
+  if (!targets.length) return;
 
   const transformedPolygon = transformPolygon(polygon, angle, scale);
   const center = polygon.reduce((sum, point) => ({
     x: sum.x + point.x / polygon.length,
     y: sum.y + point.y / polygon.length,
   }), { x: 0, y: 0 });
-  const transformed = document.createElement('canvas');
-  transformed.width = W; transformed.height = H;
-  const transformedContext = transformed.getContext('2d');
-  transformedContext.translate(center.x, center.y);
-  transformedContext.rotate(angle * Math.PI / 180);
-  transformedContext.scale(scale, scale);
-  transformedContext.drawImage(source, -center.x, -center.y);
+  const radians = angle * Math.PI / 180;
 
-  save(layer);
-  const context = layer.canvas.getContext('2d');
-  context.save();
-  context.beginPath();
-  polygon.forEach((point, index) => index ? context.lineTo(point.x, point.y) : context.moveTo(point.x, point.y));
-  context.closePath();
-  context.clip();
-  context.clearRect(0, 0, W, H);
-  context.restore();
-  context.drawImage(transformed, 0, 0);
+  // Prepare every layer before mutating any of them so all targets share
+  // exactly the same transform origin and selection boundary.
+  const prepared = targets.map(layer => {
+    const source = document.createElement('canvas');
+    source.width = W; source.height = H;
+    const sourceContext = source.getContext('2d');
+    sourceContext.save();
+    sourceContext.beginPath();
+    polygon.forEach((point, index) => index ? sourceContext.lineTo(point.x, point.y) : sourceContext.moveTo(point.x, point.y));
+    sourceContext.closePath();
+    sourceContext.clip();
+    sourceContext.drawImage(layer.canvas, 0, 0);
+    sourceContext.restore();
+
+    const transformed = document.createElement('canvas');
+    transformed.width = W; transformed.height = H;
+    const transformedContext = transformed.getContext('2d');
+    transformedContext.translate(center.x, center.y);
+    transformedContext.rotate(radians);
+    transformedContext.scale(scale, scale);
+    transformedContext.drawImage(source, -center.x, -center.y);
+    return { layer, transformed };
+  });
+
+  for (const { layer, transformed } of prepared) {
+    save(layer);
+    const context = layer.canvas.getContext('2d');
+    context.save();
+    context.beginPath();
+    polygon.forEach((point, index) => index ? context.lineTo(point.x, point.y) : context.moveTo(point.x, point.y));
+    context.closePath();
+    context.clip();
+    context.clearRect(0, 0, W, H);
+    context.restore();
+    context.drawImage(transformed, 0, 0);
+  }
 
   selectionRect = null;
   selectionPolygon = transformedPolygon;
@@ -604,7 +630,8 @@ function applySelectionTransform() {
   document.getElementById('selectionAngleOut').value = '0°';
   document.getElementById('selectionScale').value = '100';
   document.getElementById('selectionScaleOut').value = '100%';
-  render([active]);
+  saveActiveFrame();
+  render(layers.map((_, index) => index));
 }
 
 function bindControls() {
