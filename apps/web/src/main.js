@@ -12,6 +12,10 @@ import {
   hitTestLineStrokes,
   translateLineStroke,
   updateLineStrokeStyle,
+  projectPointToLineStroke,
+  insertLineStrokePoint,
+  removeLineStrokePoint,
+  smoothLineStroke,
 } from './line/line-engine.js';
 
 const W = 1200;
@@ -122,6 +126,9 @@ function applyGroupState() {
   }
 }
 let selectedStrokeId = null;
+let selectedNodeIndex = null;
+let nodeDragging = false;
+let nodeMoveSnapshot = null;
 
 function currentBrushPreset() { return getBrushPreset(brushPreset); }
 
@@ -365,7 +372,7 @@ function composite() {
 function render(dirtyIndices = [], displayStrokes = vectorStrokes) {
   applyGroupState();
   if (!loadingFrame) updateFrameStrokes(timeline, timeline.activeFrameId, vectorStrokes);
-  renderer.sync(layers, dirtyIndices, displayStrokes, selectedStrokeId, onionEnabled ? getOnionSkin(timeline) : [], selectionRect, selectionPolygon);
+  renderer.sync(layers, dirtyIndices, displayStrokes, selectedStrokeId, onionEnabled ? getOnionSkin(timeline) : [], selectionRect, selectionPolygon, selectedNodeIndex);
   document.getElementById('status').textContent = tool.toUpperCase();
   drawLayers();
   updateLayerInspector();
@@ -693,7 +700,7 @@ function animationTick(timestamp) {
       amplitude: Number(document.getElementById('boilAmplitude').value),
       frequency: Number(document.getElementById('boilFrequency').value),
     });
-    renderer.sync(layers, [], displayStrokes, selectedStrokeId, onionEnabled ? getOnionSkin(timeline) : [], selectionRect, selectionPolygon);
+    renderer.sync(layers, [], displayStrokes, selectedStrokeId, onionEnabled ? getOnionSkin(timeline) : [], selectionRect, selectionPolygon, selectedNodeIndex);
     lastAnimationPaint = timestamp;
   }
   animationFrame = requestAnimationFrame(animationTick);
@@ -719,10 +726,17 @@ function updateLineInspector() {
   const stroke = selectedStroke();
   const panel = document.getElementById('lineTools');
   panel.hidden = !stroke;
-  if (!stroke) return;
+  if (!stroke) {
+    selectedNodeIndex = null;
+    return;
+  }
   document.getElementById('lineColor').value = stroke.color;
   document.getElementById('lineWidth').value = stroke.width;
   document.getElementById('lineWidthOut').value = stroke.width + 'px';
+  const nodeStatus = document.getElementById('lineNodeStatus');
+  if (nodeStatus) nodeStatus.textContent = `${stroke.points.length}개 노드${selectedNodeIndex === null ? '' : ` · ${selectedNodeIndex + 1}번 선택`}`;
+  const removeNode = document.getElementById('deleteLineNode');
+  if (removeNode) removeNode.disabled = selectedNodeIndex === null || selectedNodeIndex <= 0 || selectedNodeIndex >= stroke.points.length - 1;
 }
 
 function applySelectedStyle(changes) {
@@ -1154,6 +1168,27 @@ function bindControls() {
     const index = vectorStrokes.findIndex(item => item.id === selectedStrokeId);
     vectorStrokes.splice(index, 1);
     selectedStrokeId = null;
+    selectedNodeIndex = null;
+    render();
+  };
+  document.getElementById('deleteLineNode').onclick = () => {
+    const stroke = selectedStroke();
+    if (!stroke || selectedNodeIndex === null) return;
+    const next = removeLineStrokePoint(stroke, selectedNodeIndex);
+    if (next === stroke) return;
+    commitLineHistory(lineSnapshot());
+    const index = vectorStrokes.findIndex(item => item.id === selectedStrokeId);
+    vectorStrokes[index] = next;
+    selectedNodeIndex = Math.min(selectedNodeIndex, next.points.length - 2);
+    render();
+  };
+  document.getElementById('smoothLine').onclick = () => {
+    const stroke = selectedStroke();
+    if (!stroke || stroke.points.length < 3) return;
+    commitLineHistory(lineSnapshot());
+    const index = vectorStrokes.findIndex(item => item.id === selectedStrokeId);
+    vectorStrokes[index] = smoothLineStroke(stroke, 5, 0.5);
+    selectedNodeIndex = null;
     render();
   };
 
@@ -1231,7 +1266,35 @@ function bindCanvasEvents() {
 
     if (tool === 'select') {
       const hit = hitTestLineStrokes(vectorStrokes, point, 9);
+      const nodeMode = document.getElementById('nodeEditToggle').checked;
+      if (nodeMode && selectedStroke() && hit?.id === selectedStrokeId) {
+        const stroke = selectedStroke();
+        let nearestIndex = -1;
+        let nearestDistance = 14;
+        stroke.points.forEach((node, index) => {
+          const distance = Math.hypot(point.x - node.x, point.y - node.y);
+          if (distance < nearestDistance) { nearestDistance = distance; nearestIndex = index; }
+        });
+        nodeMoveSnapshot = lineSnapshot();
+        if (nearestIndex >= 0) {
+          selectedNodeIndex = nearestIndex;
+        } else {
+          const projection = projectPointToLineStroke(stroke, point);
+          if (!projection || projection.distance > 18) {
+            nodeMoveSnapshot = null;
+            return;
+          }
+          const index = vectorStrokes.findIndex(item => item.id === selectedStrokeId);
+          vectorStrokes[index] = insertLineStrokePoint(stroke, point);
+          selectedNodeIndex = projection.segmentIndex + 1;
+        }
+        nodeDragging = true;
+        down = false;
+        render();
+        return;
+      }
       selectedStrokeId = hit?.id || null;
+      selectedNodeIndex = null;
       movingStroke = Boolean(hit);
       moveSnapshot = hit ? lineSnapshot() : null;
       moveChanged = false;
@@ -1266,6 +1329,18 @@ function bindCanvasEvents() {
 
   inputSurface.addEventListener('pointermove', event => {
     const point = position(event);
+
+    if (tool === 'select' && nodeDragging && selectedNodeIndex !== null) {
+      const stroke = selectedStroke();
+      if (stroke?.points[selectedNodeIndex]) {
+        const points = stroke.points.map(node => ({ x: node.x, y: node.y }));
+        points[selectedNodeIndex] = { x: point.x, y: point.y };
+        const index = vectorStrokes.findIndex(item => item.id === selectedStrokeId);
+        vectorStrokes[index] = { ...stroke, points };
+        render();
+      }
+      return;
+    }
 
     if (tool === 'select' && movingStroke && down === false && moveSnapshot) {
       const dx = point.x - last.x;
@@ -1405,6 +1480,15 @@ function bindCanvasEvents() {
       selectionDrag = null;
       down = false;
       render([active]);
+      return;
+    }
+
+    if (tool === 'select' && nodeDragging && nodeMoveSnapshot) {
+      commitLineHistory(nodeMoveSnapshot);
+      nodeDragging = false;
+      nodeMoveSnapshot = null;
+      down = false;
+      render();
       return;
     }
 
