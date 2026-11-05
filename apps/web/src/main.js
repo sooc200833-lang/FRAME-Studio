@@ -1212,6 +1212,8 @@ function bindControls() {
     copy.opacity = source.opacity ?? 1;
     copy.blendMode = source.blendMode || 'normal';
     copy.canvas.getContext('2d').drawImage(source.canvas, 0, 0);
+    copy.transformRecords = snapshotRuntimeTransformRecords(source.transformRecords);
+    refreshLayerPresentation(copy);
     if (source.maskCanvas) copy.maskCanvas.getContext('2d').drawImage(source.maskCanvas, 0, 0);
     copy.maskEnabled = source.maskEnabled;
     copy.groupId = source.groupId;
@@ -1228,7 +1230,10 @@ function bindControls() {
     if (playbackActive) setPlaybackEnabled(false);
     saveActiveFrame();
     layers.splice(active, 1);
-    timeline.frames.forEach(frame => frame.cels?.splice(active, 1));
+    timeline.frames.forEach(frame => {
+      frame.cels?.splice(active, 1);
+      frame.transformCels?.splice(active, 1);
+    });
     active = Math.min(active, layers.length - 1);
     saveActiveFrame();
     render(layers.map((_, index) => index));
