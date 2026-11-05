@@ -14,6 +14,7 @@ export class PixiStageRenderer {
     this.previewTexture = null;
     this.previewTextureSprite = null;
     this.entries = new Map();
+    this.layerPreviews = new Map();
     this.strokeGraphics = [];
     this.vectorGraphicsCache = new Map();
     this.graphicsPool = [];
@@ -116,6 +117,8 @@ export class PixiStageRenderer {
         entry.texture.source.update();
         entry.initialized = true;
       }
+      const previewCanvas = this.layerPreviews.get(layer);
+      if (previewCanvas) this.refreshLayerEntry(layer, previewCanvas);
     });
 
     layers.forEach((layer, index) => {
@@ -222,6 +225,33 @@ export class PixiStageRenderer {
     this.app.stage.setChildIndex(this.previewTextureSprite, this.app.stage.children.length - 1);
   }
 
+  refreshLayerEntry(layer, sourceCanvas) {
+    const entry = this.entries.get(layer);
+    if (!entry || !sourceCanvas) return;
+    const context = entry.displayCanvas.getContext('2d');
+    context.clearRect(0, 0, this.width, this.height);
+    context.globalCompositeOperation = 'source-over';
+    context.drawImage(sourceCanvas, 0, 0);
+    if (layer.maskEnabled && layer.maskCanvas) {
+      context.globalCompositeOperation = 'destination-in';
+      context.drawImage(layer.maskCanvas, 0, 0);
+    }
+    context.globalCompositeOperation = 'source-over';
+    entry.texture.source.update();
+  }
+
+  setLayerPreview(layer, canvas) {
+    if (!layer || !canvas) return;
+    this.layerPreviews.set(layer, canvas);
+    this.refreshLayerEntry(layer, canvas);
+  }
+
+  clearLayerPreview(layer) {
+    if (!layer) return;
+    this.layerPreviews.delete(layer);
+    this.refreshLayerEntry(layer, layer.canvas);
+  }
+
   previewStroke(points, color, width) {
     if (!this.preview || !points?.length) return;
     this.clearPreview();
@@ -307,6 +337,7 @@ export class PixiStageRenderer {
     this.vectorGraphicsCache.clear();
     this.app.destroy({ removeView: true }, { children: true, texture: true, textureSource: true });
     this.entries.clear();
+    this.layerPreviews.clear();
     this.strokeGraphics = [];
     for (const graphics of this.graphicsPool) graphics.destroy();
     this.graphicsPool = [];
