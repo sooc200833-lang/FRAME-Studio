@@ -45,6 +45,8 @@ let drawingPoints = null;
 let movingStroke = false;
 let moveSnapshot = null;
 let moveChanged = false;
+let nodeEditEnabled = false;
+let nodeDrag = null;
 let nextLineId = 1;
 let boilEnabled = false;
 let boilStartedAt = 0;
@@ -358,7 +360,7 @@ function composite() {
 function render(dirtyIndices = [], displayStrokes = vectorStrokes) {
   applyGroupState();
   if (!loadingFrame) updateFrameStrokes(timeline, timeline.activeFrameId, vectorStrokes);
-  renderer.sync(layers, dirtyIndices, displayStrokes, selectedStrokeId, onionEnabled ? getOnionSkin(timeline) : [], selectionRect, selectionPolygon);
+  renderer.sync(layers, dirtyIndices, displayStrokes, selectedStrokeId, onionEnabled ? getOnionSkin(timeline) : [], selectionRect, selectionPolygon, nodeEditEnabled);
   document.getElementById('status').textContent = tool.toUpperCase();
   drawLayers();
   updateLayerInspector();
@@ -1103,6 +1105,13 @@ function bindControls() {
     render();
   };
 
+  document.getElementById('nodeEditToggle').onclick = event => {
+    nodeEditEnabled = !nodeEditEnabled;
+    event.currentTarget.classList.toggle('active', nodeEditEnabled);
+    event.currentTarget.textContent = nodeEditEnabled ? '점 편집 ON' : '점 편집 OFF';
+    if (nodeEditEnabled) setTool('select');
+    render();
+  };
   document.getElementById('lineColor').oninput = event => applySelectedStyle({ color: event.target.value });
   document.getElementById('lineWidth').oninput = event => {
     document.getElementById('lineWidthOut').value = event.target.value + 'px';
@@ -1157,6 +1166,24 @@ function bindCanvasEvents() {
     if (boilEnabled) setBoilEnabled(false);
     inputSurface.setPointerCapture(event.pointerId);
     const point = position(event);
+
+    if (tool === 'select' && nodeEditEnabled && selectedStroke()) {
+      const stroke = selectedStroke();
+      let nearestIndex = -1;
+      let nearestDistance = 18;
+      stroke.points.forEach((node, index) => {
+        const distance = Math.hypot(point.x - node.x, point.y - node.y);
+        if (distance <= nearestDistance) {
+          nearestDistance = distance;
+          nearestIndex = index;
+        }
+      });
+      if (nearestIndex >= 0) {
+        down = true;
+        nodeDrag = { strokeId: stroke.id, index: nearestIndex, before: lineSnapshot(), changed: false };
+        return;
+      }
+    }
 
     if (tool === 'lasso') {
       down = true;
@@ -1251,6 +1278,20 @@ function bindCanvasEvents() {
   inputSurface.addEventListener('pointermove', event => {
     const point = position(event);
 
+    if (nodeDrag && down) {
+      const stroke = vectorStrokes.find(item => item.id === nodeDrag.strokeId);
+      if (stroke && stroke.points[nodeDrag.index]) {
+        const node = stroke.points[nodeDrag.index];
+        if (node.x !== point.x || node.y !== point.y) {
+          node.x = point.x;
+          node.y = point.y;
+          nodeDrag.changed = true;
+          render();
+        }
+      }
+      return;
+    }
+
     if (tool === 'select' && movingStroke && down === false && moveSnapshot) {
       const dx = point.x - last.x;
       const dy = point.y - last.y;
@@ -1339,6 +1380,17 @@ function bindCanvasEvents() {
   });
 
   const end = event => {
+    if (nodeDrag) {
+      if (nodeDrag.changed) {
+        commitLineHistory(nodeDrag.before);
+        saveActiveFrame();
+      }
+      nodeDrag = null;
+      down = false;
+      render();
+      return;
+    }
+
     if (tool === 'lasso' && down && selectionDrag) {
       const point = position(event);
       const drag = selectionDrag;
