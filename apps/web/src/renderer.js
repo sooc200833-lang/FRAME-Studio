@@ -76,7 +76,7 @@ export class PixiStageRenderer {
     else graphics.destroy();
   }
 
-  sync(layers, dirtyIndices = [], strokes = [], selectedStrokeId = null, onionSkin = [], selectionRect = null, selectionPolygon = null, selectedNodeIndex = null) {
+  sync(layers, dirtyIndices = [], strokes = [], selectedStrokeId = null, onionSkin = [], selectionRect = null, selectionPolygon = null, selectedNodeIndex = null, showNodeHandles = false) {
     if (!this.app) return;
 
     // Rebuild vector overlays after paint-layer sprites and before the live preview.
@@ -137,7 +137,7 @@ export class PixiStageRenderer {
       this.drawPath(graphics, stroke.points, Number.parseInt(stroke.color.slice(1), 16), stroke.width);
       this.app.stage.addChildAt(graphics, this.app.stage.children.length - 1);
       this.strokeGraphics.push(graphics);
-      if (stroke.id === selectedStrokeId) {
+      if (stroke.id === selectedStrokeId && showNodeHandles) {
         const nodes = this.acquireGraphics();
         stroke.points.forEach((point, index) => {
           const selected = index === selectedNodeIndex;
