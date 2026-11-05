@@ -473,18 +473,15 @@ function applyViewport() {
 
 function position(event) {
   const rect = inputSurface.getBoundingClientRect();
-  const width = inputSurface.clientWidth || W;
-  const height = inputSurface.clientHeight || H;
-  const dx = event.clientX - (rect.left + rect.width / 2);
-  const dy = event.clientY - (rect.top + rect.height / 2);
-  const radians = viewport.rotation * Math.PI / 180;
-  const cos = Math.cos(radians), sin = Math.sin(radians);
-  const localX = (cos * dx + sin * dy) / viewport.scale + width / 2;
-  const localY = (-sin * dx + cos * dy) / viewport.scale + height / 2;
-  return {
-    x: Math.max(0, Math.min(W - 1, Math.floor(localX * W / width))),
-    y: Math.max(0, Math.min(H - 1, Math.floor(localY * H / height))),
-  };
+  const transform = getComputedStyle(inputSurface).transform;
+  return clientToCanvasPoint(event, {
+    rect,
+    elementWidth: inputSurface.clientWidth || W,
+    elementHeight: inputSurface.clientHeight || H,
+    canvasWidth: W,
+    canvasHeight: H,
+    matrix: parseCssTransformMatrix(transform),
+  });
 }
 
 function withBrushContext(draw, lineWidth = size) {
