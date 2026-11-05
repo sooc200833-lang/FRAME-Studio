@@ -14,7 +14,8 @@
     <div class="spacer"></div>
     <button id="undo" aria-label="실행 취소">↶</button>
     <button id="redo" aria-label="다시 실행">↷</button>
-    <button id="toggle" aria-label="속성 패널">☷</button>
+    <button id="toggle" aria-label="속성 패널 열기/닫기" title="속성 패널">☷ 패널</button>
+    <button id="timelineToggle" aria-expanded="true" aria-controls="timeline" title="타임라인 접기/펼치기">▤ 타임라인</button>
     <button id="export">PNG</button>
   </header>
 
@@ -31,7 +32,15 @@
     </nav>
 
     <main class="stage">
-      <div class="stagebar">CANVAS · 1200 × 900 <span id="status">PEN</span></div>
+      <div class="stagebar">
+        <span class="stage-title">CANVAS <span class="stage-dimensions">1200 × 900</span></span>
+        <nav class="stagebar-actions" aria-label="빠른 작업 패널">
+          <button class="stage-panel-button active" data-open-panel="toolsPanel">도구</button>
+          <button class="stage-panel-button" data-open-panel="colorPanel">색상</button>
+          <button class="stage-panel-button" data-open-panel="layersPanel">레이어</button>
+        </nav>
+        <span id="status">PEN</span>
+      </div>
       <div class="canvaswrap">
         <div id="pixiHost" aria-label="그리기 작업 영역"></div>
       </div>
@@ -113,7 +122,7 @@
   </aside>
   </div>
 
-  <div class="timeline">
+  <div class="timeline" id="timeline">
     <div class="timeline-head"><strong>ANIMATION TIMELINE</strong><span id="frameCounter">1 / 1</span><div class="timeline-actions"><button id="playToggle" title="재생">▶ 재생</button><label class="fps-control" for="fps">FPS <input id="fps" type="range" min="1" max="30" value="12"><output id="fpsOut">12 FPS</output></label><button id="frameAdd" title="빈 프레임 추가">＋</button><button id="frameDuplicate" title="프레임 복제">▣</button><button id="frameDelete" title="프레임 삭제">－</button><button id="onionToggle" class="active">어니언 ON</button></div></div>
     <div id="frameStrip" class="frame-strip" aria-label="애니메이션 프레임"></div>
   </div>
