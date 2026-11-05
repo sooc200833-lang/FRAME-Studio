@@ -815,7 +815,7 @@ function bindCanvasEvents() {
         streamline: brushSmoothing,
         complete: false,
       });
-      renderer.previewPolygon(outline, tool === 'eraser' ? 0xf4f0e8 : Number.parseInt(color.slice(1), 16), tool === 'eraser' ? 0.9 : currentBrushPreset().opacity);
+      renderer.previewPolygon(outline, maskEditing ? (tool === 'eraser' ? 0xffffff : 0x171719) : (tool === 'eraser' ? 0xf4f0e8 : Number.parseInt(color.slice(1), 16)), maskEditing || tool === 'eraser' ? 0.9 : currentBrushPreset().opacity);
     }
   });
 
