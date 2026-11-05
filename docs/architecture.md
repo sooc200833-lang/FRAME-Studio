@@ -21,6 +21,7 @@
 ## Rendering boundary
 - PixiJS owns visible stage presentation.
 - Editable raster paint remains in ordinary Canvas buffers.
+- Raster layers may carry a separate alpha mask canvas; mask edits do not destructively modify the paint pixels.
 - Editable vector lines remain plain document objects with stable IDs and point arrays.
 - The PixiJS renderer draws raster layers and vector strokes but does not own the source document data.
 - The fill engine operates on a composite image and does not depend on PixiJS.
@@ -57,3 +58,10 @@
 ## Current implementation status
 The web prototype includes raster drawing, connected-region fill, PixiJS rendering, editable vector line objects, line selection/movement/style editing, and PNG export. Node unit tests cover the fill and line-engine algorithms. Browser and iPad interaction testing remains a separate verification step.
 \n\n## Animation timeline\n\nThe current Motion Studio MVP stores deep-copied vector stroke geometry in frame records. The active frame is edited in the Line Studio vector model. Previous and next frames are supplied to the renderer as non-editable tinted onion-skin overlays. Paint layers remain document-global until per-frame raster snapshots are implemented.\n
+
+## Layer masks
+- Each raster layer owns an optional mask canvas initialized to fully visible white.
+- Mask painting uses alpha semantics: pen strokes erase mask alpha (hide paint), while eraser strokes paint opaque white back into the mask (reveal paint).
+- PixiJS displays a masked presentation canvas while the source paint canvas remains intact.
+- The document composite and PNG export apply the same mask, so the visible result is preserved outside the editor.
+- Mask strokes have their own undo/redo snapshots. Masks are layer-level metadata shared by the current frame cels; per-frame masks and groups remain future work.
