@@ -76,3 +76,53 @@ export function resolveSelectionTargets(layers, selectedLayers, activeLayer) {
   if (selectedLayers?.size) return layers.filter(layer => selectedLayers.has(layer));
   return activeLayer && layers.includes(activeLayer) ? [activeLayer] : [];
 }
+
+function segmentsIntersect(a, b, c, d) {
+  const cross = (p, q, r) => (q.x - p.x) * (r.y - p.y) - (q.y - p.y) * (r.x - p.x);
+  const onSegment = (p, q, r) =>
+    Math.min(p.x, q.x) - 1e-9 <= r.x && r.x <= Math.max(p.x, q.x) + 1e-9 &&
+    Math.min(p.y, q.y) - 1e-9 <= r.y && r.y <= Math.max(p.y, q.y) + 1e-9;
+  const abC = cross(a, b, c), abD = cross(a, b, d);
+  const cdA = cross(c, d, a), cdB = cross(c, d, b);
+  if (((abC > 0 && abD < 0) || (abC < 0 && abD > 0)) &&
+      ((cdA > 0 && cdB < 0) || (cdA < 0 && cdB > 0))) return true;
+  return (Math.abs(abC) < 1e-9 && onSegment(a, b, c)) ||
+    (Math.abs(abD) < 1e-9 && onSegment(a, b, d)) ||
+    (Math.abs(cdA) < 1e-9 && onSegment(c, d, a)) ||
+    (Math.abs(cdB) < 1e-9 && onSegment(c, d, b));
+}
+
+export function lineStrokeIntersectsPolygon(stroke, polygon) {
+  const points = stroke?.points || [];
+  if (points.some(point => pointInPolygon(point, polygon))) return true;
+  if (points.length < 2 || polygon.length < 3) return false;
+  for (let i = 0; i < points.length - 1; i++) {
+    for (let j = 0; j < polygon.length; j++) {
+      if (segmentsIntersect(points[i], points[i + 1], polygon[j], polygon[(j + 1) % polygon.length])) return true;
+    }
+  }
+  return false;
+}
+
+export function transformLineStrokes(strokes, polygon, angleDegrees = 0, scale = 1) {
+  const selectedIds = new Set(strokes.filter(stroke => lineStrokeIntersectsPolygon(stroke, polygon)).map(stroke => stroke.id));
+  if (!selectedIds.size) return strokes.map(stroke => ({ ...stroke, points: stroke.points.map(point => ({ ...point })) }));
+  const center = polygon.reduce((sum, point) => ({
+    x: sum.x + point.x / polygon.length,
+    y: sum.y + point.y / polygon.length,
+  }), { x: 0, y: 0 });
+  const radians = angleDegrees * Math.PI / 180;
+  const cos = Math.cos(radians), sin = Math.sin(radians);
+  return strokes.map(stroke => selectedIds.has(stroke.id) ? ({
+    ...stroke,
+    width: stroke.width * scale,
+    points: stroke.points.map(point => {
+      const x = (point.x - center.x) * scale;
+      const y = (point.y - center.y) * scale;
+      return {
+        x: center.x + x * cos - y * sin,
+        y: center.y + x * sin + y * cos,
+      };
+    }),
+  }) : ({ ...stroke, points: stroke.points.map(point => ({ ...point })) }));
+}
