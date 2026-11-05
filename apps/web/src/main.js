@@ -60,6 +60,29 @@ const paletteGroups = {
 };
 let activePaletteGroup = '기본';
 const recentColors = [];
+const defaultPaletteGroups = Object.fromEntries(Object.entries(paletteGroups).map(([name, colors]) => [name, [...colors]]));
+const paletteStorageKey = 'frame-studio-color-palettes-v1';
+
+try {
+  const stored = JSON.parse(localStorage.getItem(paletteStorageKey) || 'null');
+  if (stored && typeof stored === 'object') {
+    for (const name of Object.keys(paletteGroups)) {
+      if (Array.isArray(stored[name])) {
+        paletteGroups[name] = stored[name].filter(value => /^#[0-9a-f]{6}$/i.test(value)).slice(0, 48);
+      }
+    }
+  }
+} catch {
+  // Palette editing still works for this session when browser storage is unavailable.
+}
+
+function persistPaletteGroups() {
+  try {
+    localStorage.setItem(paletteStorageKey, JSON.stringify(paletteGroups));
+  } catch {
+    // Keep the current session usable if storage is blocked or full.
+  }
+}
 const vectorStrokes = [];
 const lineUndo = [];
 const lineRedo = [];
@@ -173,6 +196,7 @@ function addCurrentColorToPalette() {
   const colors = paletteGroups[activePaletteGroup];
   if (colors.includes(color)) return;
   colors.push(color);
+  persistPaletteGroups();
   renderPaletteSwatches();
 }
 
@@ -966,10 +990,12 @@ function bindControls() {
   };
 
   document.getElementById('toggle').onclick = () => {
-    document.getElementById('inspector').classList.toggle('hidden');
+    const hidden = document.getElementById('inspector').classList.toggle('hidden');
+    document.querySelector('.workspace').classList.toggle('inspector-collapsed', hidden);
   };
   document.getElementById('inspectorClose').onclick = () => {
     document.getElementById('inspector').classList.add('hidden');
+    document.querySelector('.workspace').classList.add('inspector-collapsed');
   };
   document.querySelectorAll('.panel-tab').forEach(button => {
     button.onclick = () => selectInspectorPanel(button.dataset.panel);
@@ -1078,8 +1104,9 @@ function bindControls() {
   customColor.oninput = event => setCurrentColor(event.target.value);
   document.getElementById('addPaletteColor').onclick = addCurrentColorToPalette;
   document.getElementById('resetPalette').onclick = () => {
-    paletteGroups.기본 = ['#17171b','#45434a','#77727a','#b8b2aa','#dedbd4','#f5f0e8','#ffffff'];
+    for (const name of Object.keys(defaultPaletteGroups)) paletteGroups[name] = [...defaultPaletteGroups[name]];
     activePaletteGroup = '기본';
+    persistPaletteGroups();
     renderPaletteCategories();
     renderPaletteSwatches();
   };
