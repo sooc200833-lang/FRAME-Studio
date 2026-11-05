@@ -37,13 +37,11 @@ export class PixiStageRenderer {
     this.background = new Graphics().rect(0, 0, this.width, this.height).fill(0xf4f0e8);
     this.preview = new Graphics();
     this.previewTextureCanvas = document.createElement('canvas');
-    this.previewTextureCanvas.width = this.width;
-    this.previewTextureCanvas.height = this.height;
+    this.previewTextureCanvas.width = 1;
+    this.previewTextureCanvas.height = 1;
     this.previewTextureContext = this.previewTextureCanvas.getContext('2d');
     this.previewTexture = Texture.from(this.previewTextureCanvas);
     this.previewTextureSprite = new Sprite(this.previewTexture);
-    this.previewTextureSprite.width = this.width;
-    this.previewTextureSprite.height = this.height;
     this.previewTextureSprite.visible = false;
     app.stage.addChild(this.background, this.preview, this.previewTextureSprite);
     return app.canvas;
@@ -207,13 +205,25 @@ export class PixiStageRenderer {
     if (!this.previewTextureContext || !this.previewTexture) return;
     this.preview?.clear();
     const context = this.previewTextureContext;
-    context.clearRect(0, 0, this.width, this.height);
     if (!Array.isArray(outline) || outline.length < 3) {
       this.previewTextureSprite.visible = false;
-      this.previewTexture.source.update();
       return;
     }
+
+    const xs = outline.map(point => point[0]);
+    const ys = outline.map(point => point[1]);
+    const padding = 3;
+    const left = Math.max(0, Math.floor(Math.min(...xs) - padding));
+    const top = Math.max(0, Math.floor(Math.min(...ys) - padding));
+    const right = Math.min(this.width, Math.ceil(Math.max(...xs) + padding));
+    const bottom = Math.min(this.height, Math.ceil(Math.max(...ys) + padding));
+    const canvasWidth = Math.max(1, right - left);
+    const canvasHeight = Math.max(1, bottom - top);
+
+    if (this.previewTextureCanvas.width !== canvasWidth) this.previewTextureCanvas.width = canvasWidth;
+    if (this.previewTextureCanvas.height !== canvasHeight) this.previewTextureCanvas.height = canvasHeight;
     context.save();
+    context.translate(-left, -top);
     context.globalAlpha = alpha;
     context.fillStyle = color;
     context.beginPath();
@@ -223,6 +233,11 @@ export class PixiStageRenderer {
     context.fill();
     applyBrushTexture(context, outline, samples, options);
     context.restore();
+
+    this.previewTextureSprite.x = left;
+    this.previewTextureSprite.y = top;
+    this.previewTextureSprite.width = canvasWidth;
+    this.previewTextureSprite.height = canvasHeight;
     this.previewTexture.source.update();
     this.previewTextureSprite.visible = true;
   }
@@ -230,7 +245,7 @@ export class PixiStageRenderer {
   clearPreview() {
     this.preview?.clear();
     if (this.previewTextureContext && this.previewTextureSprite) {
-      this.previewTextureContext.clearRect(0, 0, this.width, this.height);
+      this.previewTextureContext.clearRect(0, 0, this.previewTextureCanvas.width, this.previewTextureCanvas.height);
       this.previewTexture.source.update();
       this.previewTextureSprite.visible = false;
     }
