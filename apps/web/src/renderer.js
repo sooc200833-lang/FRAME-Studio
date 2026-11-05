@@ -14,6 +14,7 @@ export class PixiStageRenderer {
     this.previewTextureSprite = null;
     this.entries = new Map();
     this.strokeGraphics = [];
+    this.graphicsPool = [];
   }
 
   async init(host) {
@@ -64,14 +65,22 @@ export class PixiStageRenderer {
     graphics.stroke({ color, width, alpha, cap: 'round', join: 'round' });
   }
 
+  acquireGraphics() {
+    return this.graphicsPool.pop() || new Graphics();
+  }
+
+  releaseGraphics(graphics) {
+    this.app.stage.removeChild(graphics);
+    graphics.clear();
+    if (this.graphicsPool.length < 512) this.graphicsPool.push(graphics);
+    else graphics.destroy();
+  }
+
   sync(layers, dirtyIndices = [], strokes = [], selectedStrokeId = null, onionSkin = [], selectionRect = null, selectionPolygon = null) {
     if (!this.app) return;
 
     // Rebuild vector overlays after paint-layer sprites and before the live preview.
-    for (const graphics of this.strokeGraphics) {
-      this.app.stage.removeChild(graphics);
-      graphics.destroy();
-    }
+    for (const graphics of this.strokeGraphics) this.releaseGraphics(graphics);
     this.strokeGraphics = [];
 
     layers.forEach((layer, index) => {
@@ -113,7 +122,7 @@ export class PixiStageRenderer {
 
     for (const ghost of onionSkin) {
       for (const stroke of ghost.strokes) {
-        const graphics = new Graphics();
+        const graphics = this.acquireGraphics();
         this.drawPath(graphics, stroke.points, ghost.tint, stroke.width, ghost.alpha);
         this.app.stage.addChildAt(graphics, this.app.stage.children.length - 1);
         this.strokeGraphics.push(graphics);
@@ -121,7 +130,7 @@ export class PixiStageRenderer {
     }
 
     for (const stroke of strokes) {
-      const graphics = new Graphics();
+      const graphics = this.acquireGraphics();
       if (stroke.id === selectedStrokeId) {
         this.drawPath(graphics, stroke.points, 0xe5b85c, stroke.width + 8, 0.55);
       }
@@ -131,7 +140,7 @@ export class PixiStageRenderer {
     }
 
     if (selectionRect && selectionRect.width > 1 && selectionRect.height > 1) {
-      const outline = new Graphics();
+      const outline = this.acquireGraphics();
       const drawDash = (x1, y1, x2, y2) => {
         const length = Math.hypot(x2 - x1, y2 - y1);
         const steps = Math.ceil(length / 10);
@@ -155,7 +164,7 @@ export class PixiStageRenderer {
     }
 
     if (selectionPolygon && selectionPolygon.length > 2) {
-      const outline = new Graphics();
+      const outline = this.acquireGraphics();
       const drawDash = (from, to) => {
         const length = Math.hypot(to.x - from.x, to.y - from.y);
         const steps = Math.max(1, Math.ceil(length / 9));
@@ -262,6 +271,8 @@ export class PixiStageRenderer {
     this.app.destroy({ removeView: true }, { children: true, texture: true, textureSource: true });
     this.entries.clear();
     this.strokeGraphics = [];
+    for (const graphics of this.graphicsPool) graphics.destroy();
+    this.graphicsPool = [];
     this.previewTexture = null;
     this.previewTextureCanvas = null;
     this.previewTextureContext = null;
