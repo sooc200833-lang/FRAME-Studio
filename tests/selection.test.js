@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { containsSelectionPoint, moveSelectionRect, normalizeSelectionRect, pointInPolygon, resizeSelectionRect, resolveSelectionTargets, transformPolygon, translatePolygon } from '../apps/web/src/selection/selection.js';
+import { containsSelectionPoint, moveSelectionRect, normalizeSelectionRect, lineStrokeIntersectsPolygon, pointInPolygon, resizeSelectionRect, resolveSelectionTargets, transformLineStrokes, transformPolygon, translatePolygon } from '../apps/web/src/selection/selection.js';
 
 test('normalizes a drag rectangle in any direction', () => {
   assert.deepEqual(normalizeSelectionRect({ x: 90, y: 80 }, { x: 10, y: 20 }), { x: 10, y: 20, width: 80, height: 60 });
@@ -59,4 +59,23 @@ test('uses checked layers as transform targets, falling back to active layer', (
   assert.deepEqual(resolveSelectionTargets(layers, new Set([lower, upper]), middle), [lower, upper]);
   assert.deepEqual(resolveSelectionTargets(layers, new Set(), middle), [middle]);
   assert.deepEqual(resolveSelectionTargets(layers, new Set([{}]), middle), []);
+});
+
+test('selects vector strokes that cross a polygon even when endpoints are outside', () => {
+  const polygon = [{ x: 10, y: 10 }, { x: 30, y: 10 }, { x: 30, y: 30 }, { x: 10, y: 30 }];
+  assert.equal(lineStrokeIntersectsPolygon({ points: [{ x: 0, y: 20 }, { x: 40, y: 20 }] }, polygon), true);
+  assert.equal(lineStrokeIntersectsPolygon({ points: [{ x: 0, y: 0 }, { x: 5, y: 5 }] }, polygon), false);
+});
+
+test('transforms selected vector strokes and preserves unrelated strokes', () => {
+  const polygon = [{ x: 0, y: 0 }, { x: 20, y: 0 }, { x: 20, y: 20 }, { x: 0, y: 20 }];
+  const strokes = [
+    { id: 'inside', width: 4, color: '#000', points: [{ x: 2, y: 10 }, { x: 8, y: 10 }] },
+    { id: 'outside', width: 2, color: '#f00', points: [{ x: 50, y: 50 }, { x: 60, y: 50 }] },
+  ];
+  const result = transformLineStrokes(strokes, polygon, 90, 2);
+  assert.equal(result[0].width, 8);
+  assert.ok(Math.abs(result[0].points[0].x - 10) < 1e-9);
+  assert.ok(Math.abs(result[0].points[0].y - 2) < 1e-9);
+  assert.deepEqual(result[1], strokes[1]);
 });
