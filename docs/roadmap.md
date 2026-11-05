@@ -29,7 +29,8 @@
 - [x] Add layer opacity, blend modes, duplication, and deletion.
 - [x] Add non-destructive alpha masks with pen-to-hide and eraser-to-reveal editing.
 - [x] Apply layer masks in PixiJS display compositing and PNG export.
-- [ ] Add layer groups, nested hierarchy, and group-level blend/opacity.
+- [x] Add layer folder groups with membership controls, visibility, opacity, and blend settings.
+- [ ] Add isolated group compositing, nested folders, and per-frame group metadata.
 - [x] Add frame-based vector-line snapshots with stable frame IDs.\n- [x] Add frame insertion, duplication, deletion, and selection.\n- [x] Add previous/next onion-skin ghost rendering.\n- [x] Add frame-based vector-line snapshots with stable frame IDs.
 - [x] Add frame insertion, duplication, deletion, and selection.
 - [x] Add previous/next onion-skin ghost rendering.
@@ -69,8 +70,8 @@
 
 ## Current status — v1.0
 
-The browser drawing engine uses perfect-freehand 1.2.3 to generate pressure-aware variable-width raster pen and eraser polygons, with pencil, ink, marker, and brush profiles. It applies adjustable speed-responsive stabilization and consumes coalesced stylus samples where available. PixiJS displays the live brush outline. Line Boil uses arc-length sampling and local centerline normals. The stage supports smooth vector paths, custom colors, layer opacity/blend modes, independent raster cels, playback, and onion skin. Native PencilKit, tilt, advanced brush textures, layer groups, per-frame masks, keyframes, and interpolation remain future work.
+The browser drawing engine uses perfect-freehand 1.2.3 to generate pressure-aware variable-width raster pen and eraser polygons, with pencil, ink, marker, and brush profiles. It applies adjustable speed-responsive stabilization and consumes coalesced stylus samples where available. PixiJS displays the live brush outline. Line Boil uses arc-length sampling and local centerline normals. The stage supports smooth vector paths, custom colors, layer opacity/blend modes, independent raster cels, playback, and onion skin. Native PencilKit, tilt, advanced brush textures, isolated/nested layer groups, per-frame group and mask metadata, keyframes, and interpolation remain future work.
 
 ## Current next action
 
-Next: test mask editing and export visually; add layer groups and group compositing; then implement comic screentones and gradients. Add visual regression fixtures for antialiased fill boundaries before calling fill cleanup production-ready.
+Next: validate group compositing visually; add isolated/nested group support and per-frame group metadata; then implement comic screentones and gradients. Add visual regression fixtures for antialiased fill boundaries before calling fill cleanup production-ready.
