@@ -222,6 +222,8 @@ export class PixiStageRenderer {
 
     if (this.previewTextureCanvas.width !== canvasWidth) this.previewTextureCanvas.width = canvasWidth;
     if (this.previewTextureCanvas.height !== canvasHeight) this.previewTextureCanvas.height = canvasHeight;
+    // A preview redraw is a full replacement, never an accumulation of prior frames.
+    context.clearRect(0, 0, this.previewTextureCanvas.width, this.previewTextureCanvas.height);
     context.save();
     context.translate(-left, -top);
     context.globalAlpha = alpha;
