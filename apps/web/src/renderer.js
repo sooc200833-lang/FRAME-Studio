@@ -109,7 +109,7 @@ export class PixiStageRenderer {
         const context = entry.displayCanvas.getContext('2d');
         context.clearRect(0, 0, this.width, this.height);
         context.globalCompositeOperation = 'source-over';
-        context.drawImage(layer.canvas, 0, 0);
+        context.drawImage(layer.presentationCanvas || layer.canvas, 0, 0);
         if (layer.maskEnabled && layer.maskCanvas) {
           context.globalCompositeOperation = 'destination-in';
           context.drawImage(layer.maskCanvas, 0, 0);
@@ -272,7 +272,7 @@ export class PixiStageRenderer {
   clearLayerPreview(layer) {
     if (!layer) return;
     this.layerPreviews.delete(layer);
-    this.refreshLayerEntry(layer, layer.canvas);
+    this.refreshLayerEntry(layer, layer.presentationCanvas || layer.canvas);
   }
 
   previewStroke(points, color, width) {
