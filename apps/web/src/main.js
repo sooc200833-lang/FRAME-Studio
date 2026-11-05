@@ -503,7 +503,7 @@ function animationTick(timestamp) {
       amplitude: Number(document.getElementById('boilAmplitude').value),
       frequency: Number(document.getElementById('boilFrequency').value),
     });
-    renderer.sync(layers, [], displayStrokes, selectedStrokeId, onionEnabled ? getOnionSkin(timeline) : []);
+    renderer.sync(layers, [], displayStrokes, selectedStrokeId, onionEnabled ? getOnionSkin(timeline) : [], selectionRect, selectionPolygon);
     lastAnimationPaint = timestamp;
   }
   animationFrame = requestAnimationFrame(animationTick);
