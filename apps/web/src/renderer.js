@@ -243,7 +243,6 @@ export class PixiStageRenderer {
   setLayerPreview(layer, canvas) {
     if (!layer || !canvas) return;
     this.layerPreviews.set(layer, canvas);
-    this.refreshLayerEntry(layer, canvas);
   }
 
   clearLayerPreview(layer) {
