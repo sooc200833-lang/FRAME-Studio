@@ -15,6 +15,38 @@ export function listBrushPresets() {
   return Object.entries(BRUSH_PRESETS).map(([id, preset]) => ({ id, ...preset }));
 }
 
+/**
+ * Coalesce expensive preview work to at most one render per animation frame.
+ * The injected frame functions make scheduling deterministic in unit tests.
+ */
+export function createFrameScheduler(render, {
+  requestFrame = callback => requestAnimationFrame(callback),
+  cancelFrame = id => cancelAnimationFrame(id),
+} = {}) {
+  let frameId = null;
+  let cancelled = false;
+  return {
+    schedule() {
+      if (cancelled || frameId !== null) return;
+      frameId = requestFrame(() => {
+        frameId = null;
+        if (!cancelled) render();
+      });
+    },
+    cancel() {
+      if (frameId !== null) cancelFrame(frameId);
+      frameId = null;
+    },
+    dispose() {
+      this.cancel();
+      cancelled = true;
+    },
+    get pending() {
+      return frameId !== null;
+    },
+  };
+}
+
 export function clamp01(value) {
   return Math.max(0, Math.min(1, Number(value) || 0));
 }
