@@ -17,11 +17,13 @@ This document tracks projects that FRAME Studio may use, study, or interoperate 
 
 ## Integration order
 
-1. **PixiJS** — replace the prototype's ad-hoc stage compositor with a renderer abstraction. Keep the document model and fill engine independent from PixiJS.
-2. **Paper.js** — prototype editable vector strokes and path operations behind a line-engine adapter. Keep raster strokes supported.
-3. **Three.js** — add a separate 3D viewport and primitive assembly module; export geometry/line data into the shared document model.
-4. **libmypaint** — evaluate brush feel and pressure dynamics after the native iPad input path exists.
-5. **Animation references** — compare OpenToonz, Krita, Blender Grease Pencil, and Nemo workflows before designing timeline features.
+1. **perfect-freehand** — pressure-sensitive raster brush geometry, tapering and streamlining (integrated).
+2. **PixiJS** — GPU stage, brush preview, masks, textures and compositing (integrated).
+3. **Paper.js** — prototype editable vector paths and selection operations behind the line-engine adapter.
+4. **Color.js / color picker research** — evaluate perceptual color spaces, palette harmony and gradient editing without replacing the document color model prematurely.
+5. **Three.js** — add a separate 3D viewport and primitive assembly module; export geometry/line data into the shared document model.
+6. **libmypaint** — evaluate richer textured brush dynamics after native iPad input and WASM feasibility are proven.
+7. **Animation references** — compare OpenToonz, Krita, Blender Grease Pencil, and Nemo workflows after drawing tools are stable.
 
 ## License policy
 
@@ -36,4 +38,4 @@ This document tracks projects that FRAME Studio may use, study, or interoperate 
 
 ## Current status
 
-PixiJS 8 is installed and integrated as the web stage renderer. Its built-in sprite alpha and standard blend modes are used for layer compositing. Paper.js, Three.js, and libmypaint remain candidates for isolated evaluation; none is treated as integrated until an adapter, tests, and license review are complete. No upstream source code has been copied into the prototype.
+PixiJS 8 and perfect-freehand 1.2.3 are integrated. PixiJS handles the stage and live polygon preview; perfect-freehand generates the variable-width brush outline from sampled pointer coordinates and pressure. Paper.js, Three.js, and libmypaint remain candidates for isolated evaluation. No upstream source code has been copied into the prototype; dependencies are installed as packages and their notices are recorded.
