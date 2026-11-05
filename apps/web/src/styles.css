@@ -51,13 +51,17 @@ output{color:var(--accent);min-width:35px;text-align:right}
 
 .fps-control{display:flex;align-items:center;gap:5px;font-size:10px;color:var(--muted);white-space:nowrap}
 .fps-control input{width:66px;accent-color:var(--accent)}
-.fps-control output{min-width:42px;font-size:10px}
+ .fps-control output{min-width:42px;font-size:10px}
+.frame-duration-control input{width:82px}
+.frame-duration-control output{min-width:112px}
 #playToggle{min-width:78px}
 @media(max-width:760px){
   .timeline-head{gap:6px}
   .timeline-actions{gap:3px}
   .timeline-actions button{padding:4px 6px;font-size:10px}
   .fps-control input{width:42px}
+  .frame-duration-control input{width:54px}
+  .frame-duration-control output{min-width:76px}
 }
 
 /* Expanded color and layer controls */
