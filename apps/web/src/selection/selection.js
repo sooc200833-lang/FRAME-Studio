@@ -53,3 +53,21 @@ export function translatePolygon(polygon, dx, dy, bounds) {
   const clampedY = Math.max(-minY, Math.min(bounds.height - maxY, dy));
   return polygon.map(point => ({ x: point.x + clampedX, y: point.y + clampedY }));
 }
+
+export function transformPolygon(polygon, angleDegrees = 0, scale = 1) {
+  if (!polygon || polygon.length < 3) return [];
+  const center = polygon.reduce((sum, point) => ({
+    x: sum.x + point.x / polygon.length,
+    y: sum.y + point.y / polygon.length,
+  }), { x: 0, y: 0 });
+  const angle = angleDegrees * Math.PI / 180;
+  const cosine = Math.cos(angle), sine = Math.sin(angle);
+  return polygon.map(point => {
+    const x = (point.x - center.x) * scale;
+    const y = (point.y - center.y) * scale;
+    return {
+      x: center.x + x * cosine - y * sine,
+      y: center.y + x * sine + y * cosine,
+    };
+  });
+}
