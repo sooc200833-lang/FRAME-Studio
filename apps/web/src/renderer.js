@@ -1,5 +1,6 @@
 import { Application, Graphics, Sprite, Texture } from 'pixi.js';
 import { applyBrushTexture } from './brush/brush-engine.js';
+import { getVectorGraphicsCacheEntry, pruneVectorGraphicsCache } from './renderer/vector-graphics-cache.js';
 
 export class PixiStageRenderer {
   constructor(width, height) {
@@ -14,6 +15,7 @@ export class PixiStageRenderer {
     this.previewTextureSprite = null;
     this.entries = new Map();
     this.strokeGraphics = [];
+    this.vectorGraphicsCache = new Map();
     this.graphicsPool = [];
   }
 
@@ -70,7 +72,7 @@ export class PixiStageRenderer {
   }
 
   releaseGraphics(graphics) {
-    this.app.stage.removeChild(graphics);
+    if (graphics.parent) graphics.parent.removeChild(graphics);
     graphics.clear();
     if (this.graphicsPool.length < 512) this.graphicsPool.push(graphics);
     else graphics.destroy();
@@ -79,9 +81,10 @@ export class PixiStageRenderer {
   sync(layers, dirtyIndices = [], strokes = [], selectedStrokeId = null, onionSkin = [], selectionRect = null, selectionPolygon = null, selectedNodeIndex = null, showNodeHandles = false) {
     if (!this.app) return;
 
-    // Rebuild vector overlays after paint-layer sprites and before the live preview.
+    // Rebuild transient overlays, but keep committed vector paths attached to their cache entries.
     for (const graphics of this.strokeGraphics) this.releaseGraphics(graphics);
     this.strokeGraphics = [];
+    for (const entry of this.vectorGraphicsCache.values()) this.app.stage.removeChild(entry.graphics);
 
     layers.forEach((layer, index) => {
       let entry = this.entries.get(layer);
@@ -129,14 +132,22 @@ export class PixiStageRenderer {
       }
     }
 
+    const activeStrokeIds = new Set();
     for (const stroke of strokes) {
-      const graphics = this.acquireGraphics();
+      activeStrokeIds.add(stroke.id);
+      const cached = getVectorGraphicsCacheEntry(
+        this.vectorGraphicsCache,
+        stroke,
+        () => this.acquireGraphics(),
+        (graphics, item) => this.drawPath(graphics, item.points, Number.parseInt(item.color.slice(1), 16), item.width),
+      );
       if (stroke.id === selectedStrokeId) {
-        this.drawPath(graphics, stroke.points, 0xe5b85c, stroke.width + 8, 0.55);
+        const highlight = this.acquireGraphics();
+        this.drawPath(highlight, stroke.points, 0xe5b85c, stroke.width + 8, 0.55);
+        this.app.stage.addChildAt(highlight, this.app.stage.children.length - 1);
+        this.strokeGraphics.push(highlight);
       }
-      this.drawPath(graphics, stroke.points, Number.parseInt(stroke.color.slice(1), 16), stroke.width);
-      this.app.stage.addChildAt(graphics, this.app.stage.children.length - 1);
-      this.strokeGraphics.push(graphics);
+      this.app.stage.addChildAt(cached.graphics, this.app.stage.children.length - 1);
       if (stroke.id === selectedStrokeId && showNodeHandles) {
         const nodes = this.acquireGraphics();
         stroke.points.forEach((point, index) => {
@@ -149,6 +160,8 @@ export class PixiStageRenderer {
         this.strokeGraphics.push(nodes);
       }
     }
+
+    pruneVectorGraphicsCache(this.vectorGraphicsCache, activeStrokeIds, graphics => this.releaseGraphics(graphics));
 
     if (selectionRect && selectionRect.width > 1 && selectionRect.height > 1) {
       const outline = this.acquireGraphics();
@@ -279,6 +292,8 @@ export class PixiStageRenderer {
 
   destroy() {
     if (!this.app) return;
+    for (const entry of this.vectorGraphicsCache.values()) entry.graphics.destroy();
+    this.vectorGraphicsCache.clear();
     this.app.destroy({ removeView: true }, { children: true, texture: true, textureSource: true });
     this.entries.clear();
     this.strokeGraphics = [];
