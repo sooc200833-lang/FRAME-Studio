@@ -93,3 +93,6 @@ output{color:var(--accent);min-width:35px;text-align:right}
 
 .transform-apply{width:100%;margin:6px 0;border-color:#76613a;color:#f3d18b}
 #selectionAngle,#selectionScale{accent-color:var(--accent)}
+
+.layer .transform-layer-check{flex:0 0 auto;width:15px;height:15px;margin:0 1px;accent-color:var(--accent);cursor:pointer}
+.layer span{min-width:0}
