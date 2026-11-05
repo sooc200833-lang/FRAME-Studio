@@ -41,6 +41,12 @@
 - Vector strokes are rendered by PixiJS and raster-composited for fill-boundary detection and PNG export.
 - The raster eraser currently affects raster paint layers only; vector deletion is performed through line selection.
 
+## Raster brush engine
+- `perfect-freehand` converts sampled pointer positions and pressure into a closed polygon with variable width.
+- Apple Pencil-compatible Pointer Events pressure is passed through when available; mouse/touch input uses simulated pressure from movement speed.
+- Stabilized and coalesced pointer samples feed the brush engine. The outline is previewed with PixiJS and committed to the active raster layer on pointer release.
+- The brush geometry is renderer-independent; the current raster layer stores the final painted pixels. Brush presets, textured tips, wet-media simulation, and pressure response curves remain future work.
+
 ## Line Boil preview
 - `apps/web/src/line/line-boil.js` creates deterministic, non-destructive line deformations from stable stroke IDs.
 - A normal-direction displacement combines two sine waves; endpoint guards reduce movement at stroke ends.
