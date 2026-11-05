@@ -134,6 +134,8 @@ test('composes a transform by clearing its source polygon and drawing its snapsh
   });
   record.sourceCanvas = source;
   assert.equal(composeRasterTransformStack(base, [record], output), output);
+  assert.equal(composeRasterTransformStack(base, [record]), null);
+  assert.equal(composeRasterTransformStack(base, [record], base), null);
   assert.ok(calls.some(call => call[0] === 'drawImage' && call[1] === 'base'));
   assert.ok(calls.some(call => call[0] === 'clearRect' && call[1] === 0 && call[2] === 0 && call[3] === 32 && call[4] === 24));
   assert.ok(calls.some(call => call[0] === 'setTransform' && call[1] === 1 && call[5] === 5 && call[6] === 7));
