@@ -129,6 +129,7 @@ let selectedStrokeId = null;
 let selectedNodeIndex = null;
 let nodeDragging = false;
 let nodeMoveSnapshot = null;
+let nodeEditEnabled = false;
 
 function currentBrushPreset() { return getBrushPreset(brushPreset); }
 
@@ -372,7 +373,7 @@ function composite() {
 function render(dirtyIndices = [], displayStrokes = vectorStrokes) {
   applyGroupState();
   if (!loadingFrame) updateFrameStrokes(timeline, timeline.activeFrameId, vectorStrokes);
-  renderer.sync(layers, dirtyIndices, displayStrokes, selectedStrokeId, onionEnabled ? getOnionSkin(timeline) : [], selectionRect, selectionPolygon, selectedNodeIndex);
+  renderer.sync(layers, dirtyIndices, displayStrokes, selectedStrokeId, onionEnabled ? getOnionSkin(timeline) : [], selectionRect, selectionPolygon, selectedNodeIndex, nodeEditEnabled);
   document.getElementById('status').textContent = tool.toUpperCase();
   drawLayers();
   updateLayerInspector();
@@ -700,7 +701,7 @@ function animationTick(timestamp) {
       amplitude: Number(document.getElementById('boilAmplitude').value),
       frequency: Number(document.getElementById('boilFrequency').value),
     });
-    renderer.sync(layers, [], displayStrokes, selectedStrokeId, onionEnabled ? getOnionSkin(timeline) : [], selectionRect, selectionPolygon, selectedNodeIndex);
+    renderer.sync(layers, [], displayStrokes, selectedStrokeId, onionEnabled ? getOnionSkin(timeline) : [], selectionRect, selectionPolygon, selectedNodeIndex, nodeEditEnabled);
     lastAnimationPaint = timestamp;
   }
   animationFrame = requestAnimationFrame(animationTick);
@@ -1157,6 +1158,11 @@ function bindControls() {
     render();
   };
 
+  document.getElementById('nodeEditToggle').onchange = event => {
+    nodeEditEnabled = event.target.checked;
+    selectedNodeIndex = null;
+    render();
+  };
   document.getElementById('lineColor').oninput = event => applySelectedStyle({ color: event.target.value });
   document.getElementById('lineWidth').oninput = event => {
     document.getElementById('lineWidthOut').value = event.target.value + 'px';
@@ -1266,7 +1272,7 @@ function bindCanvasEvents() {
 
     if (tool === 'select') {
       const hit = hitTestLineStrokes(vectorStrokes, point, 9);
-      const nodeMode = document.getElementById('nodeEditToggle').checked;
+      const nodeMode = nodeEditEnabled;
       if (nodeMode && selectedStroke() && hit?.id === selectedStrokeId) {
         const stroke = selectedStroke();
         let nearestIndex = -1;
