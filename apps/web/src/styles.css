@@ -48,3 +48,14 @@ output{color:var(--accent);min-width:35px;text-align:right}
 .boil-toggle.active{background:#51452e;border-color:var(--accent);color:#ffe0a0}
 #boilTools .field input{width:92px}
 
+
+.fps-control{display:flex;align-items:center;gap:5px;font-size:10px;color:var(--muted);white-space:nowrap}
+.fps-control input{width:66px;accent-color:var(--accent)}
+.fps-control output{min-width:42px;font-size:10px}
+#playToggle{min-width:78px}
+@media(max-width:760px){
+  .timeline-head{gap:6px}
+  .timeline-actions{gap:3px}
+  .timeline-actions button{padding:4px 6px;font-size:10px}
+  .fps-control input{width:42px}
+}
