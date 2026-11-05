@@ -158,6 +158,56 @@ export function resizeSelectionRectFromHandle(rect, handle, point, bounds, minSi
   return { x: left, y: top, width: right - left, height: bottom - top };
 }
 
+export function getPolygonBounds(polygon) {
+  if (!polygon || polygon.length < 3) return null;
+  const xs = polygon.map(point => point.x);
+  const ys = polygon.map(point => point.y);
+  const x = Math.min(...xs), y = Math.min(...ys);
+  return { x, y, width: Math.max(...xs) - x, height: Math.max(...ys) - y };
+}
+
+export function getPolygonCentroid(polygon) {
+  if (!polygon?.length) return null;
+  return polygon.reduce((center, point) => ({
+    x: center.x + point.x / polygon.length,
+    y: center.y + point.y / polygon.length,
+  }), { x: 0, y: 0 });
+}
+
+export function getPolygonTransformHandles(polygon, rotationOffset = 36) {
+  const bounds = getPolygonBounds(polygon);
+  if (!bounds || bounds.width < 1 || bounds.height < 1) return [];
+  const { x, y, width, height } = bounds;
+  const cx = x + width / 2;
+  return [
+    { id: 'nw', x, y }, { id: 'n', x: cx, y },
+    { id: 'ne', x: x + width, y }, { id: 'e', x: x + width, y: y + height / 2 },
+    { id: 'se', x: x + width, y: y + height }, { id: 's', x: cx, y: y + height },
+    { id: 'sw', x, y: y + height }, { id: 'w', x, y: y + height / 2 },
+    { id: 'rotate', x: cx, y: y - rotationOffset },
+  ];
+}
+
+export function hitTestPolygonTransformHandle(point, polygon, radius = 20) {
+  for (const handle of getPolygonTransformHandles(polygon)) {
+    if (Math.hypot(point.x - handle.x, point.y - handle.y) <= radius) return handle.id;
+  }
+  return null;
+}
+
+export function resizePolygonFromHandle(polygon, handle, point, bounds, minSize = 2) {
+  const original = getPolygonBounds(polygon);
+  if (!original || !['nw', 'n', 'ne', 'e', 'se', 's', 'sw', 'w'].includes(handle)) return polygon;
+  const target = resizeSelectionRectFromHandle(original, handle, point, bounds, minSize);
+  if (!target || original.width <= 0 || original.height <= 0) return polygon;
+  const scaleX = target.width / original.width;
+  const scaleY = target.height / original.height;
+  return polygon.map(vertex => ({
+    x: target.x + (vertex.x - original.x) * scaleX,
+    y: target.y + (vertex.y - original.y) * scaleY,
+  }));
+}
+
 export function getSelectionPreviewTransform(originalRect, targetRect = null, rotationDegrees = 0) {
   if (!originalRect || originalRect.width <= 0 || originalRect.height <= 0) return null;
   const target = targetRect || originalRect;
