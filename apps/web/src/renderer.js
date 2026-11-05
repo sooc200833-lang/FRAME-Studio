@@ -70,7 +70,16 @@ export class PixiStageRenderer {
       if (dirtyIndices.includes(index)) entry.texture.source.update();
     });
 
-    for (const ghost of onionSkin) {\n      for (const stroke of ghost.strokes) {\n        const graphics = new Graphics();\n        this.drawPath(graphics, stroke.points, ghost.tint, stroke.width, ghost.alpha);\n        this.app.stage.addChildAt(graphics, this.app.stage.children.length - 1);\n        this.strokeGraphics.push(graphics);\n      }\n    }\n\n    for (const stroke of strokes) {
+    for (const ghost of onionSkin) {
+      for (const stroke of ghost.strokes) {
+        const graphics = new Graphics();
+        this.drawPath(graphics, stroke.points, ghost.tint, stroke.width, ghost.alpha);
+        this.app.stage.addChildAt(graphics, this.app.stage.children.length - 1);
+        this.strokeGraphics.push(graphics);
+      }
+    }
+
+    for (const stroke of strokes) {
       const graphics = new Graphics();
       if (stroke.id === selectedStrokeId) {
         this.drawPath(graphics, stroke.points, 0xe5b85c, stroke.width + 8, 0.55);
