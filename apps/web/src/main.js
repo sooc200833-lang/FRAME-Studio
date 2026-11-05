@@ -3,7 +3,7 @@ import { PixiStageRenderer } from './renderer.js';
 import { applyBrushTexture, coalescedPointerEvents, createBrushOutline, getBrushPreset, normalizePointerPressure, stabilizePoint } from './brush/brush-engine.js';
 import { expandRegionMask, findConnectedRegion } from './fill/flood-fill.js';
 import { animateLineStrokes, lineBoilPhase } from './line/line-boil.js';
-import { activeFrame, addFrame, createTimeline, deleteFrame, frameAtTime, getOnionSkin, selectFrame, setFrameDuration, updateFrameCels, updateFrameStrokes } from './animation/timeline.js';
+import { activeFrame, addFrame, createTimeline, deleteFrame, frameAtTime, getOnionSkin, moveFrame, selectFrame, setFrameDuration, updateFrameCels, updateFrameStrokes } from './animation/timeline.js';
 import { normalizeRasterCels } from './animation/frame-cels.js';
 import { containsSelectionPoint, moveSelectionRect, normalizeSelectionRect, lineStrokeIntersectsPolygon, pointInPolygon, resizeSelectionRect, resolveSelectionTargets, transformLineStrokes, transformPolygon, translatePolygon } from './selection/selection.js';
 import {
@@ -1098,6 +1098,16 @@ function bindControls() {
     saveActiveFrame();
     const frame = addFrame(timeline, { duplicate: true });
     loadTimelineFrame(frame.id, false);
+  };
+  document.getElementById('frameMoveLeft').onclick = () => {
+    if (playbackActive) setPlaybackEnabled(false);
+    saveActiveFrame();
+    if (moveFrame(timeline, timeline.activeFrameId, -1)) drawTimeline();
+  };
+  document.getElementById('frameMoveRight').onclick = () => {
+    if (playbackActive) setPlaybackEnabled(false);
+    saveActiveFrame();
+    if (moveFrame(timeline, timeline.activeFrameId, 1)) drawTimeline();
   };
   document.getElementById('frameDelete').onclick = () => {
     if (playbackActive) setPlaybackEnabled(false);
