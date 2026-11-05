@@ -72,7 +72,7 @@ export class PixiStageRenderer {
   }
 
   releaseGraphics(graphics) {
-    this.app.stage.removeChild(graphics);
+    if (graphics.parent) graphics.parent.removeChild(graphics);
     graphics.clear();
     if (this.graphicsPool.length < 512) this.graphicsPool.push(graphics);
     else graphics.destroy();
@@ -292,10 +292,11 @@ export class PixiStageRenderer {
 
   destroy() {
     if (!this.app) return;
+    for (const entry of this.vectorGraphicsCache.values()) entry.graphics.destroy();
+    this.vectorGraphicsCache.clear();
     this.app.destroy({ removeView: true }, { children: true, texture: true, textureSource: true });
     this.entries.clear();
     this.strokeGraphics = [];
-    this.vectorGraphicsCache.clear();
     for (const graphics of this.graphicsPool) graphics.destroy();
     this.graphicsPool = [];
     this.previewTexture = null;
