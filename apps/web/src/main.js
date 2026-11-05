@@ -496,6 +496,11 @@ function bindControls() {
     button.onclick = () => {
       if (boilEnabled) setBoilEnabled(false);
       tool = button.dataset.tool;
+      if (maskEditing && tool !== 'pen' && tool !== 'eraser') {
+        maskEditing = false;
+        document.getElementById('maskEdit').classList.remove('active');
+        document.getElementById('maskState').textContent = '일반 그림 편집 중';
+      }
       document.querySelectorAll('[data-tool]').forEach(item => {
         item.classList.toggle('active', item === button);
       });
