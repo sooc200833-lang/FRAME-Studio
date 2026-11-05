@@ -836,6 +836,7 @@ function bindCanvasEvents() {
         context.restore();
         selectionDrag = { mode: 'lassoMove', start: point, originalPolygon: selectionPolygon.map(p => ({ ...p })), sourceCanvas };
       } else {
+        selectionRect = null;
         selectionPolygon = [point];
         selectionDrag = { mode: 'lassoNew', start: point };
       }
@@ -857,7 +858,10 @@ function bindCanvasEvents() {
         sourceCanvas.getContext('2d').drawImage(layers[active].canvas, existing.x, existing.y, existing.width, existing.height, 0, 0, sourceCanvas.width, sourceCanvas.height);
       }
       selectionDrag = { mode, start: point, originalRect: existing ? { ...existing } : null, sourceCanvas };
-      if (mode === 'new') selectionRect = normalizeSelectionRect(point, point);
+      if (mode === 'new') {
+        selectionPolygon = null;
+        selectionRect = normalizeSelectionRect(point, point);
+      }
       return;
     }
 
