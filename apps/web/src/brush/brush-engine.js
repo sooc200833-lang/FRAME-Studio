@@ -65,6 +65,33 @@ export function coalescedPointerEvents(event) {
 }
 
 /**
+ * Canonical stroke options shared by live preview and committed rendering.
+ * Keeping this resolver in one place prevents preview/commit geometry drift.
+ */
+export function resolveBrushStrokeOptions({
+  size = 7,
+  stylus = false,
+  pressureEnabled = true,
+  preset = 'ink',
+  pressureCurve,
+  smoothing,
+  streamline,
+  complete = false,
+} = {}) {
+  const profile = getBrushPreset(preset);
+  return {
+    size,
+    stylus,
+    pressureEnabled,
+    preset,
+    pressureCurve: pressureCurve ?? profile.pressureCurve,
+    smoothing: smoothing ?? profile.smoothing,
+    streamline: streamline ?? profile.streamline,
+    complete: Boolean(complete),
+  };
+}
+
+/**
  * Turn timestamped pointer samples into a closed, pressure-aware brush outline.
  * The returned polygon is renderer-agnostic and can be painted to Canvas or Pixi.
  */
