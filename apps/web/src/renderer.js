@@ -76,9 +76,9 @@ export class PixiStageRenderer {
         this.app.stage.addChildAt(sprite, this.app.stage.children.length - 1);
       }
 
-      entry.sprite.visible = layer.visible;
-      entry.sprite.alpha = layer.opacity ?? 1;
-      entry.sprite.blendMode = layer.blendMode || 'normal';
+      entry.sprite.visible = layer.renderVisible ?? layer.visible;
+      entry.sprite.alpha = layer.renderOpacity ?? layer.opacity ?? 1;
+      entry.sprite.blendMode = layer.renderBlendMode || layer.blendMode || 'normal';
       if (dirtyIndices.includes(index) || !entry.initialized) {
         const context = entry.displayCanvas.getContext('2d');
         context.clearRect(0, 0, this.width, this.height);
