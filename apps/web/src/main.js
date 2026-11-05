@@ -1219,7 +1219,7 @@ function bindCanvasEvents() {
         pressureCurve,
         complete: false,
       });
-      renderer.previewPolygon(outline, maskEditing ? (tool === 'eraser' ? 0xffffff : 0x171719) : (tool === 'eraser' ? 0xf4f0e8 : Number.parseInt(color.slice(1), 16)), maskEditing || tool === 'eraser' ? 0.9 : currentBrushPreset().opacity * brushOpacity);
+      renderer.previewPolygon(outline, maskEditing ? (tool === 'eraser' ? 0xffffff : 0x171719) : (tool === 'eraser' ? 0xf4f0e8 : Number.parseInt(color.slice(1), 16)), maskEditing || tool === 'eraser' ? 0.9 : currentBrushPreset().opacity * brushOpacity * brushOpacity);
     }
   });
 
@@ -1305,7 +1305,7 @@ function bindCanvasEvents() {
         streamline: brushSmoothing,
         complete: false,
       });
-      renderer.previewPolygon(outline, maskEditing ? (tool === 'eraser' ? 0xffffff : 0x171719) : (tool === 'eraser' ? 0xf4f0e8 : Number.parseInt(color.slice(1), 16)), maskEditing || tool === 'eraser' ? 0.9 : currentBrushPreset().opacity);
+      renderer.previewPolygon(outline, maskEditing ? (tool === 'eraser' ? 0xffffff : 0x171719) : (tool === 'eraser' ? 0xf4f0e8 : Number.parseInt(color.slice(1), 16)), maskEditing || tool === 'eraser' ? 0.9 : currentBrushPreset().opacity * brushOpacity);
     }
   });
 
@@ -1431,7 +1431,7 @@ function bindCanvasEvents() {
         }
         context.save();
         context.globalCompositeOperation = drawingMask ? (tool === 'eraser' ? 'source-over' : 'destination-out') : (tool === 'eraser' ? 'destination-out' : 'source-over');
-        context.globalAlpha = drawingMask ? 1 : (tool === 'eraser' ? 1 : currentBrushPreset().opacity);
+        context.globalAlpha = drawingMask ? 1 : (tool === 'eraser' ? 1 : currentBrushPreset().opacity * brushOpacity);
         context.fillStyle = drawingMask ? '#fff' : color;
         context.beginPath();
         context.moveTo(outline[0][0], outline[0][1]);
