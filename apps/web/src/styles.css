@@ -156,3 +156,63 @@ output{color:var(--accent);min-width:35px;text-align:right}
 @media(max-width:760px){
   .workspace.inspector-collapsed{grid-template-columns:46px minmax(0,1fr)}
 }
+
+
+/* Canvas-first workspace refinement */
+:root{--bg:#151518;--panel:#202024;--line:#35353c;--muted:#a1a1aa;--text:#f1f1f4;--accent:#e7bd69}
+.app{grid-template-rows:50px minmax(0,1fr) 116px;min-height:0}
+header{gap:8px;padding:0 12px;background:#1b1b1f}
+header button{min-height:34px;padding:6px 10px;font-size:12px}
+.brand{font-size:13px}
+.workspace{grid-template-columns:56px minmax(0,1fr) 270px;min-height:0}
+.tools{gap:7px;padding:10px 6px}
+.tool{width:44px;height:44px;border-radius:11px;font-size:19px}
+.stage{min-height:0}
+.stagebar{height:42px;flex:0 0 42px;display:flex;align-items:center;gap:14px;padding:0 14px;background:#19191d}
+.stage-title{font-size:11px;font-weight:700;letter-spacing:.08em;color:#e5e5eb}
+.stage-dimensions{margin-left:8px;color:#85858f;font-weight:500;letter-spacing:0}
+.stagebar-actions{display:flex;align-items:center;gap:5px;margin-left:auto}
+.stage-panel-button{padding:5px 11px;border-color:transparent;background:transparent;color:#a7a7b0;font-size:11px}
+.stage-panel-button.active{background:#393329;border-color:#695637;color:#f0d49b}
+#status{float:none;margin-left:5px;font-size:10px;letter-spacing:.08em;color:#c8a967}
+.canvaswrap{padding:18px;min-height:0;overscroll-behavior:contain}
+#pixiHost{width:min(100%,1100px);max-height:100%;aspect-ratio:4/3}
+.inspector{background:#202024;border-left-color:#303037}
+.inspector-heading{padding:12px 14px}
+.panel-tabs{padding:7px 10px}
+.panel-tab{min-height:38px}
+.panel-content{padding:14px}
+.timeline{background:#1b1b1f;padding:8px 14px 9px;min-height:0}
+.timeline-head{height:32px}
+.frame-cell{flex-basis:58px;height:52px;border-radius:8px}
+.app.timeline-collapsed{grid-template-rows:50px minmax(0,1fr) 0}
+.app.timeline-collapsed .timeline{display:none}
+.workspace.inspector-collapsed{grid-template-columns:56px minmax(0,1fr)}
+button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid #e7bd69;outline-offset:2px}
+button:active{transform:translateY(1px)}
+@media(max-width:900px){
+ .version{display:none}
+ .workspace{grid-template-columns:52px minmax(0,1fr) 250px}
+ .workspace.inspector-collapsed{grid-template-columns:52px minmax(0,1fr)}
+ .tool{width:42px;height:42px}
+ .canvaswrap{padding:10px}
+}
+@media(max-width:760px){
+ .app{grid-template-rows:48px minmax(0,1fr) 108px}
+ header{padding:0 7px;gap:5px}
+ header button{min-height:34px;padding:5px 7px;font-size:11px}
+ .workspace{grid-template-columns:48px minmax(0,1fr)}
+ .workspace.inspector-collapsed{grid-template-columns:48px minmax(0,1fr)}
+ .tools{gap:6px;padding:8px 4px}
+ .tool{width:40px;height:40px}
+ .stagebar{height:38px;flex-basis:38px;padding:0 8px;gap:5px}
+ .stage-dimensions{display:none}
+ .stagebar-actions{gap:2px}
+ .stage-panel-button{padding:5px 7px;font-size:10px}
+ .inspector{top:48px;bottom:108px;width:min(310px,calc(100vw - 56px))}
+ .timeline{padding:6px 8px}
+ .timeline-head{gap:5px}
+ .timeline-head>strong{font-size:9px}
+ .frame-cell{flex-basis:50px;height:46px}
+ .app.timeline-collapsed{grid-template-rows:48px minmax(0,1fr) 0}
+}
