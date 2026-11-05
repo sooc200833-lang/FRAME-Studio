@@ -22,8 +22,11 @@
 - [x] Edit selected stroke color and width; delete selected strokes.
 - [x] Include vector strokes in fill-boundary composites and PNG export.
 - [ ] Add per-line texture and pressure profiles.
-- [x] Add deterministic Line Boil deformation with stable per-line phase seeds.
-- [x] Add live preview controls for amplitude, pattern frequency, and playback speed.
+- [x] Add deterministic Line Boil deformation using arc-length sampling and each point's local centerline normal.
+- [x] Add live preview controls for amplitude, spatial wave scale, and playback speed.
+- [x] Smooth vector path rendering with quadratic curves in the stage and PNG export.
+- [x] Add expanded color palette and custom color picker.
+- [x] Add layer opacity, blend modes, duplication, and deletion.
 - [x] Add frame-based vector-line snapshots with stable frame IDs.\n- [x] Add frame insertion, duplication, deletion, and selection.\n- [x] Add previous/next onion-skin ghost rendering.\n- [x] Add frame-based vector-line snapshots with stable frame IDs.
 - [x] Add frame insertion, duplication, deletion, and selection.
 - [x] Add previous/next onion-skin ghost rendering.
@@ -58,10 +61,10 @@
 - Pressure, tilt, palm rejection, and low-latency interaction.
 - Maintain compatibility with the shared project document format.
 
-## Current status — v0.8
+## Current status — v0.9
 
-The Motion Studio MVP stores independent vector-line and raster paint-layer snapshots per frame. It supports frame insertion, duplication, deletion, selection, looping playback, FPS adjustment, and previous/next vector onion-skin ghosts. Keyframes and interpolation remain future work.
+The drawing stage now uses distance-based Line Boil displacement along the local centerline normal, quadratic vector-path rendering, an expanded palette with custom color, and per-layer opacity/blend modes. The Motion Studio MVP stores independent vector-line and raster paint-layer snapshots per frame and supports playback, FPS adjustment, and onion skin. Keyframes and interpolation remain future work.
 
 ## Current next action
 
-Run the Vite prototype on a desktop browser and an iPad browser. Verify pen, eraser, line, layer visibility, fill boundaries, undo/redo, and PNG export. Do not mark edge expansion complete until it has dedicated tests for antialiased and imperfect line boundaries.
+Run visual checks on desktop and iPad browsers, especially curved Line Boil paths, pressure feel, layer blend compositing, frame switching, and PNG export. Add visual regression fixtures for antialiased fill boundaries before calling fill cleanup production-ready.
