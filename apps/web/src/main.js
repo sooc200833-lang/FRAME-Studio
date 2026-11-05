@@ -821,13 +821,13 @@ function updateSelectionDragPreview(drag) {
     context.save();
     context.translate(transform.center.x, transform.center.y);
     context.rotate(transform.rotationRadians);
-    context.drawImage(drag.sourceCanvas, -drag.sourceCanvas.width / 2, -drag.sourceCanvas.height / 2);
+    context.drawImage(drag.sourceCanvas, -original.width / 2, -original.height / 2, original.width, original.height);
     context.restore();
   } else if (selectionRect) {
     context.save();
     context.translate(selectionRect.x, selectionRect.y);
     context.scale(transform.scaleX, transform.scaleY);
-    context.drawImage(drag.sourceCanvas, 0, 0);
+    context.drawImage(drag.sourceCanvas, 0, 0, original.width, original.height);
     context.restore();
   }
 
