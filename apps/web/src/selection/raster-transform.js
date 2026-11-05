@@ -160,3 +160,61 @@ export function cloneRasterTransformRecords(records = []) {
     .map(record => createRasterTransformRecord(record || {}))
     .filter(Boolean);
 }
+
+/**
+ * Replay serializable transform operations over an untouched layer canvas.
+ * Runtime records must provide sourceCanvas decoded from sourceDataUrl.
+ * Each operation removes its source polygon from the accumulated result, then
+ * draws the untouched source snapshot through its affine matrix.
+ */
+export function composeRasterTransformStack(baseCanvas, records = [], outputCanvas = baseCanvas) {
+  if (!baseCanvas || !outputCanvas || !Array.isArray(records)) return null;
+  const width = Math.max(1, Math.floor(baseCanvas.width || 1));
+  const height = Math.max(1, Math.floor(baseCanvas.height || 1));
+  if (outputCanvas.width !== width) outputCanvas.width = width;
+  if (outputCanvas.height !== height) outputCanvas.height = height;
+  const context = outputCanvas.getContext('2d');
+  if (!context) return null;
+  context.clearRect(0, 0, width, height);
+  context.save();
+  context.setTransform(1, 0, 0, 1, 0, 0);
+  context.globalCompositeOperation = 'source-over';
+  context.drawImage(baseCanvas, 0, 0);
+  context.restore();
+
+  for (const rawRecord of records) {
+    const record = createRasterTransformRecord(rawRecord || {});
+    const sourceCanvas = rawRecord?.sourceCanvas;
+    if (!record || !sourceCanvas) continue;
+    context.save();
+    context.setTransform(1, 0, 0, 1, 0, 0);
+    context.beginPath();
+    record.clipPolygon.forEach((point, index) => {
+      if (index === 0) context.moveTo(point.x, point.y);
+      else context.lineTo(point.x, point.y);
+    });
+    context.closePath();
+    context.clip();
+    context.clearRect(0, 0, width, height);
+    context.restore();
+
+    context.save();
+    context.setTransform(...record.matrix);
+    context.globalCompositeOperation = 'source-over';
+    context.drawImage(sourceCanvas, 0, 0);
+    context.restore();
+  }
+  return outputCanvas;
+}
+
+/** Bake the currently composed presentation into the source canvas. */
+export function rasterizeRasterTransformStack(layer) {
+  if (!layer?.canvas || !layer?.presentationCanvas || !Array.isArray(layer.transformRecords)) return false;
+  const context = layer.canvas.getContext('2d');
+  if (!context) return false;
+  context.clearRect(0, 0, layer.canvas.width, layer.canvas.height);
+  context.drawImage(layer.presentationCanvas, 0, 0);
+  layer.transformRecords = [];
+  composeRasterTransformStack(layer.canvas, [], layer.presentationCanvas);
+  return true;
+}
