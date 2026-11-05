@@ -169,3 +169,17 @@ output{color:var(--accent);min-width:35px;text-align:right}
  .viewport-controls button{min-width:25px;min-height:28px;padding:3px 5px}
  #zoomLevel{min-width:36px;font-size:9px}
 }
+
+
+/* Manga screentone controls */
+#toneTools{margin:22px 0 14px;padding-top:12px;border-top:1px solid var(--line)}
+#toneTools .section-title{color:#e5c27b;letter-spacing:.12em}
+.tone-preview{height:62px;position:relative;overflow:hidden;border:1px solid #55515a;border-radius:9px;background:#eee9df;margin:8px 0 13px}
+.tone-preview-dots{position:absolute;inset:0;background-image:radial-gradient(#24242a 1.1px,transparent 1.2px);background-size:7px 7px;opacity:.8}
+.tone-preview-lines{position:absolute;inset:0;background:repeating-linear-gradient(135deg,transparent 0 9px,#24242a 9.5px 10.5px);opacity:.22}
+#toneTools .field input{max-width:45%;accent-color:var(--accent)}
+#toneTools select{max-width:58%;background:#29292d;color:var(--text);border:1px solid var(--line);border-radius:6px;padding:6px;font-size:11px}
+.tone-color-row{display:flex;align-items:center;justify-content:space-between;color:var(--muted);font-size:10px;margin:12px 0}
+#toneColorChip{width:25px;height:25px;border:1px solid #ffffff55;border-radius:6px;background:#24242a}
+.tone-apply{width:100%;padding:11px;border-color:#8c7040;background:#51452e;color:#ffe0a0;font-weight:700}
+.tone-apply:active{transform:translateY(1px)}
