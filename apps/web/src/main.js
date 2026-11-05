@@ -95,6 +95,19 @@ function restore(layer, stack, other) {
   image.src = stack.pop();
 }
 
+function restoreMask(layer, stack, other) {
+  if (!layer?.maskCanvas || !stack?.length) return;
+  other.push(layer.maskCanvas.toDataURL());
+  const image = new Image();
+  image.onload = () => {
+    const context = layer.maskCanvas.getContext('2d');
+    context.clearRect(0, 0, W, H);
+    context.drawImage(image, 0, 0);
+    render([active]);
+  };
+  image.src = stack.pop();
+}
+
 function lineSnapshot() {
   return JSON.stringify(vectorStrokes);
 }
@@ -561,11 +574,13 @@ function bindControls() {
   };
 
   document.getElementById('undo').onclick = () => {
-    if ((tool === 'vector' || tool === 'select') && lineUndo.length) restoreLines(lineUndo, lineRedo);
+    if (maskEditing) restoreMask(layers[active], layers[active].maskUndo, layers[active].maskRedo);
+    else if ((tool === 'vector' || tool === 'select') && lineUndo.length) restoreLines(lineUndo, lineRedo);
     else restore(layers[active], layers[active].undo, layers[active].redo);
   };
   document.getElementById('redo').onclick = () => {
-    if ((tool === 'vector' || tool === 'select') && lineRedo.length) restoreLines(lineRedo, lineUndo);
+    if (maskEditing) restoreMask(layers[active], layers[active].maskRedo, layers[active].maskUndo);
+    else if ((tool === 'vector' || tool === 'select') && lineRedo.length) restoreLines(lineRedo, lineUndo);
     else restore(layers[active], layers[active].redo, layers[active].undo);
   };
 
@@ -724,7 +739,7 @@ function bindCanvasEvents() {
         preset: brushPreset,
         complete: false,
       });
-      renderer.previewPolygon(outline, tool === 'eraser' ? 0xf4f0e8 : Number.parseInt(color.slice(1), 16), tool === 'eraser' ? 0.9 : currentBrushPreset().opacity);
+      renderer.previewPolygon(outline, maskEditing ? (tool === 'eraser' ? 0xffffff : 0x171719) : (tool === 'eraser' ? 0xf4f0e8 : Number.parseInt(color.slice(1), 16)), maskEditing || tool === 'eraser' ? 0.9 : currentBrushPreset().opacity);
     }
   });
 
