@@ -22,7 +22,7 @@
 - [x] Edit selected stroke color and width; delete selected strokes.
 - [x] Include vector strokes in fill-boundary composites and PNG export.
 - [x] Add rectangular raster marquee selection with move and resize transforms on the active layer.
-- [x] Add freeform lasso selection with polygon hit testing and active-layer pixel movement.
+- [x] Add freeform lasso selection with polygon hit testing and active-layer pixel movement committed on pointer release.
 - [x] Add active-raster selection rotation and scale transforms.
 - [x] Add multi-layer raster selection transforms with grouped undo/redo.
 - [x] Add vector stroke selection transforms with grouped raster/vector undo and redo.
@@ -79,4 +79,4 @@ The browser drawing engine uses perfect-freehand 1.2.3 to generate pressure-awar
 
 ## Current next action
 
-Next: improve vector selection precision and add isolated/nested group support, then comic screentones/gradients. Add visual regression fixtures for antialiased fill boundaries before calling fill cleanup production-ready.
+Next: add non-destructive live previews and transform handles; improve vector hit-testing to account for stroke width; then add isolated/nested group compositing. Add visual regression fixtures for antialiased fill boundaries before calling fill cleanup production-ready.
