@@ -22,7 +22,8 @@
 - [x] Edit selected stroke color and width; delete selected strokes.
 - [x] Include vector strokes in fill-boundary composites and PNG export.
 - [x] Add rectangular raster marquee selection with move and resize transforms on the active layer.
-- [ ] Add freeform selection, rotation, and multi-layer transform.
+- [x] Add freeform lasso selection with polygon hit testing and active-layer pixel movement.
+- [ ] Add selection rotation and multi-layer transforms.
 - [ ] Add per-line texture and pressure profiles.
 - [x] Add deterministic Line Boil deformation using arc-length sampling and each point's local centerline normal.
 - [x] Add live preview controls for amplitude, spatial wave scale, and playback speed.
@@ -76,4 +77,4 @@ The browser drawing engine uses perfect-freehand 1.2.3 to generate pressure-awar
 
 ## Current next action
 
-Next: add freeform selection, rotation, and multi-layer transforms; then implement isolated/nested group support and comic screentones/gradients. Add visual regression fixtures for antialiased fill boundaries before calling fill cleanup production-ready.
+Next: add rotation and multi-layer transforms; then implement isolated/nested group support and comic screentones/gradients. Add visual regression fixtures for antialiased fill boundaries before calling fill cleanup production-ready.
