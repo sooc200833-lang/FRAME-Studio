@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { containsSelectionPoint, moveSelectionRect, normalizeSelectionRect, pointInPolygon, resizeSelectionRect, transformPolygon, translatePolygon } from '../apps/web/src/selection/selection.js';
+import { containsSelectionPoint, moveSelectionRect, normalizeSelectionRect, pointInPolygon, resizeSelectionRect, resolveSelectionTargets, transformPolygon, translatePolygon } from '../apps/web/src/selection/selection.js';
 
 test('normalizes a drag rectangle in any direction', () => {
   assert.deepEqual(normalizeSelectionRect({ x: 90, y: 80 }, { x: 10, y: 20 }), { x: 10, y: 20, width: 80, height: 60 });
@@ -51,4 +51,12 @@ test('scales a polygon around its centroid', () => {
   assert.deepEqual(transformPolygon(polygon, 0, 2), [
     { x: -10, y: -5 }, { x: 30, y: -5 }, { x: 30, y: 15 }, { x: -10, y: 15 },
   ]);
+});
+
+test('uses checked layers as transform targets, falling back to active layer', () => {
+  const lower = { name: 'lower' }, middle = { name: 'middle' }, upper = { name: 'upper' };
+  const layers = [lower, middle, upper];
+  assert.deepEqual(resolveSelectionTargets(layers, new Set([lower, upper]), middle), [lower, upper]);
+  assert.deepEqual(resolveSelectionTargets(layers, new Set(), middle), [middle]);
+  assert.deepEqual(resolveSelectionTargets(layers, new Set([{}]), middle), []);
 });
