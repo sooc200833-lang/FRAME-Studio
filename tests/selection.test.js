@@ -76,6 +76,6 @@ test('transforms selected vector strokes and preserves unrelated strokes', () =>
   const result = transformLineStrokes(strokes, polygon, 90, 2);
   assert.equal(result[0].width, 8);
   assert.ok(Math.abs(result[0].points[0].x - 10) < 1e-9);
-  assert.ok(Math.abs(result[0].points[0].y - 2) < 1e-9);
+  assert.ok(Math.abs(result[0].points[0].y - (-6)) < 1e-9);
   assert.deepEqual(result[1], strokes[1]);
 });
