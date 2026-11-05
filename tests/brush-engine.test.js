@@ -9,6 +9,7 @@ import {
   createBrushOutline,
   normalizePointerPressure,
   pressureToWidth,
+  resolveBrushStrokeOptions,
   stabilizePoint,
 } from '../apps/web/src/brush/brush-engine.js';
 
@@ -150,4 +151,30 @@ test('texture painting clips marks to the brush outline and restores context', (
   assert.equal(calls[0], 'save');
   assert.equal(calls.at(-1), 'restore');
   assert.equal(context.globalAlpha, 0.6);
+});
+
+test('live preview and committed strokes resolve identical brush settings', () => {
+  const state = {
+    size: 18,
+    stylus: true,
+    pressureEnabled: true,
+    preset: 'brush',
+    pressureCurve: 1.42,
+    smoothing: 0.37,
+    streamline: 0.61,
+  };
+  const preview = resolveBrushStrokeOptions({ ...state, complete: false });
+  const committed = resolveBrushStrokeOptions({ ...state, complete: true });
+  assert.deepEqual({ ...preview, complete: true }, committed);
+  assert.equal(preview.pressureCurve, 1.42);
+  assert.equal(preview.smoothing, 0.37);
+  assert.equal(preview.streamline, 0.61);
+});
+
+test('stroke option resolver supplies the selected preset defaults', () => {
+  const options = resolveBrushStrokeOptions({ preset: 'pencil' });
+  const profile = getBrushPreset('pencil');
+  assert.equal(options.pressureCurve, profile.pressureCurve);
+  assert.equal(options.smoothing, profile.smoothing);
+  assert.equal(options.streamline, profile.streamline);
 });
