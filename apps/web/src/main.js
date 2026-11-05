@@ -453,7 +453,6 @@ function appendLayerRow(list, layer, index, nested) {
       }
     };
     list.append(item);
-  });
 }
 
 function updateLayerInspector() {
