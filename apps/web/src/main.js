@@ -5,7 +5,7 @@ import { expandRegionMask, findConnectedRegion } from './fill/flood-fill.js';
 import { animateLineStrokes, lineBoilPhase } from './line/line-boil.js';
 import { activeFrame, addFrame, createTimeline, deleteFrame, frameAtTime, getOnionSkin, selectFrame, updateFrameCels, updateFrameStrokes } from './animation/timeline.js';
 import { normalizeRasterCels } from './animation/frame-cels.js';
-import { containsSelectionPoint, moveSelectionRect, normalizeSelectionRect, pointInPolygon, resizeSelectionRect, translatePolygon } from './selection/selection.js';
+import { containsSelectionPoint, moveSelectionRect, normalizeSelectionRect, pointInPolygon, resizeSelectionRect, transformPolygon, translatePolygon } from './selection/selection.js';
 import {
   createLineStroke,
   hitTestLineStrokes,
@@ -544,6 +544,69 @@ function applySelectedStyle(changes) {
   render();
 }
 
+function selectionOutlinePolygon() {
+  if (selectionPolygon?.length >= 3) return selectionPolygon.map(point => ({ ...point }));
+  if (!selectionRect) return null;
+  const { x, y, width, height } = selectionRect;
+  return [
+    { x, y }, { x: x + width, y },
+    { x: x + width, y: y + height }, { x, y: y + height },
+  ];
+}
+
+function applySelectionTransform() {
+  const polygon = selectionOutlinePolygon();
+  if (!polygon) return;
+  const angle = Number(document.getElementById('selectionAngle').value);
+  const scale = Number(document.getElementById('selectionScale').value) / 100;
+  if (!Number.isFinite(angle) || !Number.isFinite(scale) || scale <= 0) return;
+  if (playbackActive) setPlaybackEnabled(false);
+
+  const layer = layers[active];
+  const source = document.createElement('canvas');
+  source.width = W; source.height = H;
+  const sourceContext = source.getContext('2d');
+  sourceContext.save();
+  sourceContext.beginPath();
+  polygon.forEach((point, index) => index ? sourceContext.lineTo(point.x, point.y) : sourceContext.moveTo(point.x, point.y));
+  sourceContext.closePath();
+  sourceContext.clip();
+  sourceContext.drawImage(layer.canvas, 0, 0);
+  sourceContext.restore();
+
+  const transformedPolygon = transformPolygon(polygon, angle, scale);
+  const center = polygon.reduce((sum, point) => ({
+    x: sum.x + point.x / polygon.length,
+    y: sum.y + point.y / polygon.length,
+  }), { x: 0, y: 0 });
+  const transformed = document.createElement('canvas');
+  transformed.width = W; transformed.height = H;
+  const transformedContext = transformed.getContext('2d');
+  transformedContext.translate(center.x, center.y);
+  transformedContext.rotate(angle * Math.PI / 180);
+  transformedContext.scale(scale, scale);
+  transformedContext.drawImage(source, -center.x, -center.y);
+
+  save(layer);
+  const context = layer.canvas.getContext('2d');
+  context.save();
+  context.beginPath();
+  polygon.forEach((point, index) => index ? context.lineTo(point.x, point.y) : context.moveTo(point.x, point.y));
+  context.closePath();
+  context.clip();
+  context.clearRect(0, 0, W, H);
+  context.restore();
+  context.drawImage(transformed, 0, 0);
+
+  selectionRect = null;
+  selectionPolygon = transformedPolygon;
+  document.getElementById('selectionAngle').value = '0';
+  document.getElementById('selectionAngleOut').value = '0°';
+  document.getElementById('selectionScale').value = '100';
+  document.getElementById('selectionScaleOut').value = '100%';
+  render([active]);
+}
+
 function bindControls() {
   document.querySelectorAll('[data-tool]').forEach(button => {
     button.onclick = () => {
@@ -569,6 +632,14 @@ function bindControls() {
     down = false;
     render();
   };
+
+  document.getElementById('selectionAngle').oninput = event => {
+    document.getElementById('selectionAngleOut').value = event.target.value + '°';
+  };
+  document.getElementById('selectionScale').oninput = event => {
+    document.getElementById('selectionScaleOut').value = event.target.value + '%';
+  };
+  document.getElementById('selectionTransform').onclick = applySelectionTransform;
 
   document.getElementById('groupAdd').onclick = () => {
     const id = 'group-' + (layerGroups.length + 1);
