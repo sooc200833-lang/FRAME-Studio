@@ -15,10 +15,14 @@
 - [ ] Add undo/redo coverage and automated fill tests.
 
 ## Phase 2 — Line Studio
-- Represent line objects independently where possible.
-- Support selection, transforms, width, texture, and stroke properties.
-- Add controllable Line Boil animation with stable line identity.
-- Evaluate Paper.js behind a line-engine adapter.
+- [x] Store new vector strokes as independently identified line objects.
+- [x] Select individual strokes with distance-based hit testing.
+- [x] Move selected strokes without rasterizing their geometry.
+- [x] Edit selected stroke color and width; delete selected strokes.
+- [x] Include vector strokes in fill-boundary composites and PNG export.
+- [ ] Add per-line texture and pressure profiles.
+- [ ] Add controllable Line Boil animation with stable line identity.
+- [ ] Evaluate Paper.js behind a line-engine adapter.
 
 ## Phase 3 — Tone Studio
 - Add halftone patterns, tone density, gradients, and comic-oriented filters.
