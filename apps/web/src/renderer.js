@@ -65,11 +65,13 @@ export class PixiStageRenderer {
     layers.forEach((layer, index) => {
       let entry = this.entries.get(layer);
       if (!entry) {
-        const texture = Texture.from(layer.canvas);
+        const displayCanvas = document.createElement('canvas');
+        displayCanvas.width = this.width; displayCanvas.height = this.height;
+        const texture = Texture.from(displayCanvas);
         const sprite = new Sprite(texture);
         sprite.width = this.width;
         sprite.height = this.height;
-        entry = { texture, sprite };
+        entry = { texture, sprite, displayCanvas };
         this.entries.set(layer, entry);
         this.app.stage.addChildAt(sprite, this.app.stage.children.length - 1);
       }
@@ -77,7 +79,19 @@ export class PixiStageRenderer {
       entry.sprite.visible = layer.visible;
       entry.sprite.alpha = layer.opacity ?? 1;
       entry.sprite.blendMode = layer.blendMode || 'normal';
-      if (dirtyIndices.includes(index)) entry.texture.source.update();
+      if (dirtyIndices.includes(index) || !entry.initialized) {
+        const context = entry.displayCanvas.getContext('2d');
+        context.clearRect(0, 0, this.width, this.height);
+        context.globalCompositeOperation = 'source-over';
+        context.drawImage(layer.canvas, 0, 0);
+        if (layer.maskEnabled && layer.maskCanvas) {
+          context.globalCompositeOperation = 'destination-in';
+          context.drawImage(layer.maskCanvas, 0, 0);
+        }
+        context.globalCompositeOperation = 'source-over';
+        entry.texture.source.update();
+        entry.initialized = true;
+      }
     });
 
     layers.forEach((layer, index) => {
