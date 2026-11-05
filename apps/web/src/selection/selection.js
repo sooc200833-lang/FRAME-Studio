@@ -127,7 +127,7 @@ export function transformLineStrokes(strokes, polygon, angleDegrees = 0, scale =
   }) : ({ ...stroke, points: stroke.points.map(point => ({ ...point })) }));
 }
 
-export function getSelectionRectHandles(rect, rotationOffset = 28) {
+export function getSelectionRectHandles(rect, rotationOffset = 36) {
   if (!rect || rect.width < 1 || rect.height < 1) return [];
   const { x, y, width, height } = rect;
   const cx = x + width / 2;
@@ -140,7 +140,7 @@ export function getSelectionRectHandles(rect, rotationOffset = 28) {
   ];
 }
 
-export function hitTestSelectionHandle(point, rect, radius = 14) {
+export function hitTestSelectionHandle(point, rect, radius = 20) {
   for (const handle of getSelectionRectHandles(rect)) {
     if (Math.hypot(point.x - handle.x, point.y - handle.y) <= radius) return handle.id;
   }
