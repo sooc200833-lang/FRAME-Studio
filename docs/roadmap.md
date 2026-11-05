@@ -37,7 +37,9 @@
 ## Phase 4 — Motion Studio
 - [x] Frame management for vector-line snapshots.
 - [x] Previous/next onion-skin preview.
-- [ ] Frame playback, per-frame paint-layer snapshots, keyframes, and timing controls.
+- [x] Frame playback and FPS timing controls.
+- [x] Save and restore raster paint-layer snapshots independently per frame.
+- [ ] Keyframes and timeline interpolation.
 - Reuse the same document model as the drawing engine.
 
 ## Phase 5 — 3D Studio
@@ -56,9 +58,9 @@
 - Pressure, tilt, palm rejection, and low-latency interaction.
 - Maintain compatibility with the shared project document format.
 
-## Current status — v0.6
+## Current status — v0.8
 
-The Motion Studio MVP stores independent vector-line snapshots per frame and supports adding, duplicating, deleting, and selecting frames. Previous and next frames appear as blue and pink onion-skin ghosts. Paint-layer snapshots, playback, and keyframes remain future work.
+The Motion Studio MVP stores independent vector-line and raster paint-layer snapshots per frame. It supports frame insertion, duplication, deletion, selection, looping playback, FPS adjustment, and previous/next vector onion-skin ghosts. Keyframes and interpolation remain future work.
 
 ## Current next action
 
