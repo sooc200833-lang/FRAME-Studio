@@ -183,7 +183,8 @@ export function createBrushOutline(samples, {
   const profile = getBrushPreset(preset);
   const curve = Math.max(0.25, Math.min(3, Number(pressureCurve ?? profile.pressureCurve) || 1));
 
-  const reducedSamples = simplifyBrushSamples(samples);\n  const points = reducedSamples.map(sample => [
+  const reducedSamples = simplifyBrushSamples(samples);
+  const points = reducedSamples.map(sample => [
     Number(sample.x) || 0,
     Number(sample.y) || 0,
     clamp01(sample.pressure ?? 0.5),
@@ -213,6 +214,7 @@ export function createBrushOutline(samples, {
 export function createBrushTextureMarks(samples, { preset = 'ink', size = 7, seed } = {}) {
   if (!Array.isArray(samples) || samples.length < 2) return [];
   if (!['pencil', 'marker', 'brush'].includes(preset)) return [];
+  samples = simplifyBrushSamples(samples, 0.45, 0.03);
 
   const first = samples[0];
   let state = Number.isFinite(seed)
