@@ -675,7 +675,7 @@ function animationTick(timestamp) {
       amplitude: Number(document.getElementById('boilAmplitude').value),
       frequency: Number(document.getElementById('boilFrequency').value),
     });
-    renderer.sync(layers, [], displayStrokes, selectedStrokeId, onionEnabled ? getOnionSkin(timeline) : [], selectionRect, selectionPolygon);
+    renderer.sync(layers, [], displayStrokes, selectedStrokeId, onionEnabled ? getOnionSkin(timeline) : [], selectionRect, selectionPolygon, nodeEditEnabled);
     lastAnimationPaint = timestamp;
   }
   animationFrame = requestAnimationFrame(animationTick);
@@ -1109,7 +1109,11 @@ function bindControls() {
     nodeEditEnabled = !nodeEditEnabled;
     event.currentTarget.classList.toggle('active', nodeEditEnabled);
     event.currentTarget.textContent = nodeEditEnabled ? '점 편집 ON' : '점 편집 OFF';
-    if (nodeEditEnabled) setTool('select');
+    if (nodeEditEnabled) {
+      tool = 'select';
+      document.querySelectorAll('[data-tool]').forEach(item => item.classList.toggle('active', item.dataset.tool === 'select'));
+      renderer.clearPreview();
+    }
     render();
   };
   document.getElementById('lineColor').oninput = event => applySelectedStyle({ color: event.target.value });
