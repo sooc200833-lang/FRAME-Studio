@@ -22,6 +22,7 @@ let color = '#24242a';
 let size = 7;
 let down = false;
 let last = null;
+let strokeCursor = null;
 let lineStartPoint = null;
 let drawingPoints = null;
 let movingStroke = false;
@@ -259,7 +260,7 @@ function position(event) {
   };
 }
 
-function stroke(from, to) {
+function withBrushContext(draw) {
   const context = layers[active].canvas.getContext('2d');
   context.save();
   context.lineCap = 'round';
@@ -268,10 +269,23 @@ function stroke(from, to) {
   context.globalCompositeOperation = tool === 'eraser' ? 'destination-out' : 'source-over';
   context.strokeStyle = color;
   context.beginPath();
-  context.moveTo(from.x, from.y);
-  context.lineTo(to.x, to.y);
+  draw(context);
   context.stroke();
   context.restore();
+}
+
+function stroke(from, to) {
+  withBrushContext(context => {
+    context.moveTo(from.x, from.y);
+    context.lineTo(to.x, to.y);
+  });
+}
+
+function strokeCurve(from, control, to) {
+  withBrushContext(context => {
+    context.moveTo(from.x, from.y);
+    context.quadraticCurveTo(control.x, control.y, to.x, to.y);
+  });
 }
 
 function parseHex(hex) {
@@ -650,6 +664,7 @@ function bindCanvasEvents() {
 
     down = true;
     lineStartPoint = last = point;
+    strokeCursor = point;
     save(layers[active]);
     if (tool === 'pen' || tool === 'eraser') {
       stroke(point, { x: point.x + 0.01, y: point.y + 0.01 });
@@ -689,7 +704,9 @@ function bindCanvasEvents() {
     if (tool === 'line') {
       renderer.previewLine(lineStartPoint, point, Number.parseInt(color.slice(1), 16), size);
     } else if (tool === 'pen' || tool === 'eraser') {
-      stroke(last, point);
+      const midpoint = { x: (last.x + point.x) / 2, y: (last.y + point.y) / 2 };
+      strokeCurve(strokeCursor || last, last, midpoint);
+      strokeCursor = midpoint;
       render([active]);
     }
     last = point;
@@ -733,7 +750,11 @@ function bindCanvasEvents() {
       stroke(lineStartPoint, point);
       renderer.clearPreview();
       render([active]);
+    } else if (tool === 'pen' || tool === 'eraser') {
+      strokeCurve(strokeCursor || last, last, point);
+      render([active]);
     }
+    strokeCursor = null;
     down = false;
   };
 
