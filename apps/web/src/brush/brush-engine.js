@@ -113,6 +113,59 @@ export function resolveBrushStrokeOptions({
 }
 
 /**
+ * Reduce redundant pointer samples with a pressure-aware Ramer-Douglas-Peucker pass.
+ * The same reduced sequence is used by preview and commit, so optimization does
+ * not create a second geometry path. Endpoints and meaningful pressure changes survive.
+ */
+export function simplifyBrushSamples(samples, tolerance = 0.35, pressureTolerance = 0.025) {
+  if (!Array.isArray(samples) || samples.length <= 2) return Array.isArray(samples) ? samples.slice() : [];
+  const distanceLimit = Math.max(0, Number(tolerance) || 0);
+  const pressureLimit = Math.max(0, Number(pressureTolerance) || 0);
+  const keep = new Uint8Array(samples.length);
+  keep[0] = 1;
+  keep[samples.length - 1] = 1;
+  const stack = [[0, samples.length - 1]];
+
+  while (stack.length) {
+    const [start, end] = stack.pop();
+    const a = samples[start], b = samples[end];
+    const dx = b.x - a.x, dy = b.y - a.y;
+    const lengthSquared = dx * dx + dy * dy;
+    let maxScore = 1;
+    let split = -1;
+
+    for (let i = start + 1; i < end; i++) {
+      const point = samples[i];
+      const t = lengthSquared > 1e-12
+        ? Math.max(0, Math.min(1, ((point.x - a.x) * dx + (point.y - a.y) * dy) / lengthSquared))
+        : 0;
+      const px = a.x + t * dx, py = a.y + t * dy;
+      const spatialError = Math.hypot(point.x - px, point.y - py);
+      const expectedPressure = Number(a.pressure ?? 0.5) +
+        (Number(b.pressure ?? 0.5) - Number(a.pressure ?? 0.5)) * t;
+      const pressureError = Math.abs(Number(point.pressure ?? 0.5) - expectedPressure);
+      const score = Math.max(
+        distanceLimit > 0 ? spatialError / distanceLimit : (spatialError > 0 ? Infinity : 0),
+        pressureLimit > 0 ? pressureError / pressureLimit : (pressureError > 0 ? Infinity : 0),
+      );
+      if (score > maxScore) {
+        maxScore = score;
+        split = i;
+      }
+    }
+
+    if (split >= 0) {
+      keep[split] = 1;
+      stack.push([start, split], [split, end]);
+    }
+  }
+
+  const result = [];
+  for (let i = 0; i < samples.length; i++) if (keep[i]) result.push(samples[i]);
+  return result;
+}
+
+/**
  * Turn timestamped pointer samples into a closed, pressure-aware brush outline.
  * The returned polygon is renderer-agnostic and can be painted to Canvas or Pixi.
  */
@@ -130,7 +183,8 @@ export function createBrushOutline(samples, {
   const profile = getBrushPreset(preset);
   const curve = Math.max(0.25, Math.min(3, Number(pressureCurve ?? profile.pressureCurve) || 1));
 
-  const points = samples.map(sample => [
+  const reducedSamples = simplifyBrushSamples(samples);
+  const points = reducedSamples.map(sample => [
     Number(sample.x) || 0,
     Number(sample.y) || 0,
     clamp01(sample.pressure ?? 0.5),
@@ -160,6 +214,7 @@ export function createBrushOutline(samples, {
 export function createBrushTextureMarks(samples, { preset = 'ink', size = 7, seed } = {}) {
   if (!Array.isArray(samples) || samples.length < 2) return [];
   if (!['pencil', 'marker', 'brush'].includes(preset)) return [];
+  samples = simplifyBrushSamples(samples, 0.45, 0.03);
 
   const first = samples[0];
   let state = Number.isFinite(seed)

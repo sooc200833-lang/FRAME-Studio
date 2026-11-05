@@ -14,6 +14,7 @@ export class PixiStageRenderer {
     this.previewTextureSprite = null;
     this.entries = new Map();
     this.strokeGraphics = [];
+    this.graphicsPool = [];
   }
 
   async init(host) {
@@ -64,14 +65,22 @@ export class PixiStageRenderer {
     graphics.stroke({ color, width, alpha, cap: 'round', join: 'round' });
   }
 
+  acquireGraphics() {
+    return this.graphicsPool.pop() || new Graphics();
+  }
+
+  releaseGraphics(graphics) {
+    this.app.stage.removeChild(graphics);
+    graphics.clear();
+    if (this.graphicsPool.length < 512) this.graphicsPool.push(graphics);
+    else graphics.destroy();
+  }
+
   sync(layers, dirtyIndices = [], strokes = [], selectedStrokeId = null, onionSkin = [], selectionRect = null, selectionPolygon = null) {
     if (!this.app) return;
 
     // Rebuild vector overlays after paint-layer sprites and before the live preview.
-    for (const graphics of this.strokeGraphics) {
-      this.app.stage.removeChild(graphics);
-      graphics.destroy();
-    }
+    for (const graphics of this.strokeGraphics) this.releaseGraphics(graphics);
     this.strokeGraphics = [];
 
     layers.forEach((layer, index) => {
@@ -113,7 +122,7 @@ export class PixiStageRenderer {
 
     for (const ghost of onionSkin) {
       for (const stroke of ghost.strokes) {
-        const graphics = new Graphics();
+        const graphics = this.acquireGraphics();
         this.drawPath(graphics, stroke.points, ghost.tint, stroke.width, ghost.alpha);
         this.app.stage.addChildAt(graphics, this.app.stage.children.length - 1);
         this.strokeGraphics.push(graphics);
@@ -121,7 +130,7 @@ export class PixiStageRenderer {
     }
 
     for (const stroke of strokes) {
-      const graphics = new Graphics();
+      const graphics = this.acquireGraphics();
       if (stroke.id === selectedStrokeId) {
         this.drawPath(graphics, stroke.points, 0xe5b85c, stroke.width + 8, 0.55);
       }
@@ -131,7 +140,7 @@ export class PixiStageRenderer {
     }
 
     if (selectionRect && selectionRect.width > 1 && selectionRect.height > 1) {
-      const outline = new Graphics();
+      const outline = this.acquireGraphics();
       const drawDash = (x1, y1, x2, y2) => {
         const length = Math.hypot(x2 - x1, y2 - y1);
         const steps = Math.ceil(length / 10);
@@ -155,7 +164,7 @@ export class PixiStageRenderer {
     }
 
     if (selectionPolygon && selectionPolygon.length > 2) {
-      const outline = new Graphics();
+      const outline = this.acquireGraphics();
       const drawDash = (from, to) => {
         const length = Math.hypot(to.x - from.x, to.y - from.y);
         const steps = Math.max(1, Math.ceil(length / 9));
@@ -210,18 +219,24 @@ export class PixiStageRenderer {
       return;
     }
 
-    const xs = outline.map(point => point[0]);
-    const ys = outline.map(point => point[1]);
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    for (const point of outline) {
+      if (point[0] < minX) minX = point[0];
+      if (point[0] > maxX) maxX = point[0];
+      if (point[1] < minY) minY = point[1];
+      if (point[1] > maxY) maxY = point[1];
+    }
     const padding = 3;
-    const left = Math.max(0, Math.floor(Math.min(...xs) - padding));
-    const top = Math.max(0, Math.floor(Math.min(...ys) - padding));
-    const right = Math.min(this.width, Math.ceil(Math.max(...xs) + padding));
-    const bottom = Math.min(this.height, Math.ceil(Math.max(...ys) + padding));
+    const left = Math.max(0, Math.floor(minX - padding));
+    const top = Math.max(0, Math.floor(minY - padding));
+    const right = Math.min(this.width, Math.ceil(maxX + padding));
+    const bottom = Math.min(this.height, Math.ceil(maxY + padding));
     const canvasWidth = Math.max(1, right - left);
     const canvasHeight = Math.max(1, bottom - top);
 
     if (this.previewTextureCanvas.width !== canvasWidth) this.previewTextureCanvas.width = canvasWidth;
     if (this.previewTextureCanvas.height !== canvasHeight) this.previewTextureCanvas.height = canvasHeight;
+    context.clearRect(0, 0, canvasWidth, canvasHeight);
     context.save();
     context.translate(-left, -top);
     context.globalAlpha = alpha;
@@ -256,6 +271,8 @@ export class PixiStageRenderer {
     this.app.destroy({ removeView: true }, { children: true, texture: true, textureSource: true });
     this.entries.clear();
     this.strokeGraphics = [];
+    for (const graphics of this.graphicsPool) graphics.destroy();
+    this.graphicsPool = [];
     this.previewTexture = null;
     this.previewTextureCanvas = null;
     this.previewTextureContext = null;
