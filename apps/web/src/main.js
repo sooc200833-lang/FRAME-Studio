@@ -1,6 +1,6 @@
 import './styles.css';
 import { PixiStageRenderer } from './renderer.js';
-import { applyBrushTexture, coalescedPointerEvents, createBrushOutline, getBrushPreset, normalizePointerPressure, stabilizePoint } from './brush/brush-engine.js';
+import { applyBrushTexture, coalescedPointerEvents, createBrushOutline, getBrushPreset, normalizePointerPressure, resolveBrushStrokeOptions, stabilizePoint } from './brush/brush-engine.js';
 import { expandRegionMask, findConnectedRegion } from './fill/flood-fill.js';
 import { animateLineStrokes, lineBoilPhase } from './line/line-boil.js';
 import { activeFrame, addFrame, createTimeline, deleteFrame, frameAtTime, getOnionSkin, selectFrame, updateFrameCels, updateFrameStrokes } from './animation/timeline.js';
@@ -123,6 +123,14 @@ function applyGroupState() {
 let selectedStrokeId = null;
 
 function currentBrushPreset() { return getBrushPreset(brushPreset); }
+
+function currentStrokeOptions(complete = false) {
+  return resolveBrushStrokeOptions({
+    size, stylus: strokeIsStylus, pressureEnabled, preset: brushPreset,
+    pressureCurve, smoothing: currentBrushPreset().smoothing,
+    streamline: brushSmoothing, complete,
+  });
+}
 
 function normalizeHex(value) {
   return /^#[0-9a-f]{6}$/i.test(value) ? value.toLowerCase() : '#24242a';
@@ -1246,12 +1254,7 @@ function bindCanvasEvents() {
       : [];
     if (!maskEditing) save(layers[active]);
     if (tool === 'pen' || tool === 'eraser') {
-      const outline = createBrushOutline(strokeSamples, {
-        size, stylus: strokeIsStylus, pressureEnabled,
-        preset: brushPreset,
-        pressureCurve,
-        complete: false,
-      });
+      const outline = createBrushOutline(strokeSamples, currentStrokeOptions(true));
       if (!maskEditing && tool === 'pen') {
         renderer.previewBrush(outline, color, currentBrushPreset().opacity * brushOpacity, strokeSamples, { preset: brushPreset, size, color });
       } else {
@@ -1335,13 +1338,7 @@ function bindCanvasEvents() {
         last = smoothPoint;
       }
       const profile = currentBrushPreset();
-      const outline = createBrushOutline(strokeSamples, {
-        size, stylus: strokeIsStylus, pressureEnabled,
-        preset: brushPreset,
-        smoothing: profile.smoothing,
-        streamline: brushSmoothing,
-        complete: false,
-      });
+      const outline = createBrushOutline(strokeSamples, currentStrokeOptions(true));
       if (!maskEditing && tool === 'pen') {
         renderer.previewBrush(outline, color, currentBrushPreset().opacity * brushOpacity, strokeSamples, { preset: brushPreset, size, color });
       } else {
@@ -1455,12 +1452,7 @@ function bindCanvasEvents() {
       if (!finalPoint || Math.hypot(point.x - finalPoint.x, point.y - finalPoint.y) > 0.1) {
         strokeSamples.push({ ...point, pressure: finalPressure });
       }
-      const outline = createBrushOutline(strokeSamples, {
-        size, stylus: strokeIsStylus, pressureEnabled,
-        preset: brushPreset,
-        pressureCurve,
-        complete: true,
-      });
+      const outline = createBrushOutline(strokeSamples, currentStrokeOptions(true));
       if (outline.length >= 3) {
         const targetLayer = layers[active];
         const drawingMask = maskEditing && targetLayer.maskEnabled && targetLayer.maskCanvas;
