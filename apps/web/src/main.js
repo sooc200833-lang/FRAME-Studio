@@ -7,7 +7,7 @@ import { expandRegionMask, findConnectedRegion } from './fill/flood-fill.js';
 import { animateLineStrokes, lineBoilPhase } from './line/line-boil.js';
 import { activeFrame, addFrame, createTimeline, deleteFrame, frameAtTime, getOnionSkin, selectFrame, updateFrameCels, updateFrameStrokes } from './animation/timeline.js';
 import { normalizeRasterCels } from './animation/frame-cels.js';
-import { containsSelectionPoint, moveSelectionRect, normalizeSelectionRect, lineStrokeIntersectsPolygon, pointInPolygon, resizeSelectionRect, resolveSelectionTargets, transformLineStrokes, transformPolygon, translatePolygon } from './selection/selection.js';
+import { containsSelectionPoint, hitTestSelectionHandle, moveSelectionRect, normalizeSelectionRect, lineStrokeIntersectsPolygon, pointInPolygon, resizeSelectionRect, resizeSelectionRectFromHandle, resolveSelectionTargets, transformLineStrokes, transformPolygon, translatePolygon } from './selection/selection.js';
 import {
   createLineStroke,
   hitTestLineStrokes,
@@ -1303,9 +1303,12 @@ function bindCanvasEvents() {
       down = true;
       const existing = selectionRect;
       let mode = 'new';
-      if (existing && containsSelectionPoint(existing, point)) {
-        const handle = Math.hypot(point.x - (existing.x + existing.width), point.y - (existing.y + existing.height)) <= 14;
-        mode = handle ? 'resize' : 'move';
+      let handle = null;
+      if (existing) {
+        handle = hitTestSelectionHandle(point, existing);
+        if (handle === 'rotate') mode = 'rotate';
+        else if (handle) mode = 'resize';
+        else if (containsSelectionPoint(existing, point)) mode = 'move';
       }
       const sourceCanvas = document.createElement('canvas');
       if (mode !== 'new' && existing) {
@@ -1313,7 +1316,7 @@ function bindCanvasEvents() {
         sourceCanvas.height = Math.max(1, Math.ceil(existing.height));
         sourceCanvas.getContext('2d').drawImage(layers[active].canvas, existing.x, existing.y, existing.width, existing.height, 0, 0, sourceCanvas.width, sourceCanvas.height);
       }
-      selectionDrag = { mode, start: point, originalRect: existing ? { ...existing } : null, sourceCanvas };
+      selectionDrag = { mode, handle, start: point, originalRect: existing ? { ...existing } : null, sourceCanvas, startAngle: existing ? Math.atan2(point.y - (existing.y + existing.height / 2), point.x - (existing.x + existing.width / 2)) : 0 };
       if (mode === 'new') {
         selectionPolygon = null;
         selectionRect = normalizeSelectionRect(point, point);
@@ -1436,7 +1439,12 @@ function bindCanvasEvents() {
       } else if (selectionDrag.mode === 'move') {
         selectionRect = moveSelectionRect(selectionDrag.originalRect, point.x - selectionDrag.start.x, point.y - selectionDrag.start.y, { width: W, height: H });
       } else if (selectionDrag.mode === 'resize') {
-        selectionRect = resizeSelectionRect(selectionDrag.originalRect, point, { width: W, height: H });
+        selectionRect = resizeSelectionRectFromHandle(selectionDrag.originalRect, selectionDrag.handle, point, { width: W, height: H });
+      } else if (selectionDrag.mode === 'rotate') {
+        const original = selectionDrag.originalRect;
+        const center = { x: original.x + original.width / 2, y: original.y + original.height / 2 };
+        const currentAngle = Math.atan2(point.y - center.y, point.x - center.x);
+        selectionDrag.rotation = (currentAngle - selectionDrag.startAngle) * 180 / Math.PI;
       }
       render();
       return;
@@ -1515,7 +1523,37 @@ function bindCanvasEvents() {
       const drag = selectionDrag;
       if (drag.mode === 'new') selectionRect = normalizeSelectionRect(drag.start, point);
       else if (drag.mode === 'move') selectionRect = moveSelectionRect(drag.originalRect, point.x - drag.start.x, point.y - drag.start.y, { width: W, height: H });
-      else if (drag.mode === 'resize') selectionRect = resizeSelectionRect(drag.originalRect, point, { width: W, height: H });
+      else if (drag.mode === 'resize') selectionRect = resizeSelectionRectFromHandle(drag.originalRect, drag.handle, point, { width: W, height: H });
+      else if (drag.mode === 'rotate') {
+        const original = drag.originalRect;
+        const center = { x: original.x + original.width / 2, y: original.y + original.height / 2 };
+        const currentAngle = Math.atan2(point.y - center.y, point.x - center.x);
+        drag.rotation = (currentAngle - drag.startAngle) * 180 / Math.PI;
+      }
+      if (drag.mode === 'rotate' && Math.abs(drag.rotation || 0) > 0.1 && drag.sourceCanvas && drag.originalRect) {
+        const original = drag.originalRect;
+        const center = { x: original.x + original.width / 2, y: original.y + original.height / 2 };
+        const layer = layers[active];
+        save(layer);
+        const rotated = document.createElement('canvas');
+        rotated.width = W; rotated.height = H;
+        const context = rotated.getContext('2d');
+        context.translate(center.x, center.y);
+        context.rotate((drag.rotation || 0) * Math.PI / 180);
+        context.drawImage(drag.sourceCanvas, -drag.sourceCanvas.width / 2, -drag.sourceCanvas.height / 2);
+        const target = layer.canvas.getContext('2d');
+        target.clearRect(original.x, original.y, original.width, original.height);
+        target.drawImage(rotated, 0, 0);
+        const polygon = [
+          { x: original.x, y: original.y },
+          { x: original.x + original.width, y: original.y },
+          { x: original.x + original.width, y: original.y + original.height },
+          { x: original.x, y: original.y + original.height },
+        ];
+        selectionRect = null;
+        selectionPolygon = transformPolygon(polygon, drag.rotation, 1);
+        saveActiveFrame();
+      }
       if (drag.mode === 'move' || drag.mode === 'resize') {
         const source = drag.sourceCanvas;
         const original = drag.originalRect;
