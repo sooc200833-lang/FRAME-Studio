@@ -40,3 +40,7 @@ output{color:var(--accent);min-width:35px;text-align:right}
   .tool{width:37px;height:37px}
   header{padding:0 7px}.brand{font-size:12px}.version{font-size:10px}
 }
+
+.delete-line{width:100%;margin-top:4px;border-color:#744d4d;color:#f0a6a6}
+#lineColor{width:52px;height:30px;padding:2px;border:1px solid var(--line);border-radius:6px;background:#29292d}
+[hidden]{display:none!important}
