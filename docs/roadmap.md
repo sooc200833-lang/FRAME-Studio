@@ -43,8 +43,11 @@
 - [ ] Evaluate Paper.js behind a line-engine adapter.
 
 ## Phase 3 — Tone Studio
-- Add halftone patterns, tone density, gradients, and comic-oriented filters.
-- Support region- and layer-scoped effects.
+- [x] Add halftone patterns: dots, gradient dots, lines, and crosshatch.
+- [x] Separate screen spacing (frequency) from nominal mark-area coverage and opacity.
+- [x] Support selection-clipped application to the active raster layer.
+- [ ] Add non-destructive editable tone layers and calibrated print LPI/output controls.
+- [ ] Add richer region- and layer-scoped tone workflows.
 
 ## Phase 4 — Motion Studio
 - [x] Frame management for vector-line snapshots.
