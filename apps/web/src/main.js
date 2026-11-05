@@ -344,7 +344,7 @@ function buildProtectionMask() {
   const protection = new Uint8Array(W * H);
   for (let index = active + 1; index < layers.length; index++) {
     const layer = layers[index];
-    if (!layer.visible) continue;
+    if (!(layer.renderVisible ?? layer.visible)) continue;
     const pixels = layer.canvas.getContext('2d').getImageData(0, 0, W, H).data;
     for (let point = 0; point < W * H; point++) {
       const alpha = pixels[point * 4 + 3];
@@ -459,7 +459,7 @@ function appendLayerRow(list, layer, index, nested) {
 function updateLayerInspector() {
   const layer = layers[active];
   if (!layer) return;
-  const group = groupFor(layer);
+  const group = layerGroups.find(item => item.id === activeGroupId) || groupFor(layer);
   const groupControls = document.getElementById('groupInspector');
   if (groupControls) {
     groupControls.hidden = !group;
