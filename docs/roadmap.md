@@ -68,7 +68,8 @@
 ## Phase 7 — Native iPad and input quality
 - [x] Add browser Pointer Events stylus pressure mapping for raster pen and eraser strokes.
 - [x] Integrate MIT perfect-freehand 1.2.3 to generate variable-width pressure-aware raster brush polygons.
-- [x] Add configurable stroke stabilization with speed-responsive smoothing.\n- [x] Add four brush profiles (pencil, ink, marker, brush) with distinct size, pressure, opacity, smoothing, and streamline dynamics.
+- [x] Add configurable stroke stabilization with speed-responsive smoothing.
+- [x] Add four brush profiles (pencil, ink, marker, brush) with distinct size, pressure, opacity, smoothing, and streamline dynamics.
 - [x] Consume coalesced pointer samples when the browser provides them.
 - [ ] Add tilt/azimuth response, palm rejection, and native low-latency PencilKit/Metal input.
 - Maintain compatibility with the shared project document format.
