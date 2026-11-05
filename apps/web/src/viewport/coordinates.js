@@ -48,7 +48,7 @@ export function clientToCanvasPoint(event, {
   const localY = localDy + height / 2;
 
   return {
-    x: Math.max(0, Math.min(canvasWidth - 1, Math.floor(localX * canvasWidth / width))),
-    y: Math.max(0, Math.min(canvasHeight - 1, Math.floor(localY * canvasHeight / height))),
+    x: Math.max(0, Math.min(canvasWidth - 1, Math.floor(localX * canvasWidth / width + 1e-6))),
+    y: Math.max(0, Math.min(canvasHeight - 1, Math.floor(localY * canvasHeight / height + 1e-6))),
   };
 }
