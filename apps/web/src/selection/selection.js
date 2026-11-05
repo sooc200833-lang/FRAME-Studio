@@ -157,3 +157,17 @@ export function resizeSelectionRectFromHandle(rect, handle, point, bounds, minSi
   if (handle.includes('s')) bottom = Math.min(bounds.height, Math.max(top + minSize, point.y));
   return { x: left, y: top, width: right - left, height: bottom - top };
 }
+
+export function getSelectionPreviewTransform(originalRect, targetRect = null, rotationDegrees = 0) {
+  if (!originalRect || originalRect.width <= 0 || originalRect.height <= 0) return null;
+  const target = targetRect || originalRect;
+  return {
+    center: {
+      x: originalRect.x + originalRect.width / 2,
+      y: originalRect.y + originalRect.height / 2,
+    },
+    scaleX: target.width / originalRect.width,
+    scaleY: target.height / originalRect.height,
+    rotationRadians: rotationDegrees * Math.PI / 180,
+  };
+}
