@@ -255,3 +255,11 @@ When prioritizing work, favor foundations that make the app reliable as a drawin
 
 ---
 Last updated: 2026-11-06
+
+
+## Non-destructive raster transforms
+- Raster selection drags (lasso and marquee) and the inspector angle/scale action append affine transform records instead of overwriting the source layer pixels.
+- Each layer keeps an original canvas and a composed presentation canvas; frame cels persist transform records and their source image snapshots.
+- Undo/redo restores the transform records with the layer snapshot. The Layers panel exposes **변형 픽셀로 확정** to bake the composed result into the source canvas.
+- Starting a raster paint/erase/line/fill action on a transformed layer creates a new layer above it, preserving the transform stack. Manga tone application follows the same rule.
+- These changes are implemented on the non-destructive selection feature branch; browser and physical iPad/Apple Pencil interaction testing are still required.
