@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   activeFrame, addFrame, createTimeline, deleteFrame, frameAtTime,
-  getOnionSkin, selectFrame, updateFrameCels, updateFrameStrokes,
+  getOnionSkin, selectFrame, setFrameDuration, updateFrameCels, updateFrameStrokes,
 } from '../apps/web/src/animation/timeline.js';
 
 const line = { id: 'line-1', color: '#222222', width: 4, points: [{ x: 1, y: 2 }, { x: 3, y: 4 }] };
@@ -68,4 +68,17 @@ test('frameAtTime loops through frame durations', () => {
   assert.equal(frameAtTime(timeline, 50).id, 'frame-1');
   assert.equal(frameAtTime(timeline, 150).id, second.id);
   assert.equal(frameAtTime(timeline, 350).id, 'frame-1');
+});
+
+test('per-frame exposure duration can be changed independently and is clamped', () => {
+  const timeline = createTimeline({ fps: 12 });
+  const first = activeFrame(timeline);
+  const second = addFrame(timeline);
+  assert.equal(setFrameDuration(timeline, first.id, 120), true);
+  assert.equal(setFrameDuration(timeline, second.id, 250), true);
+  assert.equal(first.durationMs, 120);
+  assert.equal(second.durationMs, 250);
+  assert.equal(setFrameDuration(timeline, second.id, 1), true);
+  assert.equal(second.durationMs, 20);
+  assert.equal(setFrameDuration(timeline, 'missing', 100), false);
 });
