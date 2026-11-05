@@ -151,3 +151,8 @@ output{color:var(--accent);min-width:35px;text-align:right}
   .tool{width:37px;height:37px}
   .panel-content{padding:12px}
 }
+
+.workspace.inspector-collapsed{grid-template-columns:54px minmax(0,1fr)}
+@media(max-width:760px){
+  .workspace.inspector-collapsed{grid-template-columns:46px minmax(0,1fr)}
+}
