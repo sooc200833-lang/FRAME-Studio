@@ -5,7 +5,7 @@ import { expandRegionMask, findConnectedRegion } from './fill/flood-fill.js';
 import { animateLineStrokes, lineBoilPhase } from './line/line-boil.js';
 import { activeFrame, addFrame, createTimeline, deleteFrame, frameAtTime, getOnionSkin, selectFrame, updateFrameCels, updateFrameStrokes } from './animation/timeline.js';
 import { normalizeRasterCels } from './animation/frame-cels.js';
-import { containsSelectionPoint, moveSelectionRect, normalizeSelectionRect, pointInPolygon, resizeSelectionRect, transformPolygon, translatePolygon } from './selection/selection.js';
+import { containsSelectionPoint, moveSelectionRect, normalizeSelectionRect, pointInPolygon, resizeSelectionRect, resolveSelectionTargets, transformPolygon, translatePolygon } from './selection/selection.js';
 import {
   createLineStroke,
   hitTestLineStrokes,
@@ -575,9 +575,7 @@ function applySelectionTransform() {
   if (!Number.isFinite(angle) || !Number.isFinite(scale) || scale <= 0) return;
   if (playbackActive) setPlaybackEnabled(false);
 
-  const targets = selectedTransformLayers.size
-    ? layers.filter(layer => selectedTransformLayers.has(layer))
-    : [layers[active]];
+  const targets = resolveSelectionTargets(layers, selectedTransformLayers, layers[active]);
   if (!targets.length) return;
 
   const transformedPolygon = transformPolygon(polygon, angle, scale);
