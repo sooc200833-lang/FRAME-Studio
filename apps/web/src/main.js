@@ -1,6 +1,7 @@
 import './styles.css';
 import { PixiStageRenderer } from './renderer.js';
 import { expandRegionMask, findConnectedRegion } from './fill/flood-fill.js';
+import { animateLineStrokes, lineBoilPhase } from './line/line-boil.js';
 import {
   createLineStroke,
   hitTestLineStrokes,
@@ -24,7 +25,11 @@ let drawingPoints = null;
 let movingStroke = false;
 let moveSnapshot = null;
 let moveChanged = false;
-let nextLineId = 1;\nlet boilEnabled = false;\nlet boilStartedAt = 0;\nlet animationFrame = 0;\nlet lastAnimationPaint = 0;
+let nextLineId = 1;
+let boilEnabled = false;
+let boilStartedAt = 0;
+let animationFrame = 0;
+let lastAnimationPaint = 0;
 
 const palette = ['#24242a', '#ffffff', '#e95d4f', '#e8b64f', '#6c9c85', '#6f86c9', '#b78bc7'];
 const vectorStrokes = [];
@@ -116,8 +121,8 @@ function composite() {
   return context;
 }
 
-function render(dirtyIndices = []) {
-  renderer.sync(layers, dirtyIndices, vectorStrokes, selectedStrokeId);
+function render(dirtyIndices = [], displayStrokes = vectorStrokes) {
+  renderer.sync(layers, dirtyIndices, displayStrokes, selectedStrokeId);
   document.getElementById('status').textContent = tool.toUpperCase();
   drawLayers();
   updateLineInspector();
@@ -262,7 +267,7 @@ function animationTick(timestamp) {
       amplitude: Number(document.getElementById('boilAmplitude').value),
       frequency: Number(document.getElementById('boilFrequency').value),
     });
-    render([], displayStrokes);
+    renderer.sync(layers, [], displayStrokes, selectedStrokeId);
     lastAnimationPaint = timestamp;
   }
   animationFrame = requestAnimationFrame(animationTick);
@@ -306,7 +311,8 @@ function applySelectedStyle(changes) {
 function bindControls() {
   document.querySelectorAll('[data-tool]').forEach(button => {
     button.onclick = () => {
-      if (boilEnabled) setBoilEnabled(false);\n      tool = button.dataset.tool;
+      if (boilEnabled) setBoilEnabled(false);
+      tool = button.dataset.tool;
       document.querySelectorAll('[data-tool]').forEach(item => {
         item.classList.toggle('active', item === button);
       });
@@ -404,6 +410,7 @@ function bindControls() {
 function bindCanvasEvents() {
   inputSurface.addEventListener('pointerdown', event => {
     if (event.button !== 0) return;
+    if (boilEnabled) setBoilEnabled(false);
     inputSurface.setPointerCapture(event.pointerId);
     const point = position(event);
 
