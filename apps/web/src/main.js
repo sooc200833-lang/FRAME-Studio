@@ -1,9 +1,9 @@
+import './styles.css';
 import { PixiStageRenderer } from './renderer.js';
 
 const W = 1200;
 const H = 900;
 const buffer = document.getElementById('artboardBuffer');
-const bufferContext = buffer.getContext('2d', { willReadFrequently: true });
 const host = document.getElementById('pixiHost');
 const renderer = new PixiStageRenderer(W, H);
 
@@ -79,7 +79,8 @@ function stroke(from, to) {
   context.lineCap = 'round';
   context.lineJoin = 'round';
   context.lineWidth = size;
-  context.strokeStyle = tool === 'eraser' ? '#f4f0e8' : color;
+  context.globalCompositeOperation = tool === 'eraser' ? 'destination-out' : 'source-over';
+  context.strokeStyle = color;
   context.beginPath();
   context.moveTo(from.x, from.y);
   context.lineTo(to.x, to.y);
