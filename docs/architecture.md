@@ -50,3 +50,4 @@
 
 ## Current implementation status
 The web prototype includes raster drawing, connected-region fill, PixiJS rendering, editable vector line objects, line selection/movement/style editing, and PNG export. Node unit tests cover the fill and line-engine algorithms. Browser and iPad interaction testing remains a separate verification step.
+\n\n## Animation timeline\n\nThe current Motion Studio MVP stores deep-copied vector stroke geometry in frame records. The active frame is edited in the Line Studio vector model. Previous and next frames are supplied to the renderer as non-editable tinted onion-skin overlays. Paint layers remain document-global until per-frame raster snapshots are implemented.\n
