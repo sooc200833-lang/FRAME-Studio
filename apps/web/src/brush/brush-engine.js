@@ -1,3 +1,5 @@
+import { getStroke } from 'perfect-freehand';
+
 export function clamp01(value) {
   return Math.max(0, Math.min(1, Number(value) || 0));
 }
@@ -45,4 +47,40 @@ export function coalescedPointerEvents(event) {
     if (samples?.length) return samples;
   }
   return [event];
+}
+
+/**
+ * Turn timestamped pointer samples into a closed, pressure-aware brush outline.
+ * The returned polygon is renderer-agnostic and can be painted to Canvas or Pixi.
+ */
+export function createBrushOutline(samples, {
+  size = 7,
+  stylus = false,
+  pressureEnabled = true,
+  smoothing = 0.55,
+  streamline = 0.35,
+  complete = true,
+} = {}) {
+  if (!Array.isArray(samples) || samples.length === 0) return [];
+
+  const points = samples.map(sample => [
+    Number(sample.x) || 0,
+    Number(sample.y) || 0,
+    clamp01(sample.pressure ?? 0.5),
+  ]);
+
+  if (points.length === 1) {
+    points.push([points[0][0] + 0.01, points[0][1] + 0.01, points[0][2]]);
+  }
+
+  return getStroke(points, {
+    size: Math.max(0.5, Number(size) || 1),
+    thinning: stylus && pressureEnabled ? 0.72 : (pressureEnabled ? 0.32 : 0),
+    smoothing: Math.max(0, Math.min(1, Number(smoothing) || 0)),
+    streamline: Math.max(0, Math.min(1, Number(streamline) || 0)),
+    simulatePressure: !(stylus && pressureEnabled),
+    last: Boolean(complete),
+    start: { cap: true, taper: 0 },
+    end: { cap: true, taper: 0 },
+  });
 }
