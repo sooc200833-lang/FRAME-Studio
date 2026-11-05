@@ -85,12 +85,12 @@ The web prototype includes raster drawing, connected-region fill, PixiJS renderi
 - The lasso tool records a polygon in document coordinates and displays a dashed PixiJS overlay.
 - Clicking inside an existing lasso extracts the active raster layer through a polygon clip; dragging previews the polygon's new position and commits the pixel move on pointer release, clearing only the original polygon area. The move currently affects the active raster layer only.
 - Polygon hit testing and bounded translation are pure helpers covered by unit tests.
-- The lasso currently transforms the active raster layer only. Rotation and scaling are documented below; feathering, vector inclusion, and multi-layer transforms remain future work.
+- Lasso movement currently affects only the active raster layer. Rotation and scaling use the separate selection-transform operation; feathering and moving lasso contents across multiple raster layers or vector strokes remain future work.
 
 
 ## Selection transform
 - Rectangular and lasso selections can be rotated and scaled around the average of their polygon vertices.
-- Transform applies to the active raster layer: pixels inside the selection are extracted to a temporary canvas, transformed, and composited back after clearing the original selected area.
+- Transform extracts pixels from each resolved raster target independently, transforms them around one shared origin, and composites them back after clearing the original selected area. If no transform-target checkboxes are selected, the active raster layer is used; otherwise all checked raster layers are used. Intersecting vector strokes are transformed as whole objects.
 - The transformed boundary is retained as a polygon selection, including after rotating a rectangular selection.
 - Rotation range is -180° to 180° and scale range is 25% to 200%. Pixels transformed beyond the canvas are clipped by the canvas bounds.
 - This is a committed transform, not a live preview. Multi-layer raster and vector-stroke transforms are implemented below; masks are not transformed.
@@ -100,7 +100,7 @@ The web prototype includes raster drawing, connected-region fill, PixiJS renderi
 - Layer rows expose transform-target checkboxes. When one or more are checked, the same polygon selection, rotation, scale, and centroid are applied to every checked raster layer; with none checked, the active layer is used.
 - Each layer's selected pixels are extracted independently and transformed with the same matrix, preserving layer ordering and separation rather than flattening the result.
 - Multi-layer transforms create a grouped raster undo/redo record so one undo or redo restores all participating layers together. The grouped record is scoped to the current frame and is invalidated by subsequent raster or vector edits.
-- Masks and layer metadata are not transformed; only paint pixels in the selected polygon are affected. Vector strokes are not included yet.
+- Masks and layer metadata are not transformed; only paint pixels in the selected polygon and qualifying vector strokes are affected.
 
 
 ## Vector stroke selection transforms
