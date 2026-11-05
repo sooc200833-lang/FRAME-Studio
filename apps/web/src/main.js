@@ -7,7 +7,7 @@ import { expandRegionMask, findConnectedRegion } from './fill/flood-fill.js';
 import { animateLineStrokes, lineBoilPhase } from './line/line-boil.js';
 import { activeFrame, addFrame, createTimeline, deleteFrame, frameAtTime, getOnionSkin, selectFrame, updateFrameCels, updateFrameStrokes, updateFrameTransformCels } from './animation/timeline.js';
 import { normalizeRasterCels, normalizeRasterTransformCels } from './animation/frame-cels.js';
-import { cloneRasterTransformRecords, composeRasterTransformStack, createTranslationMatrix, createRotationMatrix } from './selection/raster-transform.js';
+import { cloneRasterTransformRecords, composeRasterTransformStack, createTranslationMatrix, createRotationMatrix, rasterizeRasterTransformStack } from './selection/raster-transform.js';
 import { containsSelectionPoint, hitTestSelectionHandle, moveSelectionRect, normalizeSelectionRect, lineStrokeIntersectsPolygon, pointInPolygon, resizeSelectionRectFromHandle, resolveSelectionTargets, transformLineStrokes, transformPolygon, translatePolygon, getSelectionPreviewTransform, getPolygonBounds, getPolygonCentroid, hitTestPolygonTransformHandle, resizePolygonFromHandle } from './selection/selection.js';
 import {
   createLineStroke,
@@ -140,6 +140,29 @@ let selectedNodeIndex = null;
 let nodeDragging = false;
 let nodeMoveSnapshot = null;
 let nodeEditEnabled = false;
+
+function rasterizeActiveLayerTransforms() {
+  const layer = layers[active];
+  if (!layer?.transformRecords?.length) return;
+  const before = layer.canvas.toDataURL('image/png');
+  const beforeTransforms = snapshotRuntimeTransformRecords(layer.transformRecords);
+  save(layer);
+  if (!rasterizeRasterTransformStack(layer)) return;
+  groupedTransformUndo = {
+    entries: [{
+      layer,
+      before,
+      after: layer.canvas.toDataURL('image/png'),
+      beforeTransforms,
+      afterTransforms: [],
+    }],
+    vectorBefore: null,
+    vectorAfter: null,
+  };
+  groupedTransformRedo = null;
+  saveActiveFrame();
+  render([active]);
+}
 
 function ensureEditableLayerAfterTransform() {
   const layer = layers[active];
@@ -747,6 +770,13 @@ function appendLayerRow(list, layer, index, nested) {
 function updateLayerInspector() {
   const layer = layers[active];
   if (!layer) return;
+  const rasterizeButton = document.getElementById('rasterizeTransforms');
+  if (rasterizeButton) {
+    rasterizeButton.disabled = !(layer.transformRecords?.length);
+    rasterizeButton.title = layer.transformRecords?.length
+      ? '비파괴 변형을 픽셀로 확정합니다'
+      : '확정할 비파괴 변형이 없습니다';
+  }
   const group = layerGroups.find(item => item.id === activeGroupId) || groupFor(layer);
   const groupControls = document.getElementById('groupInspector');
   if (groupControls) {
@@ -1190,6 +1220,8 @@ function bindControls() {
     saveActiveFrame();
     render(layers.map((_, index) => index));
   };
+
+  document.getElementById('rasterizeTransforms').onclick = rasterizeActiveLayerTransforms;
 
   document.getElementById('layerDelete').onclick = () => {
     if (layers.length <= 1) return;
