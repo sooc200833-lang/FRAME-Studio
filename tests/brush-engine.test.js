@@ -11,6 +11,7 @@ import {
   pressureToWidth,
   stabilizePoint,
   resolveBrushStrokeOptions,
+  simplifyBrushSamples,
 } from '../apps/web/src/brush/brush-engine.js';
 
 test('mouse and touch use a stable neutral pressure', () => {
@@ -184,5 +185,47 @@ test('canonical brush options keep live preview and committed geometry identical
       resolveBrushStrokeOptions(options),
       resolveBrushStrokeOptions({ ...options }),
     );
+  }
+});
+
+test('brush sample simplification keeps endpoints and removes redundant straight-line points', () => {
+  const samples = Array.from({ length: 101 }, (_, index) => ({
+    x: index,
+    y: 0.02 * Math.sin(index),
+    pressure: 0.5,
+  }));
+  const reduced = simplifyBrushSamples(samples, 0.5, 0.025);
+  assert.deepEqual(reduced[0], samples[0]);
+  assert.deepEqual(reduced.at(-1), samples.at(-1));
+  assert.ok(reduced.length < samples.length / 3);
+});
+
+test('brush sample simplification preserves corners and meaningful pressure changes', () => {
+  const samples = [
+    { x: 0, y: 0, pressure: 0.5 },
+    { x: 5, y: 0, pressure: 0.5 },
+    { x: 10, y: 0, pressure: 0.5 },
+    { x: 10, y: 5, pressure: 0.5 },
+    { x: 10, y: 10, pressure: 1 },
+    { x: 10, y: 15, pressure: 1 },
+  ];
+  const reduced = simplifyBrushSamples(samples, 0.2, 0.03);
+  assert.ok(reduced.some(point => point.x === 10 && point.y === 0));
+  assert.ok(reduced.some(point => point.pressure === 1));
+  assert.deepEqual(reduced[0], samples[0]);
+  assert.deepEqual(reduced.at(-1), samples.at(-1));
+});
+
+test('brush outlines use the same simplified geometry for every preset', () => {
+  const samples = Array.from({ length: 80 }, (_, index) => ({
+    x: index * 2,
+    y: Math.sin(index / 8) * 3,
+    pressure: 0.3 + (index % 12) / 20,
+  }));
+  for (const preset of ['pencil', 'ink', 'marker', 'brush']) {
+    const reduced = simplifyBrushSamples(samples);
+    const outline = createBrushOutline(samples, { preset, complete: true });
+    assert.ok(reduced.length < samples.length);
+    assert.ok(outline.length > 0);
   }
 });
