@@ -24,7 +24,10 @@
 - [ ] Add per-line texture and pressure profiles.
 - [x] Add deterministic Line Boil deformation with stable per-line phase seeds.
 - [x] Add live preview controls for amplitude, pattern frequency, and playback speed.
-- [x] Add frame-based vector-line snapshots with stable frame IDs.\n- [x] Add frame insertion, duplication, deletion, and selection.\n- [x] Add previous/next onion-skin ghost rendering.\n- [ ] Add per-line animation settings, frame caching, and timeline keyframes.
+- [x] Add frame-based vector-line snapshots with stable frame IDs.\n- [x] Add frame insertion, duplication, deletion, and selection.\n- [x] Add previous/next onion-skin ghost rendering.\n- [x] Add frame-based vector-line snapshots with stable frame IDs.
+- [x] Add frame insertion, duplication, deletion, and selection.
+- [x] Add previous/next onion-skin ghost rendering.
+- [ ] Add per-line animation settings, frame caching, and timeline keyframes.
 - [ ] Evaluate Paper.js behind a line-engine adapter.
 
 ## Phase 3 — Tone Studio
@@ -32,7 +35,9 @@
 - Support region- and layer-scoped effects.
 
 ## Phase 4 — Motion Studio
-- Timeline, frame management, keyframes, playback, and onion-skin workflow.
+- [x] Frame management for vector-line snapshots.
+- [x] Previous/next onion-skin preview.
+- [ ] Frame playback, per-frame paint-layer snapshots, keyframes, and timing controls.
 - Reuse the same document model as the drawing engine.
 
 ## Phase 5 — 3D Studio
@@ -50,6 +55,10 @@
 - PencilKit/Metal-based input and rendering where appropriate.
 - Pressure, tilt, palm rejection, and low-latency interaction.
 - Maintain compatibility with the shared project document format.
+
+## Current status — v0.6
+
+The Motion Studio MVP stores independent vector-line snapshots per frame and supports adding, duplicating, deleting, and selecting frames. Previous and next frames appear as blue and pink onion-skin ghosts. Paint-layer snapshots, playback, and keyframes remain future work.
 
 ## Current next action
 
