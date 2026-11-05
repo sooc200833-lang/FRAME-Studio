@@ -120,15 +120,62 @@ The current architecture is intentionally pragmatic: app state and much of the U
 9. Do not introduce a second rendering or state architecture without documenting the migration and compatibility plan.
 10. Keep UI controls touch-friendly and readable at iPad-sized viewports; avoid tiny desktop-only controls.
 
-## 6. Collaboration protocol for Claude
+## 6. AI collaboration roles
 
-Before editing:
+The project uses a two-assistant workflow with one shared source of truth: this GitHub repository. These are default ownership boundaries, not claims that one model is universally better. Either assistant may take a task explicitly assigned to it.
+
+### ChatGPT — product/technical design partner and independent reviewer
+
+Default responsibilities:
+- Translate the user's product ideas into precise requirements and acceptance criteria.
+- Design workflows, tool organization, inspector/navigation structure, and iPad-oriented UI/UX.
+- Define expected behavior and edge cases before implementation.
+- Review architecture boundaries and trade-offs across drawing, vector, tone, layers, selection, animation, and future 3D workflows.
+- Review Claude's PRs against the requirements, inspect diffs, identify regressions, and request targeted fixes.
+- Coordinate integration across features and maintain a coherent product roadmap.
+- Implement code directly when explicitly assigned or when a focused change is more efficient to complete directly.
+
+Expected deliverables:
+- Feature specification and acceptance checklist.
+- UI/workflow proposal where relevant.
+- Independent code review with concrete file/line references and reproducible concerns.
+- Integration and regression test plan.
+
+### Claude — implementation lead
+
+Default responsibilities:
+- Implement well-scoped features and refactors in the codebase.
+- Build isolated, testable engines/modules for brush, vector geometry, screentone, selection, animation, and rendering.
+- Investigate implementation-level bugs and performance bottlenecks.
+- Write unit/regression tests and improve module boundaries where justified.
+- Keep implementation details and technical documentation aligned with shipped behavior.
+
+Expected deliverables:
+- Focused feature branch and pull request.
+- Implementation summary and changed-file list.
+- Tests added/updated and exact test/build results.
+- Known limitations and any browser/device checks not performed.
+
+### Shared responsibilities
+
+Both assistants can:
+- Research and compare open-source libraries, verify licenses, and evaluate integration costs.
+- Review complex algorithms and propose alternative approaches.
+- Work on high-risk systems such as brush input, vector editing, compositing, undo/redo, and animation.
+- Challenge incorrect assumptions and correct each other's proposals using code and evidence.
+
+For critical systems, prefer a two-pass process: one assistant implements; the other independently reviews. Do not have both assistants make simultaneous edits to the same files.
+
+## 7. Collaboration protocol
+
+### Before editing
 1. Read this guide, `README.md`, relevant architecture/roadmap sections, and the exact source files involved.
-2. Check the current branch and recent commits/PRs. Do not assume an earlier chat summary reflects the current repository.
-3. Trace the complete user interaction from HTML control → event binding → state/algorithm → canvas/document mutation → renderer refresh → undo/frame persistence.
-4. Identify neighboring tests and existing conventions before choosing an implementation.
+2. Check current `main`, recent commits, open PRs, and active branches. Do not assume an earlier chat summary reflects the current repository.
+3. Confirm the task's owner and whether another assistant is editing overlapping files.
+4. Trace the complete user interaction from HTML control → event binding → state/algorithm → canvas/document mutation → renderer refresh → undo/frame persistence.
+5. Define acceptance criteria and identify neighboring tests.
 
-While editing:
+### While editing
 - Make the smallest complete change that solves the requested task.
 - Preserve Korean UI wording and the existing dark visual language unless the task requests a redesign.
 - Keep functions and controls named consistently with existing code.
@@ -137,14 +184,22 @@ While editing:
 - Avoid adding dependencies unless there is a concrete benefit. Check license and maintenance status before adopting an open-source library.
 - Do not commit API keys, tokens, passwords, private URLs, or user data. Never put provider secrets in browser code; GPT/Claude calls must go through a future server-side proxy.
 - Do not delete working features or demo/test fixtures without explaining why and updating documentation.
+- If implementation reveals a flaw in the specification, stop and explain the conflict before making a broad or irreversible design change.
 
-After editing:
+### After editing
 1. Run `npm test`.
 2. Run `npm run build`.
 3. Inspect the diff for accidental unrelated changes, broken controls, stale docs, and accessibility regressions.
 4. Report exactly what was tested. If browser interaction or physical iPad testing was not performed, say so.
 5. Work on a feature branch and open a PR to `main`; do not force-push or rewrite shared history.
-6. Do not merge until required CI checks pass and the change has been reviewed.
+6. The other assistant should review critical PRs before merge. Do not merge until required CI checks pass and review concerns are resolved.
+7. After merge, verify the relevant files on `main` and update this guide if the project state changed.
+
+### Git coordination
+- One task = one owner = one feature branch = one PR.
+- Never let two assistants independently modify the same file at the same time.
+- Prefer separate PRs for independent features. If changes depend on each other, merge the prerequisite first and rebase/update the follow-up branch safely.
+- Treat `main` as the shared, reviewed baseline. The GitHub repository—not either assistant's chat history—is the source of truth.
 
 ## 7. Test and development commands
 
