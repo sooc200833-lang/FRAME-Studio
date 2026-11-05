@@ -59,7 +59,15 @@ export function stabilizePoint(previous, current, strength = 0.28) {
 export function coalescedPointerEvents(event) {
   if (typeof event?.getCoalescedEvents === 'function') {
     const samples = event.getCoalescedEvents();
-    if (samples?.length) return samples;
+    if (samples?.length) {
+      const last = samples[samples.length - 1];
+      const coordinate = (sample, primary, fallback) => sample?.[primary] ?? sample?.[fallback];
+      const samePosition =
+        coordinate(last, 'clientX', 'x') === coordinate(event, 'clientX', 'x') &&
+        coordinate(last, 'clientY', 'y') === coordinate(event, 'clientY', 'y');
+      const samePressure = Number(last?.pressure ?? 0.5) === Number(event?.pressure ?? 0.5);
+      return samePosition && samePressure ? samples : [...samples, event];
+    }
   }
   return [event];
 }
