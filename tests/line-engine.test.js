@@ -6,6 +6,10 @@ import {
   hitTestLineStrokes,
   translateLineStroke,
   updateLineStrokeStyle,
+  projectPointToLineStroke,
+  insertLineStrokePoint,
+  removeLineStrokePoint,
+  smoothLineStroke,
 } from '../apps/web/src/line/line-engine.js';
 
 const line = () => createLineStroke({
@@ -49,4 +53,34 @@ test('style updates preserve identity and geometry', () => {
   assert.deepEqual(updated.points, original.points);
   assert.equal(updated.color, '#e95d4f');
   assert.equal(updated.width, 14);
+});
+
+test('projects onto the nearest vector segment with stable insertion coordinates', () => {
+  const original = line();
+  const projection = projectPointToLineStroke(original, { x: 50, y: 14 });
+  assert.equal(projection.segmentIndex, 0);
+  assert.deepEqual(projection.point, { x: 50, y: 10 });
+  const inserted = insertLineStrokePoint(original, { x: 50, y: 14 });
+  assert.equal(inserted.id, original.id);
+  assert.deepEqual(inserted.points[1], { x: 50, y: 10 });
+  assert.equal(original.points.length, 3);
+});
+
+test('node removal preserves endpoints and refuses to invalidate a two-node stroke', () => {
+  const original = line();
+  const removed = removeLineStrokePoint(original, 1);
+  assert.equal(removed.points.length, 2);
+  assert.deepEqual(removed.points[0], original.points[0]);
+  assert.deepEqual(removed.points[1], original.points[2]);
+  assert.equal(removeLineStrokePoint(removed, 0), removed);
+});
+
+test('Catmull-Rom smoothing adds editable samples and preserves exact endpoints', () => {
+  const original = line();
+  const smoothed = smoothLineStroke(original, 6, 0.7);
+  assert.equal(smoothed.id, original.id);
+  assert.ok(smoothed.points.length > original.points.length);
+  assert.deepEqual(smoothed.points[0], original.points[0]);
+  assert.deepEqual(smoothed.points.at(-1), original.points.at(-1));
+  assert.deepEqual(original.points, line().points);
 });
