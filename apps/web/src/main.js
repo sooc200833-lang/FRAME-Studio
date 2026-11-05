@@ -1,6 +1,6 @@
 import './styles.css';
 import { PixiStageRenderer } from './renderer.js';
-import { applyBrushTexture, coalescedPointerEvents, createBrushOutline, getBrushPreset, normalizePointerPressure, stabilizePoint } from './brush/brush-engine.js';
+import { applyBrushTexture, coalescedPointerEvents, createBrushOutline, getBrushPreset, normalizePointerPressure, resolveBrushStrokeOptions, stabilizePoint } from './brush/brush-engine.js';
 import { expandRegionMask, findConnectedRegion } from './fill/flood-fill.js';
 import { animateLineStrokes, lineBoilPhase } from './line/line-boil.js';
 import { activeFrame, addFrame, createTimeline, deleteFrame, frameAtTime, getOnionSkin, selectFrame, updateFrameCels, updateFrameStrokes } from './animation/timeline.js';
@@ -123,6 +123,14 @@ function applyGroupState() {
 let selectedStrokeId = null;
 
 function currentBrushPreset() { return getBrushPreset(brushPreset); }
+
+function currentStrokeOptions(complete = false) {
+  return resolveBrushStrokeOptions({
+    size, stylus: strokeIsStylus, pressureEnabled, preset: brushPreset,
+    pressureCurve, smoothing: currentBrushPreset().smoothing,
+    streamline: brushSmoothing, complete,
+  });
+}
 
 function normalizeHex(value) {
   return /^#[0-9a-f]{6}$/i.test(value) ? value.toLowerCase() : '#24242a';
@@ -463,12 +471,25 @@ function updateTimelineFPS(value) {
   document.getElementById('fpsOut').value = fps + ' FPS';
 }
 
+const viewport = { scale: 1, rotation: 0 };
+
+function applyViewport() {
+  if (!inputSurface) return;
+  inputSurface.style.transform = `rotate(${viewport.rotation}deg) scale(${viewport.scale})`;
+  document.getElementById('zoomLevel').value = Math.round(viewport.scale * 100) + '%';
+}
+
 function position(event) {
   const rect = inputSurface.getBoundingClientRect();
-  return {
-    x: Math.max(0, Math.min(W - 1, Math.floor((event.clientX - rect.left) * W / rect.width))),
-    y: Math.max(0, Math.min(H - 1, Math.floor((event.clientY - rect.top) * H / rect.height))),
-  };
+  const transform = getComputedStyle(inputSurface).transform;
+  return clientToCanvasPoint(event, {
+    rect,
+    elementWidth: inputSurface.clientWidth || W,
+    elementHeight: inputSurface.clientHeight || H,
+    canvasWidth: W,
+    canvasHeight: H,
+    matrix: parseCssTransformMatrix(transform),
+  });
 }
 
 function withBrushContext(draw, lineWidth = size) {
@@ -802,6 +823,26 @@ function applySelectionTransform() {
   document.getElementById('selectionScaleOut').value = '100%';
   saveActiveFrame();
   render(layers.map((_, index) => index));
+}
+
+function bindViewportControls() {
+  document.getElementById('zoomIn').onclick = () => {
+    viewport.scale = Math.min(4, Number((viewport.scale * 1.2).toFixed(3)));
+    applyViewport();
+  };
+  document.getElementById('zoomOut').onclick = () => {
+    viewport.scale = Math.max(0.25, Number((viewport.scale / 1.2).toFixed(3)));
+    applyViewport();
+  };
+  document.getElementById('rotateCanvas').onclick = () => {
+    viewport.rotation = (viewport.rotation + 15) % 360;
+    applyViewport();
+  };
+  document.getElementById('resetViewport').onclick = () => {
+    viewport.scale = 1;
+    viewport.rotation = 0;
+    applyViewport();
+  };
 }
 
 function bindControls() {
@@ -1213,12 +1254,7 @@ function bindCanvasEvents() {
       : [];
     if (!maskEditing) save(layers[active]);
     if (tool === 'pen' || tool === 'eraser') {
-      const outline = createBrushOutline(strokeSamples, {
-        size, stylus: strokeIsStylus, pressureEnabled,
-        preset: brushPreset,
-        pressureCurve,
-        complete: false,
-      });
+      const outline = createBrushOutline(strokeSamples, currentStrokeOptions(true));
       if (!maskEditing && tool === 'pen') {
         renderer.previewBrush(outline, color, currentBrushPreset().opacity * brushOpacity, strokeSamples, { preset: brushPreset, size, color });
       } else {
@@ -1302,13 +1338,7 @@ function bindCanvasEvents() {
         last = smoothPoint;
       }
       const profile = currentBrushPreset();
-      const outline = createBrushOutline(strokeSamples, {
-        size, stylus: strokeIsStylus, pressureEnabled,
-        preset: brushPreset,
-        smoothing: profile.smoothing,
-        streamline: brushSmoothing,
-        complete: false,
-      });
+      const outline = createBrushOutline(strokeSamples, currentStrokeOptions(true));
       if (!maskEditing && tool === 'pen') {
         renderer.previewBrush(outline, color, currentBrushPreset().opacity * brushOpacity, strokeSamples, { preset: brushPreset, size, color });
       } else {
@@ -1422,12 +1452,7 @@ function bindCanvasEvents() {
       if (!finalPoint || Math.hypot(point.x - finalPoint.x, point.y - finalPoint.y) > 0.1) {
         strokeSamples.push({ ...point, pressure: finalPressure });
       }
-      const outline = createBrushOutline(strokeSamples, {
-        size, stylus: strokeIsStylus, pressureEnabled,
-        preset: brushPreset,
-        pressureCurve,
-        complete: true,
-      });
+      const outline = createBrushOutline(strokeSamples, currentStrokeOptions(true));
       if (outline.length >= 3) {
         const targetLayer = layers[active];
         const drawingMask = maskEditing && targetLayer.maskEnabled && targetLayer.maskCanvas;
@@ -1468,6 +1493,7 @@ function bindCanvasEvents() {
 async function start() {
   inputSurface = await renderer.init(host);
   bindControls();
+  bindViewportControls();
   bindCanvasEvents();
 
   const lineContext = layers[1].canvas.getContext('2d');

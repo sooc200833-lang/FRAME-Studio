@@ -31,7 +31,17 @@
     </nav>
 
     <main class="stage">
-      <div class="stagebar">CANVAS · 1200 × 900 <span id="status">PEN</span></div>
+      <div class="stagebar">
+        <span class="stage-title">CANVAS · 1200 × 900</span>
+        <div class="viewport-controls" role="group" aria-label="캔버스 보기 조절">
+          <button id="zoomOut" title="축소" aria-label="축소">−</button>
+          <output id="zoomLevel">100%</output>
+          <button id="zoomIn" title="확대" aria-label="확대">＋</button>
+          <button id="rotateCanvas" title="15도 회전" aria-label="캔버스 15도 회전">↻</button>
+          <button id="resetViewport" title="보기 초기화" aria-label="보기 초기화">맞춤</button>
+        </div>
+        <span id="status">PEN</span>
+      </div>
       <div class="canvaswrap">
         <div id="pixiHost" aria-label="그리기 작업 영역"></div>
       </div>
