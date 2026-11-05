@@ -101,3 +101,10 @@ The web prototype includes raster drawing, connected-region fill, PixiJS renderi
 - Each layer's selected pixels are extracted independently and transformed with the same matrix, preserving layer ordering and separation rather than flattening the result.
 - Multi-layer transforms create a grouped raster undo/redo record so one undo or redo restores all participating layers together. The grouped record is scoped to the current frame and is invalidated by subsequent raster or vector edits.
 - Masks and layer metadata are not transformed; only paint pixels in the selected polygon are affected. Vector strokes are not included yet.
+
+
+## Vector stroke selection transforms
+- Vector strokes whose centerline intersects or enters the active polygon selection are included as whole strokes; a stroke crossing the selection boundary is not split into partial segments.
+- Selected stroke points are transformed around the same selection centroid as raster pixels. Stroke width scales with the selected scale factor; color and other stroke metadata remain unchanged.
+- Raster and vector snapshots are stored in one grouped transform undo/redo record so the operation can be reverted together. The vector selection is evaluated against the polygon at apply time.
+- Vector stroke selection currently uses centerline intersection, not stroke-width-aware edge overlap; partially intersecting strokes move in full.
