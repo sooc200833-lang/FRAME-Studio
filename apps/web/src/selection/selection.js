@@ -30,3 +30,26 @@ export function resizeSelectionRect(rect, point, bounds, minSize = 2) {
   const bottom = Math.max(rect.y + minSize, Math.min(bounds.height, point.y));
   return { ...rect, width: right - rect.x, height: bottom - rect.y };
 }
+
+export function pointInPolygon(point, polygon) {
+  if (!polygon || polygon.length < 3) return false;
+  let inside = false;
+  for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+    const a = polygon[i], b = polygon[j];
+    const crosses = (a.y > point.y) !== (b.y > point.y)
+      && point.x < ((b.x - a.x) * (point.y - a.y)) / ((b.y - a.y) || Number.EPSILON) + a.x;
+    if (crosses) inside = !inside;
+  }
+  return inside;
+}
+
+export function translatePolygon(polygon, dx, dy, bounds) {
+  if (!polygon) return [];
+  const xs = polygon.map(point => point.x);
+  const ys = polygon.map(point => point.y);
+  const minX = Math.min(...xs), maxX = Math.max(...xs);
+  const minY = Math.min(...ys), maxY = Math.max(...ys);
+  const clampedX = Math.max(-minX, Math.min(bounds.width - maxX, dx));
+  const clampedY = Math.max(-minY, Math.min(bounds.height - maxY, dy));
+  return polygon.map(point => ({ x: point.x + clampedX, y: point.y + clampedY }));
+}
