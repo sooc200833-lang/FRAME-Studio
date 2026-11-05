@@ -59,13 +59,15 @@ Always distinguish code-level tests from visual browser checks and physical iPad
 
 ### Selection and transforms
 - Rectangular marquee and freeform lasso.
-- Active-layer pixel movement and rectangular resize with eight edge/corner handles and a rotation control.
-- Move, resize, and rotation gestures show a live raster-content preview without mutating the source layer until pointer release.
+- Rectangular marquee and freeform lasso support direct move/resize/rotation gestures with live raster-content previews.
+- The layer-list transform checkboxes determine which raster layers participate; if none are checked, only the active layer is transformed.
+- All selected layers preview the same geometry independently, commit together on release, and use grouped undo/redo.
+- The source layers remain unchanged during the gesture; pointer cancellation restores every layer's original display.
 - Pointer cancellation restores the source display; the committed operation remains covered by the existing layer undo snapshot.
 - Rectangular marquee rotation converts the boundary to a freeform polygon; lasso movement now previews the clipped raster pixels live and commits on release.
 - Lasso selections expose eight bounding-box resize handles and a rotation handle; the freeform polygon shape is proportionally resized or rotated around its centroid.
-- Lasso move/resize/rotate gestures preview clipped raster pixels live and commit to the active layer on release; pointer cancellation restores the original polygon and source pixels.
-- Rotation/scale transform across selected raster layers.
+- Lasso move/resize/rotate gestures preview clipped raster pixels live and commit to all checked target layers on release.
+- Rotation/scale transforms from the inspector and direct selection handles share the same checked-layer target list.
 - Intersecting vector strokes can participate as whole objects.
 - Grouped raster/vector undo and redo for multi-target transforms.
 - Selection feathering and some cross-layer selection workflows remain incomplete.
