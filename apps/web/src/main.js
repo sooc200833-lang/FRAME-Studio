@@ -37,7 +37,7 @@ let playbackStartedAt = 0;
 let playbackStartOffset = 0;
 let playbackRaf = 0;
 
-const palette = ['#24242a', '#ffffff', '#e95d4f', '#e8b64f', '#6c9c85', '#6f86c9', '#b78bc7'];
+const palette = ['#17171b','#45434a','#77727a','#b8b2aa','#f5f0e8','#ffffff','#8f3037','#d94b52','#f07862','#f2a65a','#f2cf67','#9b9b43','#4f8a62','#74b58b','#3f9b9c','#63c5c7','#3c6c9e','#668bd0','#8c70bd','#b48bd0','#d58eb7','#9a6a50','#c08b68','#e3b9a0'];
 const vectorStrokes = [];
 const lineUndo = [];
 const lineRedo = [];
@@ -50,7 +50,7 @@ function makeLayer(name) {
   const canvas = document.createElement('canvas');
   canvas.width = W;
   canvas.height = H;
-  return { name, visible: true, canvas, undo: [], redo: [] };
+  return { name, visible: true, opacity: 1, blendMode: 'normal', canvas, undo: [], redo: [] };
 }
 
 const layers = [makeLayer('면 / 톤'), makeLayer('선화')];
@@ -125,7 +125,12 @@ function composite() {
   context.fillStyle = '#f4f0e8';
   context.fillRect(0, 0, W, H);
   layers.forEach(layer => {
-    if (layer.visible) context.drawImage(layer.canvas, 0, 0);
+    if (!layer.visible) return;
+    context.save();
+    context.globalAlpha = layer.opacity ?? 1;
+    context.globalCompositeOperation = layer.blendMode === 'add' ? 'lighter' : (layer.blendMode || 'source-over');
+    context.drawImage(layer.canvas, 0, 0);
+    context.restore();
   });
   drawVectorStrokes(context);
   return context;
@@ -136,6 +141,7 @@ function render(dirtyIndices = [], displayStrokes = vectorStrokes) {
   renderer.sync(layers, dirtyIndices, displayStrokes, selectedStrokeId, onionEnabled ? getOnionSkin(timeline) : []);
   document.getElementById('status').textContent = tool.toUpperCase();
   drawLayers();
+  updateLayerInspector();
   updateLineInspector();
   drawTimeline();
 }
@@ -357,6 +363,19 @@ function drawLayers() {
   });
 }
 
+function updateLayerInspector() {
+  const layer = layers[active];
+  if (!layer) return;
+  const opacity = document.getElementById('layerOpacity');
+  const opacityOut = document.getElementById('layerOpacityOut');
+  const blend = document.getElementById('layerBlend');
+  if (opacity && document.activeElement !== opacity) opacity.value = Math.round((layer.opacity ?? 1) * 100);
+  if (opacityOut) opacityOut.value = Math.round((layer.opacity ?? 1) * 100) + '%';
+  if (blend && document.activeElement !== blend) blend.value = layer.blendMode || 'normal';
+  const remove = document.getElementById('layerDelete');
+  if (remove) remove.disabled = layers.length <= 1;
+}
+
 function updateBoilOutputs() {
   document.getElementById('boilAmplitudeOut').value = document.getElementById('boilAmplitude').value + 'px';
   document.getElementById('boilFrequencyOut').value = Number(document.getElementById('boilFrequency').value).toFixed(2);
@@ -431,9 +450,45 @@ function bindControls() {
   });
 
   document.getElementById('addLayer').onclick = () => {
+    if (playbackActive) setPlaybackEnabled(false);
     layers.push(makeLayer('레이어 ' + (layers.length + 1)));
     active = layers.length - 1;
-    render([active]);
+    saveActiveFrame();
+    render(layers.map((_, index) => index));
+  };
+
+  document.getElementById('layerDuplicate').onclick = () => {
+    if (playbackActive) setPlaybackEnabled(false);
+    const source = layers[active];
+    const copy = makeLayer(source.name + ' 복사본');
+    copy.opacity = source.opacity ?? 1;
+    copy.blendMode = source.blendMode || 'normal';
+    copy.canvas.getContext('2d').drawImage(source.canvas, 0, 0);
+    layers.push(copy);
+    active = layers.length - 1;
+    saveActiveFrame();
+    render(layers.map((_, index) => index));
+  };
+
+  document.getElementById('layerDelete').onclick = () => {
+    if (layers.length <= 1) return;
+    if (playbackActive) setPlaybackEnabled(false);
+    saveActiveFrame();
+    layers.splice(active, 1);
+    timeline.frames.forEach(frame => frame.cels?.splice(active, 1));
+    active = Math.min(active, layers.length - 1);
+    saveActiveFrame();
+    render(layers.map((_, index) => index));
+  };
+
+  document.getElementById('layerOpacity').oninput = event => {
+    layers[active].opacity = Number(event.target.value) / 100;
+    document.getElementById('layerOpacityOut').value = event.target.value + '%';
+    render();
+  };
+  document.getElementById('layerBlend').onchange = event => {
+    layers[active].blendMode = event.target.value;
+    render();
   };
 
   document.getElementById('clear').onclick = () => {
@@ -528,6 +583,13 @@ function bindControls() {
   };
 
   const paletteElement = document.getElementById('palette');
+  const customColor = document.getElementById('customColor');
+  customColor.value = color;
+  customColor.oninput = event => {
+    color = event.target.value;
+    paletteElement.querySelectorAll('button').forEach(item => item.classList.remove('selected'));
+    if (selectedStroke()) applySelectedStyle({ color });
+  };
   palette.forEach(value => {
     const button = document.createElement('button');
     button.className = 'swatch';
@@ -535,6 +597,7 @@ function bindControls() {
     button.setAttribute('aria-label', value);
     button.onclick = () => {
       color = value;
+      customColor.value = value;
       paletteElement.querySelectorAll('button').forEach(item => {
         item.classList.toggle('selected', item === button);
       });
