@@ -1,4 +1,5 @@
 import { Application, Graphics, Sprite, Texture } from 'pixi.js';
+import { applyBrushTexture } from './brush/brush-engine.js';
 
 export class PixiStageRenderer {
   constructor(width, height) {
@@ -7,6 +8,10 @@ export class PixiStageRenderer {
     this.app = null;
     this.background = null;
     this.preview = null;
+    this.previewTextureCanvas = null;
+    this.previewTextureContext = null;
+    this.previewTexture = null;
+    this.previewTextureSprite = null;
     this.entries = new Map();
     this.strokeGraphics = [];
   }
@@ -31,7 +36,16 @@ export class PixiStageRenderer {
 
     this.background = new Graphics().rect(0, 0, this.width, this.height).fill(0xf4f0e8);
     this.preview = new Graphics();
-    app.stage.addChild(this.background, this.preview);
+    this.previewTextureCanvas = document.createElement('canvas');
+    this.previewTextureCanvas.width = this.width;
+    this.previewTextureCanvas.height = this.height;
+    this.previewTextureContext = this.previewTextureCanvas.getContext('2d');
+    this.previewTexture = Texture.from(this.previewTextureCanvas);
+    this.previewTextureSprite = new Sprite(this.previewTexture);
+    this.previewTextureSprite.width = this.width;
+    this.previewTextureSprite.height = this.height;
+    this.previewTextureSprite.visible = false;
+    app.stage.addChild(this.background, this.preview, this.previewTextureSprite);
     return app.canvas;
   }
 
@@ -163,11 +177,12 @@ export class PixiStageRenderer {
     }
 
     this.app.stage.setChildIndex(this.preview, this.app.stage.children.length - 1);
+    this.app.stage.setChildIndex(this.previewTextureSprite, this.app.stage.children.length - 1);
   }
 
   previewStroke(points, color, width) {
     if (!this.preview || !points?.length) return;
-    this.preview.clear();
+    this.clearPreview();
     this.drawPath(this.preview, points, color, width, 0.85);
   }
 
@@ -177,6 +192,7 @@ export class PixiStageRenderer {
 
   previewPolygon(points, color, alpha = 1) {
     if (!this.preview) return;
+    this.clearPreview();
     this.preview.clear();
     if (!points || points.length < 3) return;
     this.preview.moveTo(points[0][0], points[0][1]);
@@ -187,8 +203,37 @@ export class PixiStageRenderer {
     this.preview.fill({ color, alpha });
   }
 
+  previewBrush(outline, color, alpha, samples, options = {}) {
+    if (!this.previewTextureContext || !this.previewTexture) return;
+    this.preview?.clear();
+    const context = this.previewTextureContext;
+    context.clearRect(0, 0, this.width, this.height);
+    if (!Array.isArray(outline) || outline.length < 3) {
+      this.previewTextureSprite.visible = false;
+      this.previewTexture.source.update();
+      return;
+    }
+    context.save();
+    context.globalAlpha = alpha;
+    context.fillStyle = color;
+    context.beginPath();
+    context.moveTo(outline[0][0], outline[0][1]);
+    for (let index = 1; index < outline.length; index++) context.lineTo(outline[index][0], outline[index][1]);
+    context.closePath();
+    context.fill();
+    applyBrushTexture(context, outline, samples, options);
+    context.restore();
+    this.previewTexture.source.update();
+    this.previewTextureSprite.visible = true;
+  }
+
   clearPreview() {
     this.preview?.clear();
+    if (this.previewTextureContext && this.previewTextureSprite) {
+      this.previewTextureContext.clearRect(0, 0, this.width, this.height);
+      this.previewTexture.source.update();
+      this.previewTextureSprite.visible = false;
+    }
   }
 
   destroy() {
@@ -196,6 +241,10 @@ export class PixiStageRenderer {
     this.app.destroy({ removeView: true }, { children: true, texture: true, textureSource: true });
     this.entries.clear();
     this.strokeGraphics = [];
+    this.previewTexture = null;
+    this.previewTextureCanvas = null;
+    this.previewTextureContext = null;
+    this.previewTextureSprite = null;
     this.app = null;
   }
 }
