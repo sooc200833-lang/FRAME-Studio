@@ -1743,10 +1743,10 @@ function bindCanvasEvents() {
 
     if (tool === 'marquee' && down && selectionDrag) {
       if (event.type === 'pointercancel') {
-        renderer.clearLayerPreview(layers[active]);
+        clearSelectionDragPreviews(selectionDrag);
         selectionDrag = null;
         down = false;
-        render([active]);
+        render(layers.map((_, index) => index));
         return;
       }
       const point = position(event);
@@ -1764,20 +1764,20 @@ function bindCanvasEvents() {
         selectionRect = { ...drag.originalRect };
         selectionPolygon = null;
       }
-      if (drag.mode === 'rotate' && Math.abs(drag.rotation || 0) > 0.1 && drag.sourceCanvas && drag.originalRect) {
+      if (drag.mode === 'rotate' && Math.abs(drag.rotation || 0) > 0.1 && drag.sources?.length && drag.originalRect) {
         const original = drag.originalRect;
         const center = { x: original.x + original.width / 2, y: original.y + original.height / 2 };
-        const layer = layers[active];
-        save(layer);
-        const rotated = document.createElement('canvas');
-        rotated.width = W; rotated.height = H;
-        const context = rotated.getContext('2d');
-        context.translate(center.x, center.y);
-        context.rotate((drag.rotation || 0) * Math.PI / 180);
-        context.drawImage(drag.sourceCanvas, -original.width / 2, -original.height / 2, original.width, original.height);
-        const target = layer.canvas.getContext('2d');
-        target.clearRect(original.x, original.y, original.width, original.height);
-        target.drawImage(rotated, 0, 0);
+        commitSelectionDragSources(drag, source => {
+          const rotated = document.createElement('canvas');
+          rotated.width = W; rotated.height = H;
+          const context = rotated.getContext('2d');
+          context.translate(center.x, center.y);
+          context.rotate((drag.rotation || 0) * Math.PI / 180);
+          context.drawImage(source.sourceCanvas, -original.width / 2, -original.height / 2, original.width, original.height);
+          const target = source.layer.canvas.getContext('2d');
+          target.clearRect(original.x, original.y, original.width, original.height);
+          target.drawImage(rotated, 0, 0);
+        });
         const polygon = [
           { x: original.x, y: original.y },
           { x: original.x + original.width, y: original.y },
@@ -1786,26 +1786,28 @@ function bindCanvasEvents() {
         ];
         selectionRect = null;
         selectionPolygon = transformPolygon(polygon, drag.rotation, 1);
-        saveActiveFrame();
       }
       if (drag.mode === 'move' || drag.mode === 'resize') {
-        const source = drag.sourceCanvas;
         const original = drag.originalRect;
         const target = selectionRect;
-        if (source && original && target && (Math.abs(target.x - original.x) > 0.5 || Math.abs(target.y - original.y) > 0.5 || Math.abs(target.width - original.width) > 0.5 || Math.abs(target.height - original.height) > 0.5)) {
-          const layer = layers[active];
-          save(layer);
-          const context = layer.canvas.getContext('2d');
-          context.clearRect(original.x, original.y, original.width, original.height);
-          context.drawImage(source, target.x, target.y, target.width, target.height);
-          saveActiveFrame();
+        if (original && target && (
+          Math.abs(target.x - original.x) > 0.5
+          || Math.abs(target.y - original.y) > 0.5
+          || Math.abs(target.width - original.width) > 0.5
+          || Math.abs(target.height - original.height) > 0.5
+        )) {
+          commitSelectionDragSources(drag, source => {
+            const context = source.layer.canvas.getContext('2d');
+            context.clearRect(original.x, original.y, original.width, original.height);
+            context.drawImage(source.sourceCanvas, target.x, target.y, target.width, target.height);
+          });
         }
       }
       if (drag.mode === 'new' && (!selectionRect || selectionRect.width < 2 || selectionRect.height < 2)) selectionRect = null;
-      renderer.clearLayerPreview(layers[active]);
+      clearSelectionDragPreviews(drag);
       selectionDrag = null;
       down = false;
-      render([active]);
+      render(layers.map((_, index) => index));
       return;
     }
 
