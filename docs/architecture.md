@@ -78,14 +78,14 @@ The web prototype includes raster drawing, connected-region fill, PixiJS renderi
 - The marquee tool stores a rectangular selection in document coordinates and renders a dashed boundary plus a bottom-right resize handle in the PixiJS overlay.
 - Dragging inside the boundary moves the selected raster pixels; dragging the handle scales the selected pixel region. The original pixels are extracted before clearing and redrawing, avoiding overlap corruption.
 - Selection geometry helpers are isolated in `apps/web/src/selection/selection.js` and covered by Node tests.
-- The current tool operates on the active raster layer only. Freeform/lasso selection, transform rotation, multi-layer transforms, and vector selection remain separate capabilities.
+- The rectangular selection currently operates on the active raster layer only. Freeform selection and rotation are documented in their dedicated sections below; multi-layer and vector transforms remain future work.
 
 
 ## Freeform lasso selection
 - The lasso tool records a polygon in document coordinates and displays a dashed PixiJS overlay.
 - Clicking inside an existing lasso extracts the active raster layer through a polygon clip; dragging moves those pixels while clearing only the original polygon area.
 - Polygon hit testing and bounded translation are pure helpers covered by unit tests.
-- The lasso currently transforms the active raster layer only. Rotation, feathering, vector inclusion, and multi-layer transforms are not yet implemented.
+- The lasso currently transforms the active raster layer only. Rotation and scaling are documented below; feathering, vector inclusion, and multi-layer transforms remain future work.
 
 
 ## Selection transform
