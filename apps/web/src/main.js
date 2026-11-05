@@ -588,9 +588,37 @@ function drawLayers() {
   });
 }
 
+function moveLayer(index, direction) {
+  const target = index + direction;
+  if (target < 0 || target >= layers.length || index === target) return;
+  if (playbackActive) setPlaybackEnabled(false);
+  saveActiveFrame();
+  [layers[index], layers[target]] = [layers[target], layers[index]];
+  timeline.frames.forEach(frame => {
+    if (Array.isArray(frame.cels) && frame.cels.length > Math.max(index, target)) {
+      [frame.cels[index], frame.cels[target]] = [frame.cels[target], frame.cels[index]];
+    }
+  });
+  if (active === index) active = target;
+  else if (active === target) active = index;
+  drawLayers();
+  updateLayerInspector();
+  render(layers.map((_, layerIndex) => layerIndex));
+}
+
 function appendLayerRow(list, layer, index, nested) {
     const item = document.createElement('div');
     item.className = 'layer' + (index === active ? ' selected' : '') + (nested ? ' nested' : '');
+
+    const thumbnail = document.createElement('canvas');
+    thumbnail.className = 'layer-thumbnail';
+    thumbnail.width = 48;
+    thumbnail.height = 36;
+    thumbnail.setAttribute('aria-hidden', 'true');
+    const thumbnailContext = thumbnail.getContext('2d');
+    thumbnailContext.fillStyle = '#f5f3ed';
+    thumbnailContext.fillRect(0, 0, 48, 36);
+    thumbnailContext.drawImage(layer.canvas, 0, 0, 48, 36);
 
     const visibility = document.createElement('button');
     visibility.textContent = layer.visible ? '◉' : '○';
@@ -613,8 +641,28 @@ function appendLayerRow(list, layer, index, nested) {
     };
 
     const name = document.createElement('span');
+    name.className = 'layer-name';
     name.textContent = layer.name + (layer.maskEnabled ? ' · MASK' : '');
-    item.append(visibility, target, name);
+
+    const order = document.createElement('span');
+    order.className = 'layer-order';
+    const moveUp = document.createElement('button');
+    moveUp.type = 'button';
+    moveUp.textContent = '↑';
+    moveUp.title = '레이어 위로';
+    moveUp.setAttribute('aria-label', layer.name + ' 위로 이동');
+    moveUp.disabled = index >= layers.length - 1;
+    moveUp.onclick = event => { event.stopPropagation(); moveLayer(index, 1); };
+    const moveDown = document.createElement('button');
+    moveDown.type = 'button';
+    moveDown.textContent = '↓';
+    moveDown.title = '레이어 아래로';
+    moveDown.setAttribute('aria-label', layer.name + ' 아래로 이동');
+    moveDown.disabled = index <= 0;
+    moveDown.onclick = event => { event.stopPropagation(); moveLayer(index, -1); };
+    order.append(moveUp, moveDown);
+
+    item.append(visibility, target, thumbnail, name, order);
     item.onclick = event => {
       if (event.target !== visibility && event.target !== target) {
         active = index;
