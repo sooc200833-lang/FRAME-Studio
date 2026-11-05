@@ -4,13 +4,13 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
 <meta name="theme-color" content="#171719">
-<title>FRAME Studio — v0.6</title>
+<title>FRAME Studio — v0.9</title>
 </head>
 <body>
 <div class="app">
   <header>
     <div class="brand">FRAME<span>•</span>STUDIO</div>
-    <span class="version">v0.6 · MOTION STUDIO</span>
+    <span class="version">v0.9 · MOTION STUDIO</span>
     <div class="spacer"></div>
     <button id="undo" aria-label="실행 취소">↶</button>
     <button id="redo" aria-label="다시 실행">↷</button>
@@ -57,9 +57,13 @@
         <button id="deleteLine" class="delete-line">선 삭제</button>
       </section>
       <h3 class="section-title">COLOR</h3>
+      <div class="color-picker-row"><label for="customColor">직접 선택</label><input id="customColor" type="color" value="#24242a"></div>
       <div class="swatches" id="palette"></div>
       <h3 class="section-title">LAYERS</h3>
       <div id="layers"></div>
+      <div class="layer-actions"><button id="layerDuplicate">레이어 복제</button><button id="layerDelete">레이어 삭제</button></div>
+      <div class="field"><label for="layerOpacity">불투명도</label><input id="layerOpacity" type="range" min="0" max="100" value="100"><output id="layerOpacityOut">100%</output></div>
+      <div class="field"><label for="layerBlend">혼합 모드</label><select id="layerBlend"><option value="normal">일반</option><option value="multiply">곱하기</option><option value="screen">스크린</option><option value="add">더하기</option><option value="darken">어둡게</option><option value="lighten">밝게</option></select></div>
       <p class="note">PixiJS가 화면 렌더링을 담당하고, 채색 데이터는 독립적인 Canvas 레이어에 보관합니다. 면 채우기는 표시 중인 레이어를 합성해 경계를 판독하고 선택한 레이어에 기록합니다.</p>
     </aside>
   </div>
