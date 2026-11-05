@@ -1,7 +1,8 @@
 import './styles.css';
 import { PixiStageRenderer } from './renderer.js';
 import { expandRegionMask, findConnectedRegion } from './fill/flood-fill.js';
-import { animateLineStrokes, lineBoilPhase } from './line/line-boil.js';\nimport { activeFrame, addFrame, createTimeline, deleteFrame, getOnionSkin, selectFrame, updateFrameStrokes } from './animation/timeline.js';
+import { animateLineStrokes, lineBoilPhase } from './line/line-boil.js';
+import { activeFrame, addFrame, createTimeline, deleteFrame, getOnionSkin, selectFrame, updateFrameStrokes } from './animation/timeline.js';
 import {
   createLineStroke,
   hitTestLineStrokes,
@@ -34,7 +35,10 @@ let lastAnimationPaint = 0;
 const palette = ['#24242a', '#ffffff', '#e95d4f', '#e8b64f', '#6c9c85', '#6f86c9', '#b78bc7'];
 const vectorStrokes = [];
 const lineUndo = [];
-const lineRedo = [];\nconst timeline = createTimeline({ fps: 12 });\nlet onionEnabled = true;\nlet loadingFrame = false;
+const lineRedo = [];
+const timeline = createTimeline({ fps: 12 });
+let onionEnabled = true;
+let loadingFrame = false;
 
 function makeLayer(name) {
   const canvas = document.createElement('canvas');
@@ -122,10 +126,42 @@ function composite() {
 }
 
 function render(dirtyIndices = [], displayStrokes = vectorStrokes) {
-  renderer.sync(layers, dirtyIndices, displayStrokes, selectedStrokeId);
+  if (!loadingFrame) updateFrameStrokes(timeline, timeline.activeFrameId, vectorStrokes);
+  renderer.sync(layers, dirtyIndices, displayStrokes, selectedStrokeId, onionEnabled ? getOnionSkin(timeline) : []);
   document.getElementById('status').textContent = tool.toUpperCase();
   drawLayers();
   updateLineInspector();
+  drawTimeline();
+}
+
+function loadTimelineFrame(frameId, saveCurrent = true) {
+  if (saveCurrent) updateFrameStrokes(timeline, timeline.activeFrameId, vectorStrokes);
+  if (!selectFrame(timeline, frameId)) return;
+  const frame = activeFrame(timeline);
+  loadingFrame = true;
+  vectorStrokes.splice(0, vectorStrokes.length, ...(frame?.strokes || []).map(stroke => ({
+    ...stroke,
+    points: stroke.points.map(point => ({ x: point.x, y: point.y })),
+  })));
+  selectedStrokeId = null;
+  loadingFrame = false;
+  render();
+}
+
+function drawTimeline() {
+  const strip = document.getElementById('frameStrip');
+  if (!strip) return;
+  strip.replaceChildren();
+  timeline.frames.forEach((frame, index) => {
+    const button = document.createElement('button');
+    button.className = 'frame-cell' + (frame.id === timeline.activeFrameId ? ' active' : '');
+    button.textContent = String(index + 1).padStart(2, '0');
+    button.title = `프레임 ${index + 1} · ${frame.strokes.length}개 선`;
+    button.onclick = () => loadTimelineFrame(frame.id);
+    strip.append(button);
+  });
+  const label = document.getElementById('frameCounter');
+  if (label) label.textContent = `${timeline.frames.findIndex(frame => frame.id === timeline.activeFrameId) + 1} / ${timeline.frames.length}`;
 }
 
 function position(event) {
@@ -374,6 +410,28 @@ function bindControls() {
     document.getElementById(id).oninput = updateBoilOutputs;
   }
   updateBoilOutputs();
+
+  document.getElementById('frameAdd').onclick = () => {
+    updateFrameStrokes(timeline, timeline.activeFrameId, vectorStrokes);
+    const frame = addFrame(timeline);
+    loadTimelineFrame(frame.id, false);
+  };
+  document.getElementById('frameDuplicate').onclick = () => {
+    updateFrameStrokes(timeline, timeline.activeFrameId, vectorStrokes);
+    const frame = addFrame(timeline, { duplicate: true });
+    loadTimelineFrame(frame.id, false);
+  };
+  document.getElementById('frameDelete').onclick = () => {
+    const current = timeline.activeFrameId;
+    updateFrameStrokes(timeline, current, vectorStrokes);
+    if (deleteFrame(timeline, current)) loadTimelineFrame(timeline.activeFrameId, false);
+  };
+  document.getElementById('onionToggle').onclick = event => {
+    onionEnabled = !onionEnabled;
+    event.currentTarget.classList.toggle('active', onionEnabled);
+    event.currentTarget.textContent = onionEnabled ? '어니언 ON' : '어니언 OFF';
+    render();
+  };
 
   document.getElementById('lineColor').oninput = event => applySelectedStyle({ color: event.target.value });
   document.getElementById('lineWidth').oninput = event => {
