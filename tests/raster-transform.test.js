@@ -107,3 +107,35 @@ test('clones transform records deeply and skips invalid entries', () => {
   assert.equal(source.clipPolygon[0].x, 1);
   assert.equal(source.matrix[0], 1);
 });
+
+test('composes a transform by clearing its source polygon and drawing its snapshot with a matrix', async () => {
+  const { composeRasterTransformStack } = await import('../apps/web/src/selection/raster-transform.js');
+  const calls = [];
+  const context = {
+    save() { calls.push(['save']); },
+    restore() { calls.push(['restore']); },
+    setTransform(...matrix) { calls.push(['setTransform', ...matrix]); },
+    clearRect(...rect) { calls.push(['clearRect', ...rect]); },
+    drawImage(image, ...args) { calls.push(['drawImage', image.name, ...args]); },
+    beginPath() { calls.push(['beginPath']); },
+    moveTo(...point) { calls.push(['moveTo', ...point]); },
+    lineTo(...point) { calls.push(['lineTo', ...point]); },
+    closePath() { calls.push(['closePath']); },
+    clip() { calls.push(['clip']); },
+  };
+  const output = { width: 32, height: 24, getContext: () => context };
+  const base = { width: 32, height: 24, name: 'base' };
+  const source = { width: 32, height: 24, name: 'source' };
+  const record = createRasterTransformRecord({
+    id: 'transform-1',
+    sourceDataUrl: 'data:image/png;base64,AA==',
+    clipPolygon: [{ x: 2, y: 3 }, { x: 12, y: 3 }, { x: 12, y: 13 }],
+    matrix: [1, 0, 0, 1, 5, 7],
+  });
+  record.sourceCanvas = source;
+  assert.equal(composeRasterTransformStack(base, [record], output), output);
+  assert.ok(calls.some(call => call[0] === 'drawImage' && call[1] === 'base'));
+  assert.ok(calls.some(call => call[0] === 'clearRect' && call[1] === 0 && call[2] === 0 && call[3] === 32 && call[4] === 24));
+  assert.ok(calls.some(call => call[0] === 'setTransform' && call[1] === 1 && call[4] === 5 && call[5] === 7));
+  assert.ok(calls.some(call => call[0] === 'drawImage' && call[1] === 'source'));
+});
