@@ -7,7 +7,7 @@ import { expandRegionMask, findConnectedRegion } from './fill/flood-fill.js';
 import { animateLineStrokes, lineBoilPhase } from './line/line-boil.js';
 import { activeFrame, addFrame, createTimeline, deleteFrame, frameAtTime, getOnionSkin, selectFrame, updateFrameCels, updateFrameStrokes, updateFrameTransformCels } from './animation/timeline.js';
 import { normalizeRasterCels, normalizeRasterTransformCels } from './animation/frame-cels.js';
-import { cloneRasterTransformRecords, composeRasterTransformStack } from './selection/raster-transform.js';
+import { cloneRasterTransformRecords, composeRasterTransformStack, createTranslationMatrix, createRotationMatrix, rasterizeRasterTransformStack } from './selection/raster-transform.js';
 import { containsSelectionPoint, hitTestSelectionHandle, moveSelectionRect, normalizeSelectionRect, lineStrokeIntersectsPolygon, pointInPolygon, resizeSelectionRectFromHandle, resolveSelectionTargets, transformLineStrokes, transformPolygon, translatePolygon, getSelectionPreviewTransform, getPolygonBounds, getPolygonCentroid, hitTestPolygonTransformHandle, resizePolygonFromHandle } from './selection/selection.js';
 import {
   createLineStroke,
@@ -51,6 +51,7 @@ let movingStroke = false;
 let moveSnapshot = null;
 let moveChanged = false;
 let nextLineId = 1;
+let nextRasterTransformId = 0;
 let boilEnabled = false;
 let boilStartedAt = 0;
 let animationFrame = 0;
@@ -139,6 +140,41 @@ let selectedNodeIndex = null;
 let nodeDragging = false;
 let nodeMoveSnapshot = null;
 let nodeEditEnabled = false;
+
+function rasterizeActiveLayerTransforms() {
+  const layer = layers[active];
+  if (!layer?.transformRecords?.length) return;
+  const before = layer.canvas.toDataURL('image/png');
+  const beforeTransforms = snapshotRuntimeTransformRecords(layer.transformRecords);
+  save(layer);
+  if (!rasterizeRasterTransformStack(layer)) return;
+  groupedTransformUndo = {
+    entries: [{
+      layer,
+      before,
+      after: layer.canvas.toDataURL('image/png'),
+      beforeTransforms,
+      afterTransforms: [],
+    }],
+    vectorBefore: null,
+    vectorAfter: null,
+  };
+  groupedTransformRedo = null;
+  saveActiveFrame();
+  render([active]);
+}
+
+function ensureEditableLayerAfterTransform() {
+  const layer = layers[active];
+  if (!layer?.transformRecords?.length) return false;
+  const next = makeLayer(layer.name + ' · 편집');
+  layers.push(next);
+  active = layers.length - 1;
+  selectedTransformLayers.clear();
+  saveActiveFrame();
+  render(layers.map((_, index) => index));
+  return true;
+}
 
 function currentBrushPreset() { return getBrushPreset(brushPreset); }
 
@@ -279,6 +315,9 @@ async function restoreGroupedTransform(record, direction) {
     const context = entry.layer.canvas.getContext('2d');
     context.clearRect(0, 0, W, H);
     context.drawImage(image, 0, 0);
+    const transformKey = direction === 'undo' ? 'beforeTransforms' : 'afterTransforms';
+    entry.layer.transformRecords = snapshotRuntimeTransformRecords(entry[transformKey] || []);
+    refreshLayerPresentation(entry.layer);
   }
   if (record.vectorBefore && record.vectorAfter) {
     const snapshot = direction === 'undo' ? record.vectorBefore : record.vectorAfter;
@@ -626,6 +665,7 @@ function applyMangaTone() {
     document.getElementById('status').textContent = '마스크 편집 중에는 톤을 적용할 수 없습니다';
     return;
   }
+  ensureEditableLayerAfterTransform();
   const layer = layers[active];
   const selection = selectionOutlinePolygon();
   const settings = {
@@ -730,6 +770,13 @@ function appendLayerRow(list, layer, index, nested) {
 function updateLayerInspector() {
   const layer = layers[active];
   if (!layer) return;
+  const rasterizeButton = document.getElementById('rasterizeTransforms');
+  if (rasterizeButton) {
+    rasterizeButton.disabled = !(layer.transformRecords?.length);
+    rasterizeButton.title = layer.transformRecords?.length
+      ? '비파괴 변형을 픽셀로 확정합니다'
+      : '확정할 비파괴 변형이 없습니다';
+  }
   const group = layerGroups.find(item => item.id === activeGroupId) || groupFor(layer);
   const groupControls = document.getElementById('groupInspector');
   if (groupControls) {
@@ -827,10 +874,17 @@ function selectionOutlinePolygon() {
   ];
 }
 
+function snapshotRuntimeTransformRecords(records = []) {
+  return (records || []).map(record => {
+    const normalized = cloneRasterTransformRecords([record])[0];
+    return normalized ? { ...normalized, sourceCanvas: record.sourceCanvas || null } : null;
+  }).filter(Boolean);
+}
+
 function getSelectionDragSources(drag) {
   if (drag?.sources?.length) return drag.sources;
   if (drag?.sourceCanvas) {
-    return [{ layer: layers[active], sourceCanvas: drag.sourceCanvas, previewCanvas: drag.previewCanvas, before: null }];
+    return [{ layer: layers[active], sourceCanvas: drag.sourceCanvas, previewCanvas: drag.previewCanvas, before: null, beforeTransforms: [] }];
   }
   return [];
 }
@@ -847,24 +901,54 @@ function capturePolygonLayerSources(polygon) {
     polygon.forEach((point, index) => index ? context.lineTo(point.x, point.y) : context.moveTo(point.x, point.y));
     context.closePath();
     context.clip();
-    context.drawImage(layer.canvas, 0, 0);
+    context.drawImage(layer.presentationCanvas || layer.canvas, 0, 0);
     context.restore();
-    return { layer, sourceCanvas, before: layer.canvas.toDataURL('image/png'), previewCanvas: null };
+    return {
+      layer, sourceCanvas,
+      before: layer.canvas.toDataURL('image/png'),
+      beforeTransforms: snapshotRuntimeTransformRecords(layer.transformRecords),
+      previewCanvas: null,
+    };
   });
 }
 
 function captureRectLayerSources(rect) {
-  const targets = resolveSelectionTargets(layers, selectedTransformLayers, layers[active]);
-  return targets.map(layer => {
-    const sourceCanvas = document.createElement('canvas');
-    sourceCanvas.width = Math.max(1, Math.ceil(rect.width));
-    sourceCanvas.height = Math.max(1, Math.ceil(rect.height));
-    sourceCanvas.getContext('2d').drawImage(
-      layer.canvas, rect.x, rect.y, rect.width, rect.height,
-      0, 0, sourceCanvas.width, sourceCanvas.height,
-    );
-    return { layer, sourceCanvas, before: layer.canvas.toDataURL('image/png'), previewCanvas: null };
-  });
+  return capturePolygonLayerSources([
+    { x: rect.x, y: rect.y },
+    { x: rect.x + rect.width, y: rect.y },
+    { x: rect.x + rect.width, y: rect.y + rect.height },
+    { x: rect.x, y: rect.y + rect.height },
+  ]);
+}
+
+function getSelectionDragTransform(drag) {
+  if (!drag) return null;
+  if (drag.originalPolygon?.length >= 3) {
+    const original = drag.originalPolygon;
+    if (drag.mode === 'lassoMove' && selectionPolygon?.length) {
+      return { clipPolygon: original, matrix: createTranslationMatrix(selectionPolygon[0].x - original[0].x, selectionPolygon[0].y - original[0].y) };
+    }
+    if (drag.mode === 'lassoResize' && selectionPolygon?.length) {
+      const from = getPolygonBounds(original), to = getPolygonBounds(selectionPolygon);
+      if (!from || !to || from.width <= 0 || from.height <= 0) return null;
+      const sx = to.width / from.width, sy = to.height / from.height;
+      return { clipPolygon: original, matrix: [sx, 0, 0, sy, to.x - from.x * sx, to.y - from.y * sy] };
+    }
+    if (drag.mode === 'lassoRotate') return { clipPolygon: original, matrix: createRotationMatrix(drag.rotation || 0, getPolygonCentroid(original)) };
+  }
+  if (drag.originalRect) {
+    const original = drag.originalRect;
+    const clipPolygon = [
+      { x: original.x, y: original.y }, { x: original.x + original.width, y: original.y },
+      { x: original.x + original.width, y: original.y + original.height }, { x: original.x, y: original.y + original.height },
+    ];
+    if (drag.mode === 'rotate') return { clipPolygon, matrix: createRotationMatrix(drag.rotation || 0, { x: original.x + original.width / 2, y: original.y + original.height / 2 }) };
+    if ((drag.mode === 'move' || drag.mode === 'resize') && selectionRect && original.width > 0 && original.height > 0) {
+      const sx = selectionRect.width / original.width, sy = selectionRect.height / original.height;
+      return { clipPolygon, matrix: [sx, 0, 0, sy, selectionRect.x - original.x * sx, selectionRect.y - original.y * sy] };
+    }
+  }
+  return null;
 }
 
 function clearSelectionDragPreviews(drag) {
@@ -876,94 +960,46 @@ function recordSelectionDragCommit(sources) {
     layer: source.layer,
     before: source.before,
     after: source.layer.canvas.toDataURL('image/png'),
+    beforeTransforms: snapshotRuntimeTransformRecords(source.beforeTransforms),
+    afterTransforms: snapshotRuntimeTransformRecords(source.layer.transformRecords),
   }));
-  groupedTransformUndo = entries.length > 1
-    ? { entries, vectorBefore: null, vectorAfter: null }
-    : null;
+  groupedTransformUndo = entries.length ? { entries, vectorBefore: null, vectorAfter: null } : null;
   groupedTransformRedo = null;
   saveActiveFrame();
 }
 
-function commitSelectionDragSources(drag, applyTransform) {
+function commitSelectionDragSources(drag, getTransform) {
   const sources = getSelectionDragSources(drag);
-  if (!sources.length) return;
+  const transform = getTransform?.();
+  if (!sources.length || !transform?.matrix || !transform.clipPolygon?.length) return;
   for (const source of sources) {
     save(source.layer);
-    applyTransform(source);
+    source.layer.transformRecords = [...(source.layer.transformRecords || []), {
+      id: 'raster-transform-' + (++nextRasterTransformId),
+      sourceDataUrl: source.sourceCanvas.toDataURL('image/png'),
+      clipPolygon: transform.clipPolygon.map(point => ({ x: point.x, y: point.y })),
+      matrix: [...transform.matrix],
+      sourceCanvas: source.sourceCanvas,
+    }];
+    refreshLayerPresentation(source.layer);
   }
   recordSelectionDragCommit(sources);
   render(sources.map(source => layers.indexOf(source.layer)).filter(index => index >= 0));
 }
 
 function updateSelectionDragPreview(drag) {
-  const isLassoTransform = drag?.originalPolygon?.length >= 3
-    && ['lassoMove', 'lassoResize', 'lassoRotate'].includes(drag.mode);
-  const isRectTransform = drag?.originalRect && ['move', 'resize', 'rotate'].includes(drag.mode);
   const sources = getSelectionDragSources(drag);
-  if (!sources.length || (!isLassoTransform && !isRectTransform)) return;
-
+  const transform = getSelectionDragTransform(drag);
+  if (!sources.length || !transform?.matrix) return;
   for (const source of sources) {
     const previewCanvas = source.previewCanvas || document.createElement('canvas');
-    if (previewCanvas.width !== W) previewCanvas.width = W;
-    if (previewCanvas.height !== H) previewCanvas.height = H;
-    const context = previewCanvas.getContext('2d');
-    context.clearRect(0, 0, W, H);
-    context.drawImage(source.layer.canvas, 0, 0);
-
-    if (isLassoTransform) {
-      const originalPolygon = drag.originalPolygon;
-      context.save();
-      context.beginPath();
-      originalPolygon.forEach((point, index) => index ? context.lineTo(point.x, point.y) : context.moveTo(point.x, point.y));
-      context.closePath();
-      context.clip();
-      context.clearRect(0, 0, W, H);
-      context.restore();
-
-      if (drag.mode === 'lassoMove') {
-        const dx = selectionPolygon[0].x - originalPolygon[0].x;
-        const dy = selectionPolygon[0].y - originalPolygon[0].y;
-        context.drawImage(source.sourceCanvas, dx, dy);
-      } else if (drag.mode === 'lassoResize') {
-        const originalBounds = getPolygonBounds(originalPolygon);
-        const targetBounds = getPolygonBounds(selectionPolygon);
-        if (originalBounds && targetBounds && originalBounds.width > 0 && originalBounds.height > 0) {
-          const scaleX = targetBounds.width / originalBounds.width;
-          const scaleY = targetBounds.height / originalBounds.height;
-          context.save();
-          context.translate(targetBounds.x - originalBounds.x * scaleX, targetBounds.y - originalBounds.y * scaleY);
-          context.scale(scaleX, scaleY);
-          context.drawImage(source.sourceCanvas, 0, 0);
-          context.restore();
-        }
-      } else if (drag.mode === 'lassoRotate') {
-        const center = getPolygonCentroid(originalPolygon);
-        context.save();
-        context.translate(center.x, center.y);
-        context.rotate((drag.rotation || 0) * Math.PI / 180);
-        context.translate(-center.x, -center.y);
-        context.drawImage(source.sourceCanvas, 0, 0);
-        context.restore();
-      }
-    } else {
-      const original = drag.originalRect;
-      const transform = getSelectionPreviewTransform(original, selectionRect, drag.rotation || 0);
-      context.clearRect(original.x, original.y, original.width, original.height);
-      if (drag.mode === 'rotate') {
-        context.save();
-        context.translate(transform.center.x, transform.center.y);
-        context.rotate(transform.rotationRadians);
-        context.drawImage(source.sourceCanvas, -original.width / 2, -original.height / 2, original.width, original.height);
-        context.restore();
-      } else if (selectionRect) {
-        context.save();
-        context.translate(selectionRect.x, selectionRect.y);
-        context.scale(transform.scaleX, transform.scaleY);
-        context.drawImage(source.sourceCanvas, 0, 0, original.width, original.height);
-        context.restore();
-      }
-    }
-
+    composeRasterTransformStack(source.layer.presentationCanvas || source.layer.canvas, [{
+      id: 'selection-preview',
+      sourceDataUrl: 'data:image/png;base64,AA==',
+      clipPolygon: transform.clipPolygon,
+      matrix: transform.matrix,
+      sourceCanvas: source.sourceCanvas,
+    }], previewCanvas);
     source.previewCanvas = previewCanvas;
     renderer.setLayerPreview(source.layer, previewCanvas);
   }
@@ -989,60 +1025,46 @@ function applySelectionTransform() {
   const transformedVectors = hasSelectedVectors
     ? transformLineStrokes(vectorStrokes, polygon, angle, scale)
     : null;
-  const center = polygon.reduce((sum, point) => ({
-    x: sum.x + point.x / polygon.length,
-    y: sum.y + point.y / polygon.length,
-  }), { x: 0, y: 0 });
+  const center = getPolygonCentroid(polygon);
   const radians = angle * Math.PI / 180;
-
-  // Prepare every layer before mutating any of them so all targets share
-  // exactly the same transform origin and selection boundary.
-  const prepared = targets.map(layer => {
-    const before = layer.canvas.toDataURL('image/png');
-    const source = document.createElement('canvas');
-    source.width = W; source.height = H;
-    const sourceContext = source.getContext('2d');
-    sourceContext.save();
-    sourceContext.beginPath();
-    polygon.forEach((point, index) => index ? sourceContext.lineTo(point.x, point.y) : sourceContext.moveTo(point.x, point.y));
-    sourceContext.closePath();
-    sourceContext.clip();
-    sourceContext.drawImage(layer.canvas, 0, 0);
-    sourceContext.restore();
-
-    const transformed = document.createElement('canvas');
-    transformed.width = W; transformed.height = H;
-    const transformedContext = transformed.getContext('2d');
-    transformedContext.translate(center.x, center.y);
-    transformedContext.rotate(radians);
-    transformedContext.scale(scale, scale);
-    transformedContext.drawImage(source, -center.x, -center.y);
-    return { layer, transformed, before };
-  });
-
-  for (const { layer, transformed } of prepared) {
-    save(layer);
-    const context = layer.canvas.getContext('2d');
+  const cosine = Math.cos(radians) * scale;
+  const sine = Math.sin(radians) * scale;
+  const matrix = [
+    cosine, sine, -sine, cosine,
+    center.x - cosine * center.x + sine * center.y,
+    center.y - sine * center.x - cosine * center.y,
+  ];
+  const sources = targets.map(layer => {
+    const sourceCanvas = document.createElement('canvas');
+    sourceCanvas.width = W;
+    sourceCanvas.height = H;
+    const context = sourceCanvas.getContext('2d');
     context.save();
     context.beginPath();
     polygon.forEach((point, index) => index ? context.lineTo(point.x, point.y) : context.moveTo(point.x, point.y));
     context.closePath();
     context.clip();
-    context.clearRect(0, 0, W, H);
+    context.drawImage(layer.presentationCanvas || layer.canvas, 0, 0);
     context.restore();
-    context.drawImage(transformed, 0, 0);
-  }
+    return {
+      layer,
+      sourceCanvas,
+      before: layer.canvas.toDataURL('image/png'),
+      beforeTransforms: snapshotRuntimeTransformRecords(layer.transformRecords),
+      previewCanvas: null,
+    };
+  });
+
   if (hasSelectedVectors) {
     vectorStrokes.splice(0, vectorStrokes.length, ...transformedVectors);
     selectedStrokeId = null;
   }
   const vectorAfter = hasSelectedVectors ? lineSnapshot() : null;
-  groupedTransformUndo = (targets.length > 1 || hasSelectedVectors) ? {
-    entries: prepared.map(({ layer, before }) => ({ layer, before, after: layer.canvas.toDataURL('image/png') })),
-    vectorBefore: hasSelectedVectors ? vectorBefore : null,
-    vectorAfter,
-  } : null;
-  groupedTransformRedo = null;
+  commitSelectionDragSources({ sources }, () => ({ clipPolygon: polygon, matrix }));
+  if (groupedTransformUndo && hasSelectedVectors) {
+    groupedTransformUndo.vectorBefore = vectorBefore;
+    groupedTransformUndo.vectorAfter = vectorAfter;
+  }
 
   selectionRect = null;
   selectionPolygon = transformedPolygon;
@@ -1190,6 +1212,8 @@ function bindControls() {
     copy.opacity = source.opacity ?? 1;
     copy.blendMode = source.blendMode || 'normal';
     copy.canvas.getContext('2d').drawImage(source.canvas, 0, 0);
+    copy.transformRecords = snapshotRuntimeTransformRecords(source.transformRecords);
+    refreshLayerPresentation(copy);
     if (source.maskCanvas) copy.maskCanvas.getContext('2d').drawImage(source.maskCanvas, 0, 0);
     copy.maskEnabled = source.maskEnabled;
     copy.groupId = source.groupId;
@@ -1199,12 +1223,19 @@ function bindControls() {
     render(layers.map((_, index) => index));
   };
 
+  document.getElementById('rasterizeTransforms').onclick = rasterizeActiveLayerTransforms;
+
   document.getElementById('layerDelete').onclick = () => {
     if (layers.length <= 1) return;
     if (playbackActive) setPlaybackEnabled(false);
     saveActiveFrame();
+    timeline.frames.forEach(frame => {
+      frame.cels = normalizeRasterCels(frame.cels, layers.length);
+      frame.transformCels = normalizeRasterTransformCels(frame.transformCels, layers.length);
+      frame.cels.splice(active, 1);
+      frame.transformCels.splice(active, 1);
+    });
     layers.splice(active, 1);
-    timeline.frames.forEach(frame => frame.cels?.splice(active, 1));
     active = Math.min(active, layers.length - 1);
     saveActiveFrame();
     render(layers.map((_, index) => index));
@@ -1230,6 +1261,25 @@ function bindControls() {
       context.clearRect(0, 0, W, H);
       context.fillStyle = '#fff';
       context.fillRect(0, 0, W, H);
+    } else if (layer.transformRecords?.length) {
+      const before = layer.canvas.toDataURL('image/png');
+      const beforeTransforms = snapshotRuntimeTransformRecords(layer.transformRecords);
+      save(layer);
+      layer.canvas.getContext('2d').clearRect(0, 0, W, H);
+      layer.transformRecords = [];
+      groupedTransformUndo = {
+        entries: [{
+          layer,
+          before,
+          after: layer.canvas.toDataURL('image/png'),
+          beforeTransforms,
+          afterTransforms: [],
+        }],
+        vectorBefore: null,
+        vectorAfter: null,
+      };
+      groupedTransformRedo = null;
+      saveActiveFrame();
     } else {
       save(layer);
       layer.canvas.getContext('2d').clearRect(0, 0, W, H);
@@ -1449,6 +1499,7 @@ function bindCanvasEvents() {
     if (playbackActive) setPlaybackEnabled(false);
     if (boilEnabled) setBoilEnabled(false);
     inputSurface.setPointerCapture(event.pointerId);
+    if (['pen', 'eraser', 'line', 'fill'].includes(tool)) ensureEditableLayerAfterTransform();
     const point = position(event);
 
     if (tool === 'lasso') {
@@ -1707,17 +1758,7 @@ function bindCanvasEvents() {
         const dx = selectionPolygon[0].x - original[0].x;
         const dy = selectionPolygon[0].y - original[0].y;
         if (Math.abs(dx) > 0.5 || Math.abs(dy) > 0.5) {
-          commitSelectionDragSources(drag, source => {
-            const context = source.layer.canvas.getContext('2d');
-            context.save();
-            context.beginPath();
-            original.forEach((p, index) => index ? context.lineTo(p.x, p.y) : context.moveTo(p.x, p.y));
-            context.closePath();
-            context.clip();
-            context.clearRect(0, 0, W, H);
-            context.restore();
-            context.drawImage(source.sourceCanvas, dx, dy);
-          });
+          commitSelectionDragSources(drag, () => getSelectionDragTransform(drag))
         }
       } else if (['lassoResize', 'lassoRotate'].includes(drag.mode) && selectionPolygon?.length) {
         const original = drag.originalPolygon;
@@ -1732,34 +1773,7 @@ function bindCanvasEvents() {
             || Math.abs(originalBounds.height - targetBounds.height) > 0.5
           );
         if (changed) {
-          commitSelectionDragSources(drag, source => {
-            const context = source.layer.canvas.getContext('2d');
-            context.save();
-            context.beginPath();
-            original.forEach((p, index) => index ? context.lineTo(p.x, p.y) : context.moveTo(p.x, p.y));
-            context.closePath();
-            context.clip();
-            context.clearRect(0, 0, W, H);
-            context.restore();
-
-            if (drag.mode === 'lassoResize' && originalBounds && targetBounds && originalBounds.width > 0 && originalBounds.height > 0) {
-              const scaleX = targetBounds.width / originalBounds.width;
-              const scaleY = targetBounds.height / originalBounds.height;
-              context.save();
-              context.translate(targetBounds.x - originalBounds.x * scaleX, targetBounds.y - originalBounds.y * scaleY);
-              context.scale(scaleX, scaleY);
-              context.drawImage(source.sourceCanvas, 0, 0);
-              context.restore();
-            } else if (drag.mode === 'lassoRotate') {
-              const center = getPolygonCentroid(original);
-              context.save();
-              context.translate(center.x, center.y);
-              context.rotate((drag.rotation || 0) * Math.PI / 180);
-              context.translate(-center.x, -center.y);
-              context.drawImage(source.sourceCanvas, 0, 0);
-              context.restore();
-            }
-          });
+          commitSelectionDragSources(drag, () => getSelectionDragTransform(drag))
         }
       }
       clearSelectionDragPreviews(drag);
@@ -1795,17 +1809,7 @@ function bindCanvasEvents() {
       if (drag.mode === 'rotate' && Math.abs(drag.rotation || 0) > 0.1 && drag.sources?.length && drag.originalRect) {
         const original = drag.originalRect;
         const center = { x: original.x + original.width / 2, y: original.y + original.height / 2 };
-        commitSelectionDragSources(drag, source => {
-          const rotated = document.createElement('canvas');
-          rotated.width = W; rotated.height = H;
-          const context = rotated.getContext('2d');
-          context.translate(center.x, center.y);
-          context.rotate((drag.rotation || 0) * Math.PI / 180);
-          context.drawImage(source.sourceCanvas, -original.width / 2, -original.height / 2, original.width, original.height);
-          const target = source.layer.canvas.getContext('2d');
-          target.clearRect(original.x, original.y, original.width, original.height);
-          target.drawImage(rotated, 0, 0);
-        });
+        commitSelectionDragSources(drag, () => getSelectionDragTransform(drag))
         const polygon = [
           { x: original.x, y: original.y },
           { x: original.x + original.width, y: original.y },
@@ -1824,11 +1828,7 @@ function bindCanvasEvents() {
           || Math.abs(target.width - original.width) > 0.5
           || Math.abs(target.height - original.height) > 0.5
         )) {
-          commitSelectionDragSources(drag, source => {
-            const context = source.layer.canvas.getContext('2d');
-            context.clearRect(original.x, original.y, original.width, original.height);
-            context.drawImage(source.sourceCanvas, target.x, target.y, target.width, target.height);
-          });
+          commitSelectionDragSources(drag, () => getSelectionDragTransform(drag))
         }
       }
       if (drag.mode === 'new' && (!selectionRect || selectionRect.width < 2 || selectionRect.height < 2)) selectionRect = null;
