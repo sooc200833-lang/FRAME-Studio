@@ -1757,6 +1757,24 @@ function bindCanvasEvents() {
         return;
       }
       const point = position(event);
+      if (drag.mode === 'lassoMove') {
+        selectionPolygon = translatePolygon(
+          drag.originalPolygon,
+          point.x - drag.start.x,
+          point.y - drag.start.y,
+          { width: W, height: H },
+        );
+      } else if (drag.mode === 'lassoResize') {
+        selectionPolygon = resizePolygonFromHandle(
+          drag.originalPolygon, drag.handle, point, { width: W, height: H },
+        );
+      } else if (drag.mode === 'lassoRotate') {
+        const center = getPolygonCentroid(drag.originalPolygon);
+        const currentAngle = Math.atan2(point.y - center.y, point.x - center.x);
+        drag.rotation = (currentAngle - drag.startAngle) * 180 / Math.PI;
+        selectionPolygon = transformPolygon(drag.originalPolygon, drag.rotation, 1);
+      }
+      if (drag.mode !== 'lassoNew') updateSelectionDragPreview(drag);
       if (drag.mode === 'lassoNew') {
         const lastPoint = selectionPolygon?.at(-1);
         if (lastPoint && Math.hypot(point.x - lastPoint.x, point.y - lastPoint.y) > 0.1) {
