@@ -11,6 +11,8 @@ import {
   hitTestLineStrokes,
   translateLineStroke,
   updateLineStrokeStyle,
+  smoothLineStroke,
+  simplifyLineStroke,
 } from './line/line-engine.js';
 
 const W = 1200;
@@ -1106,6 +1108,25 @@ function bindControls() {
     document.getElementById('lineWidthOut').value = event.target.value + 'px';
     applySelectedStyle({ width: Number(event.target.value) });
   };
+  document.getElementById('smoothLine').onclick = () => {
+    const stroke = selectedStroke();
+    if (!stroke || stroke.points.length < 3) return;
+    commitLineHistory(lineSnapshot());
+    const index = vectorStrokes.findIndex(item => item.id === selectedStrokeId);
+    vectorStrokes[index] = smoothLineStroke(stroke, 1);
+    saveActiveFrame();
+    render();
+  };
+  document.getElementById('simplifyLine').onclick = () => {
+    const stroke = selectedStroke();
+    if (!stroke || stroke.points.length < 3) return;
+    commitLineHistory(lineSnapshot());
+    const index = vectorStrokes.findIndex(item => item.id === selectedStrokeId);
+    vectorStrokes[index] = simplifyLineStroke(stroke, 1.5);
+    saveActiveFrame();
+    render();
+  };
+
   document.getElementById('deleteLine').onclick = () => {
     if (!selectedStroke()) return;
     commitLineHistory(lineSnapshot());
