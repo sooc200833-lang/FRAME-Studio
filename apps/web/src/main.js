@@ -1524,10 +1524,7 @@ function bindCanvasEvents() {
         const center = getPolygonCentroid(selectionDrag.originalPolygon);
         const currentAngle = Math.atan2(point.y - center.y, point.x - center.x);
         selectionDrag.rotation = (currentAngle - selectionDrag.startAngle) * 180 / Math.PI;
-        selectionPolygon = translatePolygon(
-          transformPolygon(selectionDrag.originalPolygon, selectionDrag.rotation, 1),
-          0, 0, { width: W, height: H },
-        );
+        selectionPolygon = transformPolygon(selectionDrag.originalPolygon, selectionDrag.rotation, 1);
         updateSelectionDragPreview(selectionDrag);
       }
       render();
