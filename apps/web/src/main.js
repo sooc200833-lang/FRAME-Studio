@@ -1,6 +1,6 @@
 import './styles.css';
 import { PixiStageRenderer } from './renderer.js';
-import { coalescedPointerEvents, createBrushOutline, normalizePointerPressure, stabilizePoint } from './brush/brush-engine.js';
+import { coalescedPointerEvents, createBrushOutline, getBrushPreset, normalizePointerPressure, stabilizePoint } from './brush/brush-engine.js';
 import { expandRegionMask, findConnectedRegion } from './fill/flood-fill.js';
 import { animateLineStrokes, lineBoilPhase } from './line/line-boil.js';
 import { activeFrame, addFrame, createTimeline, deleteFrame, frameAtTime, getOnionSkin, selectFrame, updateFrameCels, updateFrameStrokes } from './animation/timeline.js';
@@ -21,6 +21,7 @@ let inputSurface;
 let tool = 'pen';
 let color = '#24242a';
 let size = 7;
+let brushPreset = 'ink';
 let down = false;
 let last = null;
 let strokeSamples = [];
@@ -61,6 +62,8 @@ function makeLayer(name) {
 const layers = [makeLayer('면 / 톤'), makeLayer('선화')];
 let active = 0;
 let selectedStrokeId = null;
+
+function currentBrushPreset() { return getBrushPreset(brushPreset); }
 
 function selectedStroke() {
   return vectorStrokes.find(stroke => stroke.id === selectedStrokeId) || null;
@@ -541,6 +544,7 @@ function bindControls() {
     });
   };
 
+  document.getElementById('brushPreset').onchange = event => { brushPreset = event.target.value; };
   document.getElementById('size').oninput = event => {
     size = Number(event.target.value);
     document.getElementById('sizeOut').value = size + 'px';
@@ -676,10 +680,10 @@ function bindCanvasEvents() {
     if (tool === 'pen' || tool === 'eraser') {
       const outline = createBrushOutline(strokeSamples, {
         size, stylus: strokeIsStylus, pressureEnabled,
-        smoothing: 0.58, streamline: brushSmoothing,
+        preset: brushPreset,
         complete: false,
       });
-      renderer.previewPolygon(outline, tool === 'eraser' ? 0xf4f0e8 : Number.parseInt(color.slice(1), 16), 0.9);
+      renderer.previewPolygon(outline, tool === 'eraser' ? 0xf4f0e8 : Number.parseInt(color.slice(1), 16), tool === 'eraser' ? 0.9 : currentBrushPreset().opacity);
     }
   });
 
@@ -785,13 +789,14 @@ function bindCanvasEvents() {
       }
       const outline = createBrushOutline(strokeSamples, {
         size, stylus: strokeIsStylus, pressureEnabled,
-        smoothing: 0.58, streamline: brushSmoothing,
+        preset: brushPreset,
         complete: true,
       });
       if (outline.length >= 3) {
         const context = layers[active].canvas.getContext('2d');
         context.save();
         context.globalCompositeOperation = tool === 'eraser' ? 'destination-out' : 'source-over';
+        context.globalAlpha = tool === 'eraser' ? 1 : currentBrushPreset().opacity;
         context.fillStyle = color;
         context.beginPath();
         context.moveTo(outline[0][0], outline[0][1]);
