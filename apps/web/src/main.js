@@ -3,7 +3,7 @@ import { PixiStageRenderer } from './renderer.js';
 import { applyBrushTexture, coalescedPointerEvents, createBrushOutline, getBrushPreset, normalizePointerPressure, stabilizePoint } from './brush/brush-engine.js';
 import { expandRegionMask, findConnectedRegion } from './fill/flood-fill.js';
 import { animateLineStrokes, lineBoilPhase } from './line/line-boil.js';
-import { activeFrame, addFrame, createTimeline, deleteFrame, frameAtTime, getOnionSkin, selectFrame, updateFrameCels, updateFrameStrokes } from './animation/timeline.js';
+import { activeFrame, addFrame, createTimeline, deleteFrame, frameAtTime, getOnionSkin, selectFrame, setFrameDuration, updateFrameCels, updateFrameStrokes } from './animation/timeline.js';
 import { normalizeRasterCels } from './animation/frame-cels.js';
 import { containsSelectionPoint, moveSelectionRect, normalizeSelectionRect, lineStrokeIntersectsPolygon, pointInPolygon, resizeSelectionRect, resolveSelectionTargets, transformLineStrokes, transformPolygon, translatePolygon } from './selection/selection.js';
 import {
@@ -418,6 +418,11 @@ function drawTimeline() {
     button.onclick = () => loadTimelineFrame(frame.id);
     strip.append(button);
   });
+  const active = activeFrame(timeline);
+  const durationInput = document.getElementById('frameDuration');
+  const durationOutput = document.getElementById('frameDurationOut');
+  if (active && durationInput) durationInput.value = String(Math.round(active.durationMs));
+  if (active && durationOutput) durationOutput.value = `${Math.round(active.durationMs)} ms · ${(1000 / active.durationMs).toFixed(1)} FPS`;
   const label = document.getElementById('frameCounter');
   if (label) label.textContent = `${timeline.frames.findIndex(frame => frame.id === timeline.activeFrameId) + 1} / ${timeline.frames.length}`;
 }
@@ -1074,6 +1079,12 @@ function bindControls() {
 
   document.getElementById('playToggle').onclick = () => setPlaybackEnabled(!playbackActive);
   document.getElementById('fps').oninput = event => updateTimelineFPS(event.target.value);
+  document.getElementById('frameDuration').oninput = event => {
+    if (playbackActive) setPlaybackEnabled(false);
+    const frame = activeFrame(timeline);
+    if (frame) setFrameDuration(timeline, frame.id, event.target.value);
+    drawTimeline();
+  };
   updateTimelineFPS(document.getElementById('fps').value);
 
   document.getElementById('frameAdd').onclick = () => {
