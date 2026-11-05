@@ -1,4 +1,4 @@
-import { cloneRasterCels } from './frame-cels.js';
+import { cloneRasterCels, cloneRasterTransformCels } from './frame-cels.js';
 
 function cloneStrokes(strokes = []) {
   return strokes.map(stroke => ({
@@ -7,8 +7,14 @@ function cloneStrokes(strokes = []) {
   }));
 }
 
-function makeFrame(id, strokes = [], durationMs = 1000 / 12, cels = []) {
-  return { id, durationMs: Math.max(1, Number(durationMs) || 1000 / 12), strokes: cloneStrokes(strokes), cels: cloneRasterCels(cels) };
+function makeFrame(id, strokes = [], durationMs = 1000 / 12, cels = [], transformCels = []) {
+  return {
+    id,
+    durationMs: Math.max(1, Number(durationMs) || 1000 / 12),
+    strokes: cloneStrokes(strokes),
+    cels: cloneRasterCels(cels),
+    transformCels: cloneRasterTransformCels(transformCels),
+  };
 }
 
 export function createTimeline({ fps = 12, frames = [] } = {}) {
@@ -18,6 +24,7 @@ export function createTimeline({ fps = 12, frames = [] } = {}) {
     frame.strokes,
     frame.durationMs || 1000 / safeFps,
     frame.cels,
+    frame.transformCels,
   ));
   const initialFrames = normalized.length ? normalized : [makeFrame('frame-1')];
   return {
@@ -46,6 +53,13 @@ export function updateFrameCels(timeline, frameId, cels) {
   return true;
 }
 
+export function updateFrameTransformCels(timeline, frameId, transformCels) {
+  const frame = timeline.frames.find(item => item.id === frameId);
+  if (!frame) return false;
+  frame.transformCels = cloneRasterTransformCels(transformCels);
+  return true;
+}
+
 export function selectFrame(timeline, frameId) {
   if (!timeline.frames.some(frame => frame.id === frameId)) return false;
   timeline.activeFrameId = frameId;
@@ -59,6 +73,7 @@ export function addFrame(timeline, { duplicate = false } = {}) {
     duplicate && current ? current.strokes : [],
     current?.durationMs || 1000 / timeline.fps,
     duplicate && current ? current.cels : [],
+    duplicate && current ? current.transformCels : [],
   );
   const index = current ? timeline.frames.indexOf(current) + 1 : timeline.frames.length;
   timeline.frames.splice(index, 0, frame);

@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   activeFrame, addFrame, createTimeline, deleteFrame, frameAtTime,
-  getOnionSkin, selectFrame, updateFrameCels, updateFrameStrokes,
+  getOnionSkin, selectFrame, updateFrameCels, updateFrameStrokes, updateFrameTransformCels,
 } from '../apps/web/src/animation/timeline.js';
 
 const line = { id: 'line-1', color: '#222222', width: 4, points: [{ x: 1, y: 2 }, { x: 3, y: 4 }] };
@@ -79,4 +79,22 @@ test('onion skin exposes read-only frame stroke references without deep cloning 
   const ghosts = getOnionSkin(timeline);
   assert.equal(ghosts[0].strokes, timeline.frames[0].strokes);
   assert.equal(ghosts[0].strokes[0].points, timeline.frames[0].strokes[0].points);
+});
+
+test('transform stacks are stored per frame and duplicated independently', () => {
+  const timeline = createTimeline();
+  const first = activeFrame(timeline);
+  const transform = {
+    id: 'transform-1',
+    sourceDataUrl: 'data:image/png;base64,AA==',
+    clipPolygon: [{ x: 1, y: 2 }, { x: 5, y: 2 }, { x: 5, y: 6 }],
+    matrix: [1, 0, 0, 1, 10, 20],
+  };
+  assert.equal(updateFrameTransformCels(timeline, first.id, [[transform]]), true);
+  const duplicate = addFrame(timeline, { duplicate: true });
+  assert.deepEqual(duplicate.transformCels, [[transform]]);
+  duplicate.transformCels[0][0].clipPolygon[0].x = 999;
+  assert.equal(first.transformCels[0][0].clipPolygon[0].x, 1);
+  const blank = addFrame(timeline);
+  assert.deepEqual(blank.transformCels, []);
 });

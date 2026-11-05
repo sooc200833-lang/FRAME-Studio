@@ -5,8 +5,9 @@ import { clientToCanvasPoint, parseCssTransformMatrix } from './viewport/coordin
 import { applyBrushTexture, coalescedPointerEvents, createBrushOutline, createFrameScheduler, getBrushPreset, normalizePointerPressure, resolveBrushStrokeOptions, stabilizePoint } from './brush/brush-engine.js';
 import { expandRegionMask, findConnectedRegion } from './fill/flood-fill.js';
 import { animateLineStrokes, lineBoilPhase } from './line/line-boil.js';
-import { activeFrame, addFrame, createTimeline, deleteFrame, frameAtTime, getOnionSkin, selectFrame, updateFrameCels, updateFrameStrokes } from './animation/timeline.js';
-import { normalizeRasterCels } from './animation/frame-cels.js';
+import { activeFrame, addFrame, createTimeline, deleteFrame, frameAtTime, getOnionSkin, selectFrame, updateFrameCels, updateFrameStrokes, updateFrameTransformCels } from './animation/timeline.js';
+import { normalizeRasterCels, normalizeRasterTransformCels } from './animation/frame-cels.js';
+import { cloneRasterTransformRecords, composeRasterTransformStack } from './selection/raster-transform.js';
 import { containsSelectionPoint, hitTestSelectionHandle, moveSelectionRect, normalizeSelectionRect, lineStrokeIntersectsPolygon, pointInPolygon, resizeSelectionRectFromHandle, resolveSelectionTargets, transformLineStrokes, transformPolygon, translatePolygon, getSelectionPreviewTransform, getPolygonBounds, getPolygonCentroid, hitTestPolygonTransformHandle, resizePolygonFromHandle } from './selection/selection.js';
 import {
   createLineStroke,
@@ -103,13 +104,20 @@ function makeLayer(name) {
   const canvas = document.createElement('canvas');
   canvas.width = W;
   canvas.height = H;
+  const presentationCanvas = document.createElement('canvas');
+  presentationCanvas.width = W;
+  presentationCanvas.height = H;
   const maskCanvas = document.createElement('canvas');
   maskCanvas.width = W;
   maskCanvas.height = H;
   const maskContext = maskCanvas.getContext('2d');
   maskContext.fillStyle = '#fff';
   maskContext.fillRect(0, 0, W, H);
-  return { name, visible: true, opacity: 1, blendMode: 'normal', canvas, maskCanvas, maskEnabled: false, maskUndo: [], maskRedo: [], undo: [], redo: [] };
+  return {
+    name, visible: true, opacity: 1, blendMode: 'normal',
+    canvas, presentationCanvas, transformRecords: [],
+    maskCanvas, maskEnabled: false, maskUndo: [], maskRedo: [], undo: [], redo: [],
+  };
 }
 
 const layers = [makeLayer('면 / 톤'), makeLayer('선화')];
@@ -342,6 +350,11 @@ function drawVectorStrokes(context, strokes = vectorStrokes) {
   context.restore();
 }
 
+function refreshLayerPresentation(layer) {
+  if (!layer?.canvas || !layer?.presentationCanvas) return;
+  composeRasterTransformStack(layer.canvas, layer.transformRecords || [], layer.presentationCanvas);
+}
+
 function composite() {
   const canvas = document.createElement('canvas');
   canvas.width = W;
@@ -359,12 +372,12 @@ function composite() {
       const masked = document.createElement('canvas');
       masked.width = W; masked.height = H;
       const maskedContext = masked.getContext('2d');
-      maskedContext.drawImage(layer.canvas, 0, 0);
+      maskedContext.drawImage(layer.presentationCanvas || layer.canvas, 0, 0);
       maskedContext.globalCompositeOperation = 'destination-in';
       maskedContext.drawImage(layer.maskCanvas, 0, 0);
       context.drawImage(masked, 0, 0);
     } else {
-      context.drawImage(layer.canvas, 0, 0);
+      context.drawImage(layer.presentationCanvas || layer.canvas, 0, 0);
     }
     context.restore();
   });
@@ -373,6 +386,9 @@ function composite() {
 }
 
 function render(dirtyIndices = [], displayStrokes = vectorStrokes) {
+  for (const index of dirtyIndices) {
+    if (layers[index]) refreshLayerPresentation(layers[index]);
+  }
   applyGroupState();
   if (!loadingFrame) updateFrameStrokes(timeline, timeline.activeFrameId, vectorStrokes);
   renderer.sync(layers, dirtyIndices, displayStrokes, selectedStrokeId, onionEnabled ? getOnionSkin(timeline) : [], selectionRect, selectionPolygon, selectedNodeIndex, nodeEditEnabled);
@@ -386,6 +402,7 @@ function render(dirtyIndices = [], displayStrokes = vectorStrokes) {
 function saveActiveFrame() {
   updateFrameStrokes(timeline, timeline.activeFrameId, vectorStrokes);
   updateFrameCels(timeline, timeline.activeFrameId, layers.map(layer => layer.canvas.toDataURL('image/png')));
+  updateFrameTransformCels(timeline, timeline.activeFrameId, layers.map(layer => cloneRasterTransformRecords(layer.transformRecords || [])));
 }
 
 async function decodeRasterCels(cels) {
@@ -409,12 +426,23 @@ async function loadTimelineFrame(frameId, saveCurrent = true) {
   const token = ++frameLoadToken;
   loadingFrame = true;
   const frame = activeFrame(timeline);
-  const decoded = await decodeRasterCels(normalizeRasterCels(frame?.cels, layers.length));
+  const [decoded, decodedTransformSources] = await Promise.all([
+    decodeRasterCels(normalizeRasterCels(frame?.cels, layers.length)),
+    Promise.all(normalizeRasterTransformCels(frame?.transformCels, layers.length).map(records =>
+      decodeRasterCels(records.map(record => record.sourceDataUrl)),
+    )),
+  ]);
   if (token !== frameLoadToken) return;
   layers.forEach((layer, index) => {
     const context = layer.canvas.getContext('2d');
     context.clearRect(0, 0, W, H);
     if (decoded[index]) context.drawImage(decoded[index], 0, 0, W, H);
+    const records = normalizeRasterTransformCels(frame?.transformCels, layers.length)[index] || [];
+    layer.transformRecords = cloneRasterTransformRecords(records).map((record, recordIndex) => ({
+      ...record,
+      sourceCanvas: decodedTransformSources[index]?.[recordIndex] || null,
+    })).filter(record => record.sourceCanvas);
+    refreshLayerPresentation(layer);
   });
   vectorStrokes.splice(0, vectorStrokes.length, ...(frame?.strokes || []).map(stroke => ({
     ...stroke,
