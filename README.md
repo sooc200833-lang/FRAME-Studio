@@ -8,7 +8,7 @@ FRAME Studio is an original drawing and animation application inspired by the br
 
 ## Current prototype
 
-The web prototype now uses **PixiJS 8.20.1** for GPU-backed stage presentation while keeping editable paint buffers and the flood-fill engine on independent Canvas layers.
+The web prototype now uses **PixiJS 8.20.1** for GPU-backed stage presentation. Editable paint buffers remain independent, and the connected-region fill algorithm lives in a renderer-independent module.
 
 - PixiJS stage renderer adapter: `apps/web/src/renderer.js`
 - Drawing tools and fill engine: `apps/web/src/main.js`
@@ -23,6 +23,8 @@ Requirements: Node.js 20.19+ or 22.12+.
 ```bash
 npm install
 npm run dev
+# Run fill-engine unit tests in a separate terminal
+npm test
 ```
 
 Open the local URL printed by Vite. To create a production build:
@@ -40,7 +42,10 @@ npm run preview
 - [x] Separate line-art and paint layers
 - [x] Visible-layer composite used for flood-fill boundaries
 - [x] Fill tolerance control
-- [ ] Add robust edge expansion and anti-alias cleanup to fill
+- [x] Extract renderer-independent connected-region fill module
+- [x] Add protected edge expansion beneath upper line-art layers
+- [x] Add unit tests for region detection, tolerance, and edge protection
+- [ ] Improve color-distance metrics and anti-alias edge quality with visual fixtures
 - [ ] Add automated browser tests for drawing, fill, undo, and export
 - [ ] Build independent vector line selection and Line Boil
 - [ ] Add comic tone and filter tools
