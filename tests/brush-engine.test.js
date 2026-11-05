@@ -12,6 +12,7 @@ import {
   stabilizePoint,
   resolveBrushStrokeOptions,
   simplifyBrushSamples,
+  createFrameScheduler,
 } from '../apps/web/src/brush/brush-engine.js';
 
 test('mouse and touch use a stable neutral pressure', () => {
@@ -228,4 +229,75 @@ test('brush outlines use the same simplified geometry for every preset', () => {
     assert.ok(reduced.length < samples.length);
     assert.ok(outline.length > 0);
   }
+});
+
+
+test('brush preview scheduler coalesces many pointer updates into one frame', () => {
+  const callbacks = new Map();
+  const cancelled = [];
+  const rendered = [];
+  let nextId = 1;
+  const scheduler = createFrameScheduler(
+    () => rendered.push('render'),
+    {
+      requestFrame(callback) {
+        const id = nextId++;
+        callbacks.set(id, callback);
+        return id;
+      },
+      cancelFrame(id) {
+        cancelled.push(id);
+        callbacks.delete(id);
+      },
+    },
+  );
+
+  scheduler.schedule();
+  scheduler.schedule();
+  scheduler.schedule();
+  assert.equal(callbacks.size, 1);
+  assert.equal(scheduler.pending, true);
+  callbacks.get(1)();
+  assert.deepEqual(rendered, ['render']);
+  assert.equal(scheduler.pending, false);
+
+  scheduler.schedule();
+  callbacks.get(2)();
+  assert.deepEqual(rendered, ['render', 'render']);
+});
+
+test('cancelling a pending brush preview prevents a stale render', () => {
+  const callbacks = new Map();
+  const cancelled = [];
+  let rendered = 0;
+  const scheduler = createFrameScheduler(
+    () => rendered++,
+    {
+      requestFrame(callback) { callbacks.set(7, callback); return 7; },
+      cancelFrame(id) { cancelled.push(id); callbacks.delete(id); },
+    },
+  );
+  scheduler.schedule();
+  scheduler.cancel();
+  assert.deepEqual(cancelled, [7]);
+  assert.equal(scheduler.pending, false);
+  assert.equal(rendered, 0);
+  callbacks.get(7)?.();
+  assert.equal(rendered, 0);
+});
+
+test('disposed brush preview scheduler ignores future updates', () => {
+  let requested = 0;
+  let rendered = 0;
+  const scheduler = createFrameScheduler(
+    () => rendered++,
+    {
+      requestFrame() { requested++; return requested; },
+      cancelFrame() {},
+    },
+  );
+  scheduler.dispose();
+  scheduler.schedule();
+  assert.equal(requested, 0);
+  assert.equal(rendered, 0);
 });
