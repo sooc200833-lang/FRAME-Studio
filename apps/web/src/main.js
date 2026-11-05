@@ -1596,7 +1596,7 @@ function bindCanvasEvents() {
         const context = rotated.getContext('2d');
         context.translate(center.x, center.y);
         context.rotate((drag.rotation || 0) * Math.PI / 180);
-        context.drawImage(drag.sourceCanvas, -drag.sourceCanvas.width / 2, -drag.sourceCanvas.height / 2);
+        context.drawImage(drag.sourceCanvas, -original.width / 2, -original.height / 2, original.width, original.height);
         const target = layer.canvas.getContext('2d');
         target.clearRect(original.x, original.y, original.width, original.height);
         target.drawImage(rotated, 0, 0);
