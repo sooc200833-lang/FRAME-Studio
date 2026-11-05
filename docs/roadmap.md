@@ -25,7 +25,7 @@
 - [x] Add freeform lasso selection with polygon hit testing and active-layer pixel movement.
 - [x] Add active-raster selection rotation and scale transforms.
 - [x] Add multi-layer raster selection transforms with grouped undo/redo.
-- [ ] Add vector selection transforms.
+- [x] Add vector stroke selection transforms with grouped raster/vector undo and redo.
 - [ ] Add per-line texture and pressure profiles.
 - [x] Add deterministic Line Boil deformation using arc-length sampling and each point's local centerline normal.
 - [x] Add live preview controls for amplitude, spatial wave scale, and playback speed.
@@ -79,4 +79,4 @@ The browser drawing engine uses perfect-freehand 1.2.3 to generate pressure-awar
 
 ## Current next action
 
-Next: add vector selection transforms; then implement isolated/nested group support and comic screentones/gradients. Add visual regression fixtures for antialiased fill boundaries before calling fill cleanup production-ready.
+Next: improve vector selection precision and add isolated/nested group support, then comic screentones/gradients. Add visual regression fixtures for antialiased fill boundaries before calling fill cleanup production-ready.
