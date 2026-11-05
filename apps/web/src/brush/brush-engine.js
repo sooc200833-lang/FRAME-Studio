@@ -1,5 +1,20 @@
 import { getStroke } from 'perfect-freehand';
 
+const BRUSH_PRESETS = Object.freeze({
+  pencil: Object.freeze({ label: '연필', sizeMultiplier: 0.78, thinning: 0.42, opacity: 0.76, smoothing: 0.28, streamline: 0.16, pressureCurve: 1.18 }),
+  ink: Object.freeze({ label: '잉크 펜', sizeMultiplier: 1, thinning: 0.72, opacity: 1, smoothing: 0.58, streamline: 0.3, pressureCurve: 0.92 }),
+  marker: Object.freeze({ label: '마커', sizeMultiplier: 1.45, thinning: 0.12, opacity: 0.34, smoothing: 0.48, streamline: 0.24, pressureCurve: 0.82 }),
+  brush: Object.freeze({ label: '브러시', sizeMultiplier: 1.18, thinning: 0.88, opacity: 0.9, smoothing: 0.62, streamline: 0.38, pressureCurve: 1.08 }),
+});
+
+export function getBrushPreset(name = 'ink') {
+  return BRUSH_PRESETS[name] || BRUSH_PRESETS.ink;
+}
+
+export function listBrushPresets() {
+  return Object.entries(BRUSH_PRESETS).map(([id, preset]) => ({ id, ...preset }));
+}
+
 export function clamp01(value) {
   return Math.max(0, Math.min(1, Number(value) || 0));
 }
@@ -57,11 +72,15 @@ export function createBrushOutline(samples, {
   size = 7,
   stylus = false,
   pressureEnabled = true,
-  smoothing = 0.55,
-  streamline = 0.35,
+  preset = 'ink',
+  smoothing,
+  streamline,
+  pressureCurve,
   complete = true,
 } = {}) {
   if (!Array.isArray(samples) || samples.length === 0) return [];
+  const profile = getBrushPreset(preset);
+  const curve = Math.max(0.25, Math.min(3, Number(pressureCurve ?? profile.pressureCurve) || 1));
 
   const points = samples.map(sample => [
     Number(sample.x) || 0,
@@ -74,10 +93,11 @@ export function createBrushOutline(samples, {
   }
 
   return getStroke(points, {
-    size: Math.max(0.5, Number(size) || 1),
-    thinning: stylus && pressureEnabled ? 0.72 : (pressureEnabled ? 0.32 : 0),
-    smoothing: Math.max(0, Math.min(1, Number(smoothing) || 0)),
-    streamline: Math.max(0, Math.min(1, Number(streamline) || 0)),
+    size: Math.max(0.5, (Number(size) || 1) * profile.sizeMultiplier),
+    thinning: pressureEnabled ? profile.thinning : 0,
+    smoothing: Math.max(0, Math.min(1, Number(smoothing ?? profile.smoothing) || 0)),
+    streamline: Math.max(0, Math.min(1, Number(streamline ?? profile.streamline) || 0)),
+    easing: pressure => Math.pow(clamp01(pressure), curve),
     simulatePressure: !(stylus && pressureEnabled),
     last: Boolean(complete),
     start: { cap: true, taper: 0 },
