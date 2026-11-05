@@ -559,6 +559,13 @@ function bindControls() {
     };
   });
 
+  document.getElementById('selectionDeselect').onclick = () => {
+    selectionRect = null;
+    selectionDrag = null;
+    down = false;
+    render();
+  };
+
   document.getElementById('groupAdd').onclick = () => {
     const id = 'group-' + (layerGroups.length + 1);
     layerGroups.push({ id, name: '그룹 ' + (layerGroups.length + 1), visible: true, opacity: 1, blendMode: 'normal' });
@@ -941,7 +948,11 @@ function bindCanvasEvents() {
 
   const end = event => {
     if (tool === 'marquee' && down && selectionDrag) {
+      const point = position(event);
       const drag = selectionDrag;
+      if (drag.mode === 'new') selectionRect = normalizeSelectionRect(drag.start, point);
+      else if (drag.mode === 'move') selectionRect = moveSelectionRect(drag.originalRect, point.x - drag.start.x, point.y - drag.start.y, { width: W, height: H });
+      else if (drag.mode === 'resize') selectionRect = resizeSelectionRect(drag.originalRect, point, { width: W, height: H });
       if (drag.mode === 'move' || drag.mode === 'resize') {
         const source = drag.sourceCanvas;
         const original = drag.originalRect;
@@ -954,6 +965,7 @@ function bindCanvasEvents() {
           context.drawImage(source, target.x, target.y, target.width, target.height);
         }
       }
+      if (drag.mode === 'new' && (!selectionRect || selectionRect.width < 2 || selectionRect.height < 2)) selectionRect = null;
       selectionDrag = null;
       down = false;
       render([active]);
