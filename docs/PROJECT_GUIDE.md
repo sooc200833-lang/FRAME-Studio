@@ -59,7 +59,8 @@ Always distinguish code-level tests from visual browser checks and physical iPad
 
 ### Selection and transforms
 - Rectangular marquee and freeform lasso.
-- Active-layer pixel movement and rectangular resize.
+- Active-layer pixel movement and rectangular resize with eight edge/corner handles and a rotation control.
+- Rectangular marquee rotation converts the boundary to a freeform polygon; lasso-specific resize/rotate handles and live pixel transform previews are not implemented yet.
 - Rotation/scale transform across selected raster layers.
 - Intersecting vector strokes can participate as whole objects.
 - Grouped raster/vector undo and redo for multi-target transforms.
