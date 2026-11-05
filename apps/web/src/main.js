@@ -376,7 +376,6 @@ function render(dirtyIndices = [], displayStrokes = vectorStrokes) {
   applyGroupState();
   if (!loadingFrame) updateFrameStrokes(timeline, timeline.activeFrameId, vectorStrokes);
   renderer.sync(layers, dirtyIndices, displayStrokes, selectedStrokeId, onionEnabled ? getOnionSkin(timeline) : [], selectionRect, selectionPolygon, selectedNodeIndex, nodeEditEnabled);
-  if (selectionDrag?.previewCanvas) renderer.setLayerPreview(layers[active], selectionDrag.previewCanvas);
   document.getElementById('status').textContent = tool.toUpperCase();
   drawLayers();
   updateLayerInspector();
@@ -832,6 +831,7 @@ function updateSelectionDragPreview(drag) {
   }
 
   drag.previewCanvas = previewCanvas;
+  renderer.setLayerPreview(layers[active], previewCanvas);
 }
 
 function applySelectionTransform() {
