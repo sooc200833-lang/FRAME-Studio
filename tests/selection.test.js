@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { containsSelectionPoint, moveSelectionRect, normalizeSelectionRect, lineStrokeIntersectsPolygon, pointInPolygon, resizeSelectionRect, resolveSelectionTargets, transformLineStrokes, transformPolygon, translatePolygon } from '../apps/web/src/selection/selection.js';
+import { containsSelectionPoint, getSelectionRectHandles, hitTestSelectionHandle, moveSelectionRect, normalizeSelectionRect, lineStrokeIntersectsPolygon, pointInPolygon, resizeSelectionRect, resizeSelectionRectFromHandle, resolveSelectionTargets, transformLineStrokes, transformPolygon, translatePolygon, getSelectionPreviewTransform } from '../apps/web/src/selection/selection.js';
 
 test('normalizes a drag rectangle in any direction', () => {
   assert.deepEqual(normalizeSelectionRect({ x: 90, y: 80 }, { x: 10, y: 20 }), { x: 10, y: 20, width: 80, height: 60 });
@@ -34,6 +34,13 @@ test('translates freeform polygon while keeping it inside canvas bounds', () => 
   assert.deepEqual(translatePolygon(polygon, 100, 100, { width: 80, height: 70 }), [
     { x: 50, y: 40 }, { x: 80, y: 40 }, { x: 70, y: 70 },
   ]);
+});
+
+test('preserves lasso polygon shape and clamps movement at the top-left canvas edge', () => {
+  const polygon = [{ x: 12, y: 18 }, { x: 42, y: 18 }, { x: 32, y: 48 }];
+  const moved = translatePolygon(polygon, -100, -100, { width: 100, height: 100 });
+  assert.deepEqual(moved, [{ x: 0, y: 0 }, { x: 30, y: 0 }, { x: 20, y: 30 }]);
+  assert.deepEqual(polygon, [{ x: 12, y: 18 }, { x: 42, y: 18 }, { x: 32, y: 48 }]);
 });
 
 test('rotates a polygon around its centroid', () => {
@@ -78,4 +85,37 @@ test('transforms selected vector strokes and preserves unrelated strokes', () =>
   assert.ok(Math.abs(result[0].points[0].x - 10) < 1e-9);
   assert.ok(Math.abs(result[0].points[0].y - (-6)) < 1e-9);
   assert.deepEqual(result[1], strokes[1]);
+});
+
+test('exposes eight resize handles and a rotation handle with hit testing', () => {
+  const rect = { x: 10, y: 20, width: 80, height: 60 };
+  const handles = getSelectionRectHandles(rect);
+  assert.equal(handles.length, 9);
+  assert.deepEqual(handles.find(handle => handle.id === 'rotate'), { id: 'rotate', x: 50, y: -16 });
+  assert.equal(hitTestSelectionHandle({ x: 10, y: 20 }, rect), 'nw');
+  assert.equal(hitTestSelectionHandle({ x: 50, y: -16 }, rect), 'rotate');
+  assert.equal(hitTestSelectionHandle({ x: 50, y: 50 }, rect), null);
+});
+
+test('resizes from edges and corners while preserving opposite anchors', () => {
+  const rect = { x: 10, y: 20, width: 80, height: 60 };
+  assert.deepEqual(resizeSelectionRectFromHandle(rect, 'nw', { x: 0, y: 5 }, { width: 120, height: 100 }), { x: 0, y: 5, width: 90, height: 75 });
+  assert.deepEqual(resizeSelectionRectFromHandle(rect, 'e', { x: 110, y: 60 }, { width: 120, height: 100 }), { x: 10, y: 20, width: 100, height: 60 });
+  assert.deepEqual(resizeSelectionRectFromHandle(rect, 's', { x: 50, y: 95 }, { width: 120, height: 100 }), { x: 10, y: 20, width: 80, height: 75 });
+});
+
+test('clamps resized handles to canvas and enforces a minimum size', () => {
+  const rect = { x: 10, y: 20, width: 80, height: 60 };
+  assert.deepEqual(resizeSelectionRectFromHandle(rect, 'nw', { x: 500, y: 500 }, { width: 120, height: 100 }), { x: 88, y: 78, width: 2, height: 2 });
+});
+
+test('computes a stable center and independent scale factors for live transform previews', () => {
+  const original = { x: 10, y: 20, width: 80, height: 40 };
+  const target = { x: 5, y: 15, width: 160, height: 20 };
+  const transform = getSelectionPreviewTransform(original, target, 90);
+  assert.deepEqual(transform.center, { x: 50, y: 40 });
+  assert.equal(transform.scaleX, 2);
+  assert.equal(transform.scaleY, 0.5);
+  assert.ok(Math.abs(transform.rotationRadians - Math.PI / 2) < 1e-9);
+  assert.equal(getSelectionPreviewTransform(null), null);
 });

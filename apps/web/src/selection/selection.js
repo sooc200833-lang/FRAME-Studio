@@ -126,3 +126,48 @@ export function transformLineStrokes(strokes, polygon, angleDegrees = 0, scale =
     }),
   }) : ({ ...stroke, points: stroke.points.map(point => ({ ...point })) }));
 }
+
+export function getSelectionRectHandles(rect, rotationOffset = 36) {
+  if (!rect || rect.width < 1 || rect.height < 1) return [];
+  const { x, y, width, height } = rect;
+  const cx = x + width / 2;
+  return [
+    { id: 'nw', x, y }, { id: 'n', x: cx, y },
+    { id: 'ne', x: x + width, y }, { id: 'e', x: x + width, y: y + height / 2 },
+    { id: 'se', x: x + width, y: y + height }, { id: 's', x: cx, y: y + height },
+    { id: 'sw', x, y: y + height }, { id: 'w', x, y: y + height / 2 },
+    { id: 'rotate', x: cx, y: y - rotationOffset },
+  ];
+}
+
+export function hitTestSelectionHandle(point, rect, radius = 20) {
+  for (const handle of getSelectionRectHandles(rect)) {
+    if (Math.hypot(point.x - handle.x, point.y - handle.y) <= radius) return handle.id;
+  }
+  return null;
+}
+
+export function resizeSelectionRectFromHandle(rect, handle, point, bounds, minSize = 2) {
+  if (!rect || !['nw', 'n', 'ne', 'e', 'se', 's', 'sw', 'w'].includes(handle)) return rect;
+  let left = rect.x, top = rect.y;
+  let right = rect.x + rect.width, bottom = rect.y + rect.height;
+  if (handle.includes('w')) left = Math.max(0, Math.min(right - minSize, point.x));
+  if (handle.includes('e')) right = Math.min(bounds.width, Math.max(left + minSize, point.x));
+  if (handle.includes('n')) top = Math.max(0, Math.min(bottom - minSize, point.y));
+  if (handle.includes('s')) bottom = Math.min(bounds.height, Math.max(top + minSize, point.y));
+  return { x: left, y: top, width: right - left, height: bottom - top };
+}
+
+export function getSelectionPreviewTransform(originalRect, targetRect = null, rotationDegrees = 0) {
+  if (!originalRect || originalRect.width <= 0 || originalRect.height <= 0) return null;
+  const target = targetRect || originalRect;
+  return {
+    center: {
+      x: originalRect.x + originalRect.width / 2,
+      y: originalRect.y + originalRect.height / 2,
+    },
+    scaleX: target.width / originalRect.width,
+    scaleY: target.height / originalRect.height,
+    rotationRadians: rotationDegrees * Math.PI / 180,
+  };
+}

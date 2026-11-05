@@ -7,7 +7,7 @@ import { expandRegionMask, findConnectedRegion } from './fill/flood-fill.js';
 import { animateLineStrokes, lineBoilPhase } from './line/line-boil.js';
 import { activeFrame, addFrame, createTimeline, deleteFrame, frameAtTime, getOnionSkin, selectFrame, updateFrameCels, updateFrameStrokes } from './animation/timeline.js';
 import { normalizeRasterCels } from './animation/frame-cels.js';
-import { containsSelectionPoint, moveSelectionRect, normalizeSelectionRect, lineStrokeIntersectsPolygon, pointInPolygon, resizeSelectionRect, resolveSelectionTargets, transformLineStrokes, transformPolygon, translatePolygon } from './selection/selection.js';
+import { containsSelectionPoint, hitTestSelectionHandle, moveSelectionRect, normalizeSelectionRect, lineStrokeIntersectsPolygon, pointInPolygon, resizeSelectionRectFromHandle, resolveSelectionTargets, transformLineStrokes, transformPolygon, translatePolygon, getSelectionPreviewTransform } from './selection/selection.js';
 import {
   createLineStroke,
   hitTestLineStrokes,
@@ -799,6 +799,57 @@ function selectionOutlinePolygon() {
   ];
 }
 
+function updateSelectionDragPreview(drag) {
+  const isLassoMove = drag?.mode === 'lassoMove' && drag.originalPolygon?.length >= 3;
+  const isRectTransform = drag?.originalRect && ['move', 'resize', 'rotate'].includes(drag.mode);
+  if (!drag?.sourceCanvas || (!isLassoMove && !isRectTransform)) {
+    if (drag) drag.previewCanvas = null;
+    return;
+  }
+
+  const previewCanvas = drag.previewCanvas || document.createElement('canvas');
+  if (previewCanvas.width !== W) previewCanvas.width = W;
+  if (previewCanvas.height !== H) previewCanvas.height = H;
+  const context = previewCanvas.getContext('2d');
+  context.clearRect(0, 0, W, H);
+  context.drawImage(layers[active].canvas, 0, 0);
+
+  if (isLassoMove) {
+    const original = drag.originalPolygon;
+    const dx = selectionPolygon[0].x - original[0].x;
+    const dy = selectionPolygon[0].y - original[0].y;
+    context.save();
+    context.beginPath();
+    original.forEach((point, index) => index ? context.lineTo(point.x, point.y) : context.moveTo(point.x, point.y));
+    context.closePath();
+    context.clip();
+    context.clearRect(0, 0, W, H);
+    context.restore();
+    context.drawImage(drag.sourceCanvas, dx, dy);
+  } else {
+    const original = drag.originalRect;
+    const transform = getSelectionPreviewTransform(original, selectionRect, drag.rotation || 0);
+    context.clearRect(original.x, original.y, original.width, original.height);
+
+    if (drag.mode === 'rotate') {
+      context.save();
+      context.translate(transform.center.x, transform.center.y);
+      context.rotate(transform.rotationRadians);
+      context.drawImage(drag.sourceCanvas, -original.width / 2, -original.height / 2, original.width, original.height);
+      context.restore();
+    } else if (selectionRect) {
+      context.save();
+      context.translate(selectionRect.x, selectionRect.y);
+      context.scale(transform.scaleX, transform.scaleY);
+      context.drawImage(drag.sourceCanvas, 0, 0, original.width, original.height);
+      context.restore();
+    }
+  }
+
+  drag.previewCanvas = previewCanvas;
+  renderer.setLayerPreview(layers[active], previewCanvas);
+}
+
 function applySelectionTransform() {
   const polygon = selectionOutlinePolygon();
   if (!polygon) return;
@@ -926,6 +977,7 @@ function bindControls() {
   });
 
   document.getElementById('selectionDeselect').onclick = () => {
+    if (selectionDrag?.previewCanvas) renderer.clearLayerPreview(layers[active]);
     selectionRect = null;
     selectionPolygon = null;
     selectionDrag = null;
@@ -1303,9 +1355,12 @@ function bindCanvasEvents() {
       down = true;
       const existing = selectionRect;
       let mode = 'new';
-      if (existing && containsSelectionPoint(existing, point)) {
-        const handle = Math.hypot(point.x - (existing.x + existing.width), point.y - (existing.y + existing.height)) <= 14;
-        mode = handle ? 'resize' : 'move';
+      let handle = null;
+      if (existing) {
+        handle = hitTestSelectionHandle(point, existing);
+        if (handle === 'rotate') mode = 'rotate';
+        else if (handle) mode = 'resize';
+        else if (containsSelectionPoint(existing, point)) mode = 'move';
       }
       const sourceCanvas = document.createElement('canvas');
       if (mode !== 'new' && existing) {
@@ -1313,7 +1368,7 @@ function bindCanvasEvents() {
         sourceCanvas.height = Math.max(1, Math.ceil(existing.height));
         sourceCanvas.getContext('2d').drawImage(layers[active].canvas, existing.x, existing.y, existing.width, existing.height, 0, 0, sourceCanvas.width, sourceCanvas.height);
       }
-      selectionDrag = { mode, start: point, originalRect: existing ? { ...existing } : null, sourceCanvas };
+      selectionDrag = { mode, handle, start: point, originalRect: existing ? { ...existing } : null, sourceCanvas, startAngle: existing ? Math.atan2(point.y - (existing.y + existing.height / 2), point.x - (existing.x + existing.width / 2)) : 0 };
       if (mode === 'new') {
         selectionPolygon = null;
         selectionRect = normalizeSelectionRect(point, point);
@@ -1425,6 +1480,7 @@ function bindCanvasEvents() {
           point.y - selectionDrag.start.y,
           { width: W, height: H },
         );
+        updateSelectionDragPreview(selectionDrag);
       }
       render();
       return;
@@ -1436,8 +1492,22 @@ function bindCanvasEvents() {
       } else if (selectionDrag.mode === 'move') {
         selectionRect = moveSelectionRect(selectionDrag.originalRect, point.x - selectionDrag.start.x, point.y - selectionDrag.start.y, { width: W, height: H });
       } else if (selectionDrag.mode === 'resize') {
-        selectionRect = resizeSelectionRect(selectionDrag.originalRect, point, { width: W, height: H });
+        selectionRect = resizeSelectionRectFromHandle(selectionDrag.originalRect, selectionDrag.handle, point, { width: W, height: H });
+      } else if (selectionDrag.mode === 'rotate') {
+        const original = selectionDrag.originalRect;
+        const center = { x: original.x + original.width / 2, y: original.y + original.height / 2 };
+        const currentAngle = Math.atan2(point.y - center.y, point.x - center.x);
+        selectionDrag.rotation = (currentAngle - selectionDrag.startAngle) * 180 / Math.PI;
+        const originalPolygon = [
+          { x: original.x, y: original.y },
+          { x: original.x + original.width, y: original.y },
+          { x: original.x + original.width, y: original.y + original.height },
+          { x: original.x, y: original.y + original.height },
+        ];
+        selectionRect = null;
+        selectionPolygon = transformPolygon(originalPolygon, selectionDrag.rotation, 1);
       }
+      if (selectionDrag.mode !== 'new') updateSelectionDragPreview(selectionDrag);
       render();
       return;
     }
@@ -1477,8 +1547,18 @@ function bindCanvasEvents() {
 
   const end = event => {
     if (tool === 'lasso' && down && selectionDrag) {
-      const point = position(event);
       const drag = selectionDrag;
+      if (event.type === 'pointercancel') {
+        renderer.clearLayerPreview(layers[active]);
+        selectionPolygon = drag.mode === 'lassoMove'
+          ? drag.originalPolygon.map(point => ({ ...point }))
+          : null;
+        selectionDrag = null;
+        down = false;
+        render([active]);
+        return;
+      }
+      const point = position(event);
       if (drag.mode === 'lassoNew') {
         const lastPoint = selectionPolygon?.at(-1);
         if (lastPoint && Math.hypot(point.x - lastPoint.x, point.y - lastPoint.y) > 0.1) {
@@ -1501,21 +1581,64 @@ function bindCanvasEvents() {
           context.clearRect(0, 0, W, H);
           context.restore();
           context.drawImage(drag.sourceCanvas, dx, dy);
+          saveActiveFrame();
           render([active]);
         }
       }
+      renderer.clearLayerPreview(layers[active]);
       selectionDrag = null;
       down = false;
-      render();
+      render([active]);
       return;
     }
 
     if (tool === 'marquee' && down && selectionDrag) {
+      if (event.type === 'pointercancel') {
+        renderer.clearLayerPreview(layers[active]);
+        selectionDrag = null;
+        down = false;
+        render([active]);
+        return;
+      }
       const point = position(event);
       const drag = selectionDrag;
       if (drag.mode === 'new') selectionRect = normalizeSelectionRect(drag.start, point);
       else if (drag.mode === 'move') selectionRect = moveSelectionRect(drag.originalRect, point.x - drag.start.x, point.y - drag.start.y, { width: W, height: H });
-      else if (drag.mode === 'resize') selectionRect = resizeSelectionRect(drag.originalRect, point, { width: W, height: H });
+      else if (drag.mode === 'resize') selectionRect = resizeSelectionRectFromHandle(drag.originalRect, drag.handle, point, { width: W, height: H });
+      else if (drag.mode === 'rotate') {
+        const original = drag.originalRect;
+        const center = { x: original.x + original.width / 2, y: original.y + original.height / 2 };
+        const currentAngle = Math.atan2(point.y - center.y, point.x - center.x);
+        drag.rotation = (currentAngle - drag.startAngle) * 180 / Math.PI;
+      }
+      if (drag.mode === 'rotate' && Math.abs(drag.rotation || 0) <= 0.1) {
+        selectionRect = { ...drag.originalRect };
+        selectionPolygon = null;
+      }
+      if (drag.mode === 'rotate' && Math.abs(drag.rotation || 0) > 0.1 && drag.sourceCanvas && drag.originalRect) {
+        const original = drag.originalRect;
+        const center = { x: original.x + original.width / 2, y: original.y + original.height / 2 };
+        const layer = layers[active];
+        save(layer);
+        const rotated = document.createElement('canvas');
+        rotated.width = W; rotated.height = H;
+        const context = rotated.getContext('2d');
+        context.translate(center.x, center.y);
+        context.rotate((drag.rotation || 0) * Math.PI / 180);
+        context.drawImage(drag.sourceCanvas, -original.width / 2, -original.height / 2, original.width, original.height);
+        const target = layer.canvas.getContext('2d');
+        target.clearRect(original.x, original.y, original.width, original.height);
+        target.drawImage(rotated, 0, 0);
+        const polygon = [
+          { x: original.x, y: original.y },
+          { x: original.x + original.width, y: original.y },
+          { x: original.x + original.width, y: original.y + original.height },
+          { x: original.x, y: original.y + original.height },
+        ];
+        selectionRect = null;
+        selectionPolygon = transformPolygon(polygon, drag.rotation, 1);
+        saveActiveFrame();
+      }
       if (drag.mode === 'move' || drag.mode === 'resize') {
         const source = drag.sourceCanvas;
         const original = drag.originalRect;
@@ -1526,9 +1649,11 @@ function bindCanvasEvents() {
           const context = layer.canvas.getContext('2d');
           context.clearRect(original.x, original.y, original.width, original.height);
           context.drawImage(source, target.x, target.y, target.width, target.height);
+          saveActiveFrame();
         }
       }
       if (drag.mode === 'new' && (!selectionRect || selectionRect.width < 2 || selectionRect.height < 2)) selectionRect = null;
+      renderer.clearLayerPreview(layers[active]);
       selectionDrag = null;
       down = false;
       render([active]);
