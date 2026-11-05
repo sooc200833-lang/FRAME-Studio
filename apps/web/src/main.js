@@ -162,11 +162,10 @@ async function loadTimelineFrame(frameId, saveCurrent = true) {
   if (saveCurrent) saveActiveFrame();
   if (!selectFrame(timeline, frameId)) return;
   const token = ++frameLoadToken;
+  loadingFrame = true;
   const frame = activeFrame(timeline);
   const decoded = await decodeRasterCels(normalizeRasterCels(frame?.cels, layers.length));
   if (token !== frameLoadToken) return;
-
-  loadingFrame = true;
   layers.forEach((layer, index) => {
     const context = layer.canvas.getContext('2d');
     context.clearRect(0, 0, W, H);
