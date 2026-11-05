@@ -156,3 +156,20 @@ output{color:var(--accent);min-width:35px;text-align:right}
 @media(max-width:760px){
   .workspace.inspector-collapsed{grid-template-columns:46px minmax(0,1fr)}
 }
+
+
+/* Color Studio precision controls */
+.color-tools-row{display:flex;align-items:center;gap:8px;margin:10px 0}
+.color-tools-row>button{flex:0 0 auto;min-height:34px;padding:6px 9px;font-size:10px}
+.hue-control{display:flex;align-items:center;gap:6px;min-width:0;flex:1;font-size:10px;color:#aaaab4}
+.hue-control input{min-width:0;width:100%;accent-color:#d9b56f}
+.color-values{margin:12px 0;padding:10px;background:#29292e;border:1px solid #3b3b43;border-radius:10px}
+.color-value-head{display:flex;justify-content:space-between;gap:8px;align-items:center;margin-bottom:9px}
+.color-value-head strong{font-size:11px}
+.color-value-head span{font-size:9px;color:#9696a1}
+.color-value-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:7px}
+.color-value-grid label{display:flex;flex-direction:column;gap:4px;font-size:9px;color:#a5a5af;min-width:0}
+.color-value-grid label:first-child{grid-column:span 4}
+.color-value-grid input{width:100%;min-width:0;height:31px;padding:4px 6px;background:#1c1c21;border:1px solid #45454e;border-radius:6px;color:#f1f1f4;font-size:11px}
+.color-value-grid input:focus{border-color:#d6b16a;outline:none}
+#eyedropperButton:disabled{opacity:.45;cursor:not-allowed}

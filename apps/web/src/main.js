@@ -128,6 +128,43 @@ function normalizeHex(value) {
   return /^#[0-9a-f]{6}$/i.test(value) ? value.toLowerCase() : '#24242a';
 }
 
+function hexToRgb(hex) {
+  const value = normalizeHex(hex);
+  return [1, 3, 5].map(index => Number.parseInt(value.slice(index, index + 2), 16));
+}
+
+function rgbToHsv(r, g, b) {
+  r /= 255; g /= 255; b /= 255;
+  const max = Math.max(r, g, b), min = Math.min(r, g, b), delta = max - min;
+  let h = 0;
+  if (delta) {
+    if (max === r) h = 60 * (((g - b) / delta) % 6);
+    else if (max === g) h = 60 * ((b - r) / delta + 2);
+    else h = 60 * ((r - g) / delta + 4);
+  }
+  return [Math.round((h + 360) % 360), Math.round(max ? delta / max * 100 : 0), Math.round(max * 100)];
+}
+
+function hsvToHex(h, s, v) {
+  h = ((Number(h) % 360) + 360) % 360;
+  s = Math.max(0, Math.min(100, Number(s))) / 100;
+  v = Math.max(0, Math.min(100, Number(v))) / 100;
+  const c = v * s, x = c * (1 - Math.abs((h / 60) % 2 - 1)), m = v - c;
+  const sector = Math.floor(h / 60);
+  const rgb = sector === 0 ? [c,x,0] : sector === 1 ? [x,c,0] : sector === 2 ? [0,c,x] : sector === 3 ? [0,x,c] : sector === 4 ? [x,0,c] : [c,0,x];
+  return '#' + rgb.map(channel => Math.round((channel + m) * 255).toString(16).padStart(2, '0')).join('');
+}
+
+function syncColorFields(hex) {
+  const rgb = hexToRgb(hex);
+  const [h, s, v] = rgbToHsv(...rgb);
+  const values = { colorHexInput: hex, colorH: h, colorS: s, colorV: v, colorR: rgb[0], colorG: rgb[1], colorB: rgb[2], colorHue: h };
+  for (const [id, value] of Object.entries(values)) {
+    const field = document.getElementById(id);
+    if (field && document.activeElement !== field) field.value = String(value);
+  }
+}
+
 function setCurrentColor(value, { applyToSelectedLine = true, remember = true } = {}) {
   color = normalizeHex(value);
   const picker = document.getElementById('customColor');
@@ -136,6 +173,7 @@ function setCurrentColor(value, { applyToSelectedLine = true, remember = true } 
   if (preview) preview.style.background = color;
   const hex = document.getElementById('activeColorHex');
   if (hex) hex.textContent = color.toUpperCase();
+  syncColorFields(color);
   if (remember) {
     const index = recentColors.indexOf(color);
     if (index >= 0) recentColors.splice(index, 1);
@@ -1117,6 +1155,39 @@ function bindControls() {
 
   const customColor = document.getElementById('customColor');
   customColor.oninput = event => setCurrentColor(event.target.value);
+  const hexField = document.getElementById('colorHexInput');
+  hexField.onchange = () => {
+    const value = hexField.value.trim();
+    if (/^#[0-9a-f]{6}$/i.test(value)) setCurrentColor(value);
+    else { hexField.setCustomValidity('HEX는 #RRGGBB 형식으로 입력하세요.'); hexField.reportValidity(); syncColorFields(color); }
+  };
+  hexField.oninput = () => hexField.setCustomValidity('');
+  const updateFromHsv = () => setCurrentColor(hsvToHex(
+    document.getElementById('colorH').value,
+    document.getElementById('colorS').value,
+    document.getElementById('colorV').value
+  ));
+  ['colorH','colorS','colorV'].forEach(id => document.getElementById(id).onchange = updateFromHsv);
+  document.getElementById('colorHue').oninput = event => {
+    document.getElementById('colorH').value = event.target.value;
+    updateFromHsv();
+  };
+  const updateFromRgb = () => setCurrentColor('#' + ['colorR','colorG','colorB'].map(id =>
+    Math.max(0, Math.min(255, Number(document.getElementById(id).value) || 0)).toString(16).padStart(2, '0')
+  ).join(''));
+  ['colorR','colorG','colorB'].forEach(id => document.getElementById(id).onchange = updateFromRgb);
+  document.getElementById('eyedropperButton').onclick = async () => {
+    if (!('EyeDropper' in window)) {
+      document.getElementById('activeColorHex').title = '이 브라우저는 화면 색 추출을 지원하지 않습니다. 색상 선택기를 이용해 주세요.';
+      return;
+    }
+    try {
+      const result = await new EyeDropper().open();
+      setCurrentColor(result.sRGBHex);
+    } catch (error) {
+      if (error?.name !== 'AbortError') console.warn('EyeDropper unavailable:', error);
+    }
+  };
   document.getElementById('addPaletteColor').onclick = addCurrentColorToPalette;
   document.getElementById('resetPalette').onclick = () => {
     for (const name of Object.keys(defaultPaletteGroups)) paletteGroups[name] = [...defaultPaletteGroups[name]];
