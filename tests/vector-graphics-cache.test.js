@@ -43,3 +43,13 @@ test('prunes inactive stroke entries and releases their graphics', () => {
   assert.equal(cache.size, 0);
   assert.deepEqual(released, [entry.graphics]);
 });
+
+test('detects in-place edits to point coordinates', () => {
+  const cache = new Map();
+  const stroke = { id: 'line-2', points: [{ x: 0, y: 0 }, { x: 5, y: 5 }], color: '#000000', width: 3 };
+  let drawn = 0;
+  getVectorGraphicsCacheEntry(cache, stroke, fakeGraphics, () => { drawn++; });
+  stroke.points[1].x = 12;
+  getVectorGraphicsCacheEntry(cache, stroke, fakeGraphics, () => { drawn++; });
+  assert.equal(drawn, 2);
+});
