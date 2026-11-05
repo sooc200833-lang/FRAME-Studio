@@ -21,6 +21,8 @@ test('normalizes array and Canvas-style affine matrix values', () => {
   assert.deepEqual(normalizeAffineMatrix({ a: 2, b: 0, c: 0, d: 3, e: 4, f: 5 }), [2, 0, 0, 3, 4, 5]);
   assert.equal(normalizeAffineMatrix([1, 2, 3]), null);
   assert.equal(normalizeAffineMatrix([1, 2, 3, 4, 5, Infinity]), null);
+  assert.equal(normalizeAffineMatrix([1, 2, 3, 4, 5, null]), null);
+  assert.equal(normalizeAffineMatrix([1, 2, 3, 4, 5, '']), null);
 });
 
 test('maps points through translation and non-uniform scale', () => {
