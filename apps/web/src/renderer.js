@@ -188,12 +188,12 @@ export class PixiStageRenderer {
         [(left + right) / 2, bottom], [left, bottom], [left, (top + bottom) / 2],
       ];
       for (const [x, y] of handles) {
-        outline.circle(x, y, 5.5).fill(0xf8fafc).stroke({ color: 0x268cff, width: 1.7 });
+        outline.circle(x, y, 8).fill(0xf8fafc).stroke({ color: 0x268cff, width: 1.7 });
       }
-      const rotateX = (left + right) / 2, rotateY = top - 28;
-      outline.moveTo(rotateX, top).lineTo(rotateX, rotateY + 5);
+      const rotateX = (left + right) / 2, rotateY = top - 36;
+      outline.moveTo(rotateX, top).lineTo(rotateX, rotateY + 7);
       outline.stroke({ color: 0x268cff, width: 1.3, alpha: 0.9 });
-      outline.circle(rotateX, rotateY, 6.5).fill(0xe5b85c).stroke({ color: 0x24242a, width: 1.5 });
+      outline.circle(rotateX, rotateY, 9).fill(0xe5b85c).stroke({ color: 0x24242a, width: 1.5 });
       this.app.stage.addChildAt(outline, this.app.stage.children.length - 1);
       this.strokeGraphics.push(outline);
     }
