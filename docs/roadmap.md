@@ -24,7 +24,7 @@
 - [ ] Add per-line texture and pressure profiles.
 - [x] Add deterministic Line Boil deformation with stable per-line phase seeds.
 - [x] Add live preview controls for amplitude, pattern frequency, and playback speed.
-- [ ] Add per-line animation settings, frame caching, and timeline keyframes.
+- [x] Add frame-based vector-line snapshots with stable frame IDs.\n- [x] Add frame insertion, duplication, deletion, and selection.\n- [x] Add previous/next onion-skin ghost rendering.\n- [ ] Add per-line animation settings, frame caching, and timeline keyframes.
 - [ ] Evaluate Paper.js behind a line-engine adapter.
 
 ## Phase 3 — Tone Studio
