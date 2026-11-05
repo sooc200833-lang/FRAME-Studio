@@ -77,3 +77,7 @@ output{color:var(--accent);min-width:35px;text-align:right}
 
 /* Brush preset selector */
 #brushPreset{max-width:145px;background:#29292d;color:var(--text);border:1px solid var(--line);border-radius:6px;padding:6px}
+
+/* Layer mask controls */
+#maskState{margin:4px 0 10px;min-height:28px}
+#maskEdit.active{border-color:var(--accent);background:#51452e;color:#ffe0a0}
