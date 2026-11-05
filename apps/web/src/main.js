@@ -1,5 +1,6 @@
 import './styles.css';
 import { PixiStageRenderer } from './renderer.js';
+import { applyScreentoneToCanvas } from './tone/screentone.js';
 import { clientToCanvasPoint, parseCssTransformMatrix } from './viewport/coordinates.js';
 import { applyBrushTexture, coalescedPointerEvents, createBrushOutline, createFrameScheduler, getBrushPreset, normalizePointerPressure, resolveBrushStrokeOptions, stabilizePoint } from './brush/brush-engine.js';
 import { expandRegionMask, findConnectedRegion } from './fill/flood-fill.js';
@@ -149,6 +150,7 @@ function setCurrentColor(value, { applyToSelectedLine = true, remember = true } 
   color = normalizeHex(value);
   const picker = document.getElementById('customColor');
   if (picker) picker.value = color;
+  updateToneControls();
   const preview = document.getElementById('activeColorPreview');
   if (preview) preview.style.background = color;
   const hex = document.getElementById('activeColorHex');
@@ -590,6 +592,44 @@ function floodFill(x, y) {
   context.putImageData(image, 0, 0);
 }
 
+function applyMangaTone() {
+  if (playbackActive) setPlaybackEnabled(false);
+  if (maskEditing) {
+    document.getElementById('status').textContent = '마스크 편집 중에는 톤을 적용할 수 없습니다';
+    return;
+  }
+  const layer = layers[active];
+  const selection = selectionOutlinePolygon();
+  const settings = {
+    pattern: document.getElementById('tonePattern').value,
+    spacing: Number(document.getElementById('toneSpacing').value),
+    dotSize: Number(document.getElementById('toneDotSize').value),
+    angle: Number(document.getElementById('toneAngle').value),
+    opacity: Number(document.getElementById('toneOpacity').value),
+    color,
+  };
+  save(layer);
+  applyScreentoneToCanvas(layer.canvas, settings, selection);
+  saveActiveFrame();
+  render([active]);
+}
+
+function updateToneControls() {
+  const values = [
+    ['toneSpacing', 'toneSpacingOut', value => value + 'px'],
+    ['toneDotSize', 'toneDotSizeOut', value => value + 'px'],
+    ['toneAngle', 'toneAngleOut', value => value + '°'],
+    ['toneOpacity', 'toneOpacityOut', value => value + '%'],
+  ];
+  for (const [inputId, outputId, format] of values) {
+    const input = document.getElementById(inputId);
+    const output = document.getElementById(outputId);
+    if (input && output) output.value = format(input.value);
+  }
+  const chip = document.getElementById('toneColorChip');
+  if (chip) chip.style.background = color;
+}
+
 function drawLayers() {
   const list = document.getElementById('layers');
   list.replaceChildren();
@@ -862,6 +902,12 @@ function bindViewportControls() {
 }
 
 function bindControls() {
+  document.getElementById('applyTone').onclick = applyMangaTone;
+  ['toneSpacing', 'toneDotSize', 'toneAngle', 'toneOpacity'].forEach(id => {
+    document.getElementById(id).oninput = updateToneControls;
+  });
+  document.getElementById('tonePattern').onchange = updateToneControls;
+
   document.querySelectorAll('[data-tool]').forEach(button => {
     button.onclick = () => {
       if (boilEnabled) setBoilEnabled(false);
