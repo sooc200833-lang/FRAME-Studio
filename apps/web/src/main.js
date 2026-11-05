@@ -7,7 +7,7 @@ import { expandRegionMask, findConnectedRegion } from './fill/flood-fill.js';
 import { animateLineStrokes, lineBoilPhase } from './line/line-boil.js';
 import { activeFrame, addFrame, createTimeline, deleteFrame, frameAtTime, getOnionSkin, selectFrame, updateFrameCels, updateFrameStrokes } from './animation/timeline.js';
 import { normalizeRasterCels } from './animation/frame-cels.js';
-import { containsSelectionPoint, hitTestSelectionHandle, moveSelectionRect, normalizeSelectionRect, lineStrokeIntersectsPolygon, pointInPolygon, resizeSelectionRect, resizeSelectionRectFromHandle, resolveSelectionTargets, transformLineStrokes, transformPolygon, translatePolygon } from './selection/selection.js';
+import { containsSelectionPoint, hitTestSelectionHandle, moveSelectionRect, normalizeSelectionRect, lineStrokeIntersectsPolygon, pointInPolygon, resizeSelectionRectFromHandle, resolveSelectionTargets, transformLineStrokes, transformPolygon, translatePolygon } from './selection/selection.js';
 import {
   createLineStroke,
   hitTestLineStrokes,
@@ -1445,6 +1445,14 @@ function bindCanvasEvents() {
         const center = { x: original.x + original.width / 2, y: original.y + original.height / 2 };
         const currentAngle = Math.atan2(point.y - center.y, point.x - center.x);
         selectionDrag.rotation = (currentAngle - selectionDrag.startAngle) * 180 / Math.PI;
+        const originalPolygon = [
+          { x: original.x, y: original.y },
+          { x: original.x + original.width, y: original.y },
+          { x: original.x + original.width, y: original.y + original.height },
+          { x: original.x, y: original.y + original.height },
+        ];
+        selectionRect = null;
+        selectionPolygon = transformPolygon(originalPolygon, selectionDrag.rotation, 1);
       }
       render();
       return;
