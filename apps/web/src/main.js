@@ -1,5 +1,6 @@
 import './styles.css';
 import { PixiStageRenderer } from './renderer.js';
+import { expandRegionMask, findConnectedRegion } from './fill/flood-fill.js';
 
 const W = 1200;
 const H = 900;
@@ -88,13 +89,6 @@ function stroke(from, to) {
   context.restore();
 }
 
-function closeEnough(data, index, seed, tolerance) {
-  return Math.abs(data[index] - seed[0]) <= tolerance
-    && Math.abs(data[index + 1] - seed[1]) <= tolerance
-    && Math.abs(data[index + 2] - seed[2]) <= tolerance
-    && Math.abs(data[index + 3] - seed[3]) <= tolerance;
-}
-
 function parseHex(hex) {
   return [
     Number.parseInt(hex.slice(1, 3), 16),
@@ -103,52 +97,51 @@ function parseHex(hex) {
   ];
 }
 
-function floodFill(x, y) {
-  const boundary = composite();
-  const source = boundary.getImageData(0, 0, W, H).data;
-  const startIndex = (y * W + x) * 4;
-  const seed = [source[startIndex], source[startIndex + 1], source[startIndex + 2], source[startIndex + 3]];
-  const tolerance = Number(document.getElementById('tolerance').value);
-  const rgb = parseHex(color);
-
-  if (seed[0] === rgb[0] && seed[1] === rgb[1] && seed[2] === rgb[2]) return;
-
-  const visited = new Uint8Array(W * H);
-  const stack = [y * W + x];
-  const region = [];
-
-  while (stack.length) {
-    const point = stack.pop();
-    if (point < 0 || point >= W * H || visited[point]) continue;
-    visited[point] = 1;
-
-    const pixel = point * 4;
-    if (!closeEnough(source, pixel, seed, tolerance)) continue;
-
-    region.push(point);
-    const px = point % W;
-    const py = Math.floor(point / W);
-    if (px > 0) stack.push(point - 1);
-    if (px < W - 1) stack.push(point + 1);
-    if (py > 0) stack.push(point - W);
-    if (py < H - 1) stack.push(point + W);
+function buildProtectionMask() {
+  const protection = new Uint8Array(W * H);
+  for (let index = active + 1; index < layers.length; index++) {
+    const layer = layers[index];
+    if (!layer.visible) continue;
+    const pixels = layer.canvas.getContext('2d').getImageData(0, 0, W, H).data;
+    for (let point = 0; point < W * H; point++) {
+      const alpha = pixels[point * 4 + 3];
+      if (alpha > protection[point]) protection[point] = alpha;
+    }
   }
+  return protection;
+}
 
-  if (!region.length) return;
+function floodFill(x, y) {
+  const source = composite().getImageData(0, 0, W, H).data;
+  const rgb = parseHex(color);
+  const result = findConnectedRegion({
+    data: source,
+    width: W,
+    height: H,
+    x,
+    y,
+    tolerance: Number(document.getElementById('tolerance').value),
+  });
+
+  if (!result.count) return;
+  if (result.seed[0] === rgb[0] && result.seed[1] === rgb[1] && result.seed[2] === rgb[2]) return;
+
+  const edgeMargin = Number(document.getElementById('edge').value);
+  const protection = edgeMargin > 0 ? buildProtectionMask() : null;
+  const fillMask = expandRegionMask(result.mask, W, H, edgeMargin, protection, 250);
 
   save(layers[active]);
   const context = layers[active].canvas.getContext('2d');
   const image = context.getImageData(0, 0, W, H);
   const output = image.data;
-
-  for (const point of region) {
+  for (let point = 0; point < fillMask.length; point++) {
+    if (!fillMask[point]) continue;
     const pixel = point * 4;
     output[pixel] = rgb[0];
     output[pixel + 1] = rgb[1];
     output[pixel + 2] = rgb[2];
     output[pixel + 3] = 255;
   }
-
   context.putImageData(image, 0, 0);
 }
 
