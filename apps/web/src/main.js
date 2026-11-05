@@ -2,7 +2,8 @@ import './styles.css';
 import { PixiStageRenderer } from './renderer.js';
 import { expandRegionMask, findConnectedRegion } from './fill/flood-fill.js';
 import { animateLineStrokes, lineBoilPhase } from './line/line-boil.js';
-import { activeFrame, addFrame, createTimeline, deleteFrame, frameAtTime, getOnionSkin, selectFrame, updateFrameStrokes } from './animation/timeline.js';
+import { activeFrame, addFrame, createTimeline, deleteFrame, frameAtTime, getOnionSkin, selectFrame, updateFrameCels, updateFrameStrokes } from './animation/timeline.js';
+import { normalizeRasterCels } from './animation/frame-cels.js';
 import {
   createLineStroke,
   hitTestLineStrokes,
@@ -43,6 +44,7 @@ const lineRedo = [];
 const timeline = createTimeline({ fps: 12 });
 let onionEnabled = true;
 let loadingFrame = false;
+let frameLoadToken = 0;
 
 function makeLayer(name) {
   const canvas = document.createElement('canvas');
@@ -138,18 +140,45 @@ function render(dirtyIndices = [], displayStrokes = vectorStrokes) {
   drawTimeline();
 }
 
-function loadTimelineFrame(frameId, saveCurrent = true) {
-  if (saveCurrent) updateFrameStrokes(timeline, timeline.activeFrameId, vectorStrokes);
+function saveActiveFrame() {
+  updateFrameStrokes(timeline, timeline.activeFrameId, vectorStrokes);
+  updateFrameCels(timeline, timeline.activeFrameId, layers.map(layer => layer.canvas.toDataURL('image/png')));
+}
+
+async function decodeRasterCels(cels) {
+  return Promise.all(cels.map(source => new Promise(resolve => {
+    if (!source) {
+      resolve(null);
+      return;
+    }
+    const image = new Image();
+    image.onload = () => resolve(image);
+    image.onerror = () => resolve(null);
+    image.src = source;
+  })));
+}
+
+async function loadTimelineFrame(frameId, saveCurrent = true) {
+  if (saveCurrent) saveActiveFrame();
   if (!selectFrame(timeline, frameId)) return;
+  const token = ++frameLoadToken;
   const frame = activeFrame(timeline);
+  const decoded = await decodeRasterCels(normalizeRasterCels(frame?.cels, layers.length));
+  if (token !== frameLoadToken) return;
+
   loadingFrame = true;
+  layers.forEach((layer, index) => {
+    const context = layer.canvas.getContext('2d');
+    context.clearRect(0, 0, W, H);
+    if (decoded[index]) context.drawImage(decoded[index], 0, 0, W, H);
+  });
   vectorStrokes.splice(0, vectorStrokes.length, ...(frame?.strokes || []).map(stroke => ({
     ...stroke,
     points: stroke.points.map(point => ({ x: point.x, y: point.y })),
   })));
   selectedStrokeId = null;
   loadingFrame = false;
-  render();
+  render(layers.map((_, index) => index));
 }
 
 function drawTimeline() {
@@ -176,7 +205,7 @@ function setPlaybackEnabled(enabled) {
 
   if (enabled) {
     if (boilEnabled) setBoilEnabled(false);
-    updateFrameStrokes(timeline, timeline.activeFrameId, vectorStrokes);
+    saveActiveFrame();
     const activeIndex = timeline.frames.findIndex(frame => frame.id === timeline.activeFrameId);
     playbackStartOffset = timeline.frames.slice(0, Math.max(0, activeIndex))
       .reduce((sum, frame) => sum + frame.durationMs, 0);
@@ -185,7 +214,7 @@ function setPlaybackEnabled(enabled) {
   } else {
     if (playbackRaf) cancelAnimationFrame(playbackRaf);
     playbackRaf = 0;
-    updateFrameStrokes(timeline, timeline.activeFrameId, vectorStrokes);
+    saveActiveFrame();
     render();
   }
 }
@@ -197,7 +226,7 @@ function playbackTick(timestamp) {
   }
   const elapsed = timestamp - playbackStartedAt + playbackStartOffset;
   const frame = frameAtTime(timeline, elapsed);
-  if (frame && frame.id !== timeline.activeFrameId) loadTimelineFrame(frame.id);
+  if (!loadingFrame && frame && frame.id !== timeline.activeFrameId) loadTimelineFrame(frame.id);
   playbackRaf = requestAnimationFrame(playbackTick);
 }
 
@@ -461,20 +490,20 @@ function bindControls() {
 
   document.getElementById('frameAdd').onclick = () => {
     if (playbackActive) setPlaybackEnabled(false);
-    updateFrameStrokes(timeline, timeline.activeFrameId, vectorStrokes);
+    saveActiveFrame();
     const frame = addFrame(timeline);
     loadTimelineFrame(frame.id, false);
   };
   document.getElementById('frameDuplicate').onclick = () => {
     if (playbackActive) setPlaybackEnabled(false);
-    updateFrameStrokes(timeline, timeline.activeFrameId, vectorStrokes);
+    saveActiveFrame();
     const frame = addFrame(timeline, { duplicate: true });
     loadTimelineFrame(frame.id, false);
   };
   document.getElementById('frameDelete').onclick = () => {
     if (playbackActive) setPlaybackEnabled(false);
     const current = timeline.activeFrameId;
-    updateFrameStrokes(timeline, current, vectorStrokes);
+    saveActiveFrame();
     if (deleteFrame(timeline, current)) loadTimelineFrame(timeline.activeFrameId, false);
   };
   document.getElementById('onionToggle').onclick = event => {
@@ -661,6 +690,7 @@ async function start() {
   lineContext.closePath();
   lineContext.stroke();
 
+  updateFrameCels(timeline, timeline.activeFrameId, layers.map(layer => layer.canvas.toDataURL('image/png')));
   render([0, 1]);
 }
 
