@@ -71,3 +71,8 @@ export function transformPolygon(polygon, angleDegrees = 0, scale = 1) {
     };
   });
 }
+
+export function resolveSelectionTargets(layers, selectedLayers, activeLayer) {
+  if (selectedLayers?.size) return layers.filter(layer => selectedLayers.has(layer));
+  return activeLayer && layers.includes(activeLayer) ? [activeLayer] : [];
+}
