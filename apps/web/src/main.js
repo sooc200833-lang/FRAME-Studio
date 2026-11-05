@@ -1098,41 +1098,14 @@ function bindCanvasEvents() {
         const previous = points[points.length - 1];
         if (Math.hypot(point.x - previous.x, point.y - previous.y) >= 2.5) points.push(point);
       } else if (selectionDrag.mode === 'lassoMove') {
-        selectionPolygon = translatePolygon(selectionDrag.originalPolygon, point.x - selectionDrag.start.x, point.y - selectionDrag.start.y, { width: W, height: H });
+        selectionPolygon = translatePolygon(
+          selectionDrag.originalPolygon,
+          point.x - selectionDrag.start.x,
+          point.y - selectionDrag.start.y,
+          { width: W, height: H },
+        );
       }
       render();
-      return;
-    }
-
-    if (tool === 'lasso' && down && selectionDrag) {
-      const point = position(event);
-      const drag = selectionDrag;
-      if (drag.mode === 'lassoNew') {
-        const lastPoint = selectionPolygon[selectionPolygon.length - 1];
-        if (Math.hypot(point.x - lastPoint.x, point.y - lastPoint.y) > 1) selectionPolygon.push(point);
-        if (selectionPolygon.length < 3) selectionPolygon = null;
-      } else if (drag.mode === 'lassoMove') {
-        const moved = selectionPolygon;
-        const original = drag.originalPolygon;
-        const dx = moved[0].x - original[0].x;
-        const dy = moved[0].y - original[0].y;
-        if (Math.abs(dx) > 0.5 || Math.abs(dy) > 0.5) {
-          const layer = layers[active];
-          save(layer);
-          const context = layer.canvas.getContext('2d');
-          context.save();
-          context.beginPath();
-          original.forEach((p, index) => index ? context.lineTo(p.x, p.y) : context.moveTo(p.x, p.y));
-          context.closePath();
-          context.clip();
-          context.clearRect(0, 0, W, H);
-          context.restore();
-          context.drawImage(drag.sourceCanvas, dx, dy);
-        }
-      }
-      selectionDrag = null;
-      down = false;
-      render([active]);
       return;
     }
 
@@ -1188,6 +1161,40 @@ function bindCanvasEvents() {
   });
 
   const end = event => {
+    if (tool === 'lasso' && down && selectionDrag) {
+      const point = position(event);
+      const drag = selectionDrag;
+      if (drag.mode === 'lassoNew') {
+        const lastPoint = selectionPolygon?.at(-1);
+        if (lastPoint && Math.hypot(point.x - lastPoint.x, point.y - lastPoint.y) > 0.1) {
+          selectionPolygon.push(point);
+        }
+        if (!selectionPolygon || selectionPolygon.length < 3) selectionPolygon = null;
+      } else if (drag.mode === 'lassoMove' && selectionPolygon?.length) {
+        const original = drag.originalPolygon;
+        const dx = selectionPolygon[0].x - original[0].x;
+        const dy = selectionPolygon[0].y - original[0].y;
+        if (Math.abs(dx) > 0.5 || Math.abs(dy) > 0.5) {
+          const layer = layers[active];
+          save(layer);
+          const context = layer.canvas.getContext('2d');
+          context.save();
+          context.beginPath();
+          original.forEach((p, index) => index ? context.lineTo(p.x, p.y) : context.moveTo(p.x, p.y));
+          context.closePath();
+          context.clip();
+          context.clearRect(0, 0, W, H);
+          context.restore();
+          context.drawImage(drag.sourceCanvas, dx, dy);
+          render([active]);
+        }
+      }
+      selectionDrag = null;
+      down = false;
+      render();
+      return;
+    }
+
     if (tool === 'marquee' && down && selectionDrag) {
       const point = position(event);
       const drag = selectionDrag;
