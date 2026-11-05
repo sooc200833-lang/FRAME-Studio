@@ -84,9 +84,9 @@ test('exposes eight resize handles and a rotation handle with hit testing', () =
   const rect = { x: 10, y: 20, width: 80, height: 60 };
   const handles = getSelectionRectHandles(rect);
   assert.equal(handles.length, 9);
-  assert.deepEqual(handles.find(handle => handle.id === 'rotate'), { id: 'rotate', x: 50, y: -8 });
+  assert.deepEqual(handles.find(handle => handle.id === 'rotate'), { id: 'rotate', x: 50, y: -16 });
   assert.equal(hitTestSelectionHandle({ x: 10, y: 20 }, rect), 'nw');
-  assert.equal(hitTestSelectionHandle({ x: 50, y: -8 }, rect), 'rotate');
+  assert.equal(hitTestSelectionHandle({ x: 50, y: -16 }, rect), 'rotate');
   assert.equal(hitTestSelectionHandle({ x: 50, y: 50 }, rect), null);
 });
 
