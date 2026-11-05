@@ -94,3 +94,10 @@ The web prototype includes raster drawing, connected-region fill, PixiJS renderi
 - The transformed boundary is retained as a polygon selection, including after rotating a rectangular selection.
 - Rotation range is -180° to 180° and scale range is 25% to 200%. Pixels transformed beyond the canvas are clipped by the canvas bounds.
 - This is a committed transform, not a live preview; multi-layer and vector selection transforms remain future work.
+
+
+## Multi-layer raster selection transform
+- Layer rows expose transform-target checkboxes. When one or more are checked, the same polygon selection, rotation, scale, and centroid are applied to every checked raster layer; with none checked, the active layer is used.
+- Each layer's selected pixels are extracted independently and transformed with the same matrix, preserving layer ordering and separation rather than flattening the result.
+- Multi-layer transforms create a grouped raster undo/redo record so one undo or redo restores all participating layers together. The grouped record is scoped to the current frame and is invalidated by subsequent raster or vector edits.
+- Masks and layer metadata are not transformed; only paint pixels in the selected polygon are affected. Vector strokes are not included yet.
