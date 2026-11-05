@@ -642,6 +642,7 @@ function applyMangaTone() {
     document.getElementById('status').textContent = '마스크 편집 중에는 톤을 적용할 수 없습니다';
     return;
   }
+  ensureEditableLayerAfterTransform();
   const layer = layers[active];
   const selection = selectionOutlinePolygon();
   const settings = {
@@ -994,60 +995,46 @@ function applySelectionTransform() {
   const transformedVectors = hasSelectedVectors
     ? transformLineStrokes(vectorStrokes, polygon, angle, scale)
     : null;
-  const center = polygon.reduce((sum, point) => ({
-    x: sum.x + point.x / polygon.length,
-    y: sum.y + point.y / polygon.length,
-  }), { x: 0, y: 0 });
+  const center = getPolygonCentroid(polygon);
   const radians = angle * Math.PI / 180;
-
-  // Prepare every layer before mutating any of them so all targets share
-  // exactly the same transform origin and selection boundary.
-  const prepared = targets.map(layer => {
-    const before = layer.canvas.toDataURL('image/png');
-    const source = document.createElement('canvas');
-    source.width = W; source.height = H;
-    const sourceContext = source.getContext('2d');
-    sourceContext.save();
-    sourceContext.beginPath();
-    polygon.forEach((point, index) => index ? sourceContext.lineTo(point.x, point.y) : sourceContext.moveTo(point.x, point.y));
-    sourceContext.closePath();
-    sourceContext.clip();
-    sourceContext.drawImage(layer.canvas, 0, 0);
-    sourceContext.restore();
-
-    const transformed = document.createElement('canvas');
-    transformed.width = W; transformed.height = H;
-    const transformedContext = transformed.getContext('2d');
-    transformedContext.translate(center.x, center.y);
-    transformedContext.rotate(radians);
-    transformedContext.scale(scale, scale);
-    transformedContext.drawImage(source, -center.x, -center.y);
-    return { layer, transformed, before };
-  });
-
-  for (const { layer, transformed } of prepared) {
-    save(layer);
-    const context = layer.canvas.getContext('2d');
+  const cosine = Math.cos(radians) * scale;
+  const sine = Math.sin(radians) * scale;
+  const matrix = [
+    cosine, sine, -sine, cosine,
+    center.x - cosine * center.x + sine * center.y,
+    center.y - sine * center.x - cosine * center.y,
+  ];
+  const sources = targets.map(layer => {
+    const sourceCanvas = document.createElement('canvas');
+    sourceCanvas.width = W;
+    sourceCanvas.height = H;
+    const context = sourceCanvas.getContext('2d');
     context.save();
     context.beginPath();
     polygon.forEach((point, index) => index ? context.lineTo(point.x, point.y) : context.moveTo(point.x, point.y));
     context.closePath();
     context.clip();
-    context.clearRect(0, 0, W, H);
+    context.drawImage(layer.presentationCanvas || layer.canvas, 0, 0);
     context.restore();
-    context.drawImage(transformed, 0, 0);
-  }
+    return {
+      layer,
+      sourceCanvas,
+      before: layer.canvas.toDataURL('image/png'),
+      beforeTransforms: snapshotRuntimeTransformRecords(layer.transformRecords),
+      previewCanvas: null,
+    };
+  });
+
   if (hasSelectedVectors) {
     vectorStrokes.splice(0, vectorStrokes.length, ...transformedVectors);
     selectedStrokeId = null;
   }
   const vectorAfter = hasSelectedVectors ? lineSnapshot() : null;
-  groupedTransformUndo = (targets.length > 1 || hasSelectedVectors) ? {
-    entries: prepared.map(({ layer, before }) => ({ layer, before, after: layer.canvas.toDataURL('image/png') })),
-    vectorBefore: hasSelectedVectors ? vectorBefore : null,
-    vectorAfter,
-  } : null;
-  groupedTransformRedo = null;
+  commitSelectionDragSources({ sources }, () => ({ clipPolygon: polygon, matrix }));
+  if (groupedTransformUndo && hasSelectedVectors) {
+    groupedTransformUndo.vectorBefore = vectorBefore;
+    groupedTransformUndo.vectorAfter = vectorAfter;
+  }
 
   selectionRect = null;
   selectionPolygon = transformedPolygon;
