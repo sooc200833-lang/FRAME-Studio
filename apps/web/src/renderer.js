@@ -52,7 +52,7 @@ export class PixiStageRenderer {
     graphics.stroke({ color, width, alpha, cap: 'round', join: 'round' });
   }
 
-  sync(layers, dirtyIndices = [], strokes = [], selectedStrokeId = null, onionSkin = []) {
+  sync(layers, dirtyIndices = [], strokes = [], selectedStrokeId = null, onionSkin = [], selectionRect = null) {
     if (!this.app) return;
 
     // Rebuild vector overlays after paint-layer sprites and before the live preview.
@@ -116,6 +116,30 @@ export class PixiStageRenderer {
       this.drawPath(graphics, stroke.points, Number.parseInt(stroke.color.slice(1), 16), stroke.width);
       this.app.stage.addChildAt(graphics, this.app.stage.children.length - 1);
       this.strokeGraphics.push(graphics);
+    }
+
+    if (selectionRect && selectionRect.width > 1 && selectionRect.height > 1) {
+      const outline = new Graphics();
+      const drawDash = (x1, y1, x2, y2) => {
+        const length = Math.hypot(x2 - x1, y2 - y1);
+        const steps = Math.ceil(length / 10);
+        for (let index = 0; index < steps; index += 2) {
+          const start = index / steps;
+          const end = Math.min(1, (index + 1) / steps);
+          outline.moveTo(x1 + (x2 - x1) * start, y1 + (y2 - y1) * start);
+          outline.lineTo(x1 + (x2 - x1) * end, y1 + (y2 - y1) * end);
+        }
+      };
+      const left = selectionRect.x, top = selectionRect.y;
+      const right = left + selectionRect.width, bottom = top + selectionRect.height;
+      drawDash(left, top, right, top);
+      drawDash(right, top, right, bottom);
+      drawDash(right, bottom, left, bottom);
+      drawDash(left, bottom, left, top);
+      outline.stroke({ color: 0x268cff, width: 1.5, alpha: 0.95 });
+      outline.rect(right - 5, bottom - 5, 10, 10).fill(0xffffff).stroke({ color: 0x268cff, width: 1.5 });
+      this.app.stage.addChildAt(outline, this.app.stage.children.length - 1);
+      this.strokeGraphics.push(outline);
     }
 
     this.app.stage.setChildIndex(this.preview, this.app.stage.children.length - 1);
