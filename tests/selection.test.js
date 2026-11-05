@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { containsSelectionPoint, getSelectionRectHandles, hitTestSelectionHandle, moveSelectionRect, normalizeSelectionRect, lineStrokeIntersectsPolygon, pointInPolygon, resizeSelectionRect, resizeSelectionRectFromHandle, resolveSelectionTargets, transformLineStrokes, transformPolygon, translatePolygon, getSelectionPreviewTransform } from '../apps/web/src/selection/selection.js';
+import { containsSelectionPoint, getSelectionRectHandles, hitTestSelectionHandle, moveSelectionRect, normalizeSelectionRect, lineStrokeIntersectsPolygon, pointInPolygon, resizeSelectionRect, resizeSelectionRectFromHandle, resolveSelectionTargets, transformLineStrokes, transformPolygon, translatePolygon, getSelectionPreviewTransform, getPolygonBounds, getPolygonCentroid, getPolygonTransformHandles, hitTestPolygonTransformHandle, resizePolygonFromHandle } from '../apps/web/src/selection/selection.js';
 
 test('normalizes a drag rectangle in any direction', () => {
   assert.deepEqual(normalizeSelectionRect({ x: 90, y: 80 }, { x: 10, y: 20 }), { x: 10, y: 20, width: 80, height: 60 });
@@ -118,4 +118,26 @@ test('computes a stable center and independent scale factors for live transform 
   assert.equal(transform.scaleY, 0.5);
   assert.ok(Math.abs(transform.rotationRadians - Math.PI / 2) < 1e-9);
   assert.equal(getSelectionPreviewTransform(null), null);
+});
+
+test('computes polygon bounds and centroid for lasso transform controls', () => {
+  const polygon = [{ x: 10, y: 20 }, { x: 50, y: 10 }, { x: 40, y: 60 }, { x: 20, y: 50 }];
+  assert.deepEqual(getPolygonBounds(polygon), { x: 10, y: 10, width: 40, height: 50 });
+  assert.deepEqual(getPolygonCentroid(polygon), { x: 30, y: 35 });
+});
+
+test('provides lasso resize and rotation handles with hit testing', () => {
+  const polygon = [{ x: 10, y: 20 }, { x: 50, y: 10 }, { x: 40, y: 60 }, { x: 20, y: 50 }];
+  const handles = getPolygonTransformHandles(polygon);
+  assert.equal(handles.length, 9);
+  assert.deepEqual(handles.find(handle => handle.id === 'rotate'), { id: 'rotate', x: 30, y: -26 });
+  assert.equal(hitTestPolygonTransformHandle({ x: 10, y: 20 }, polygon), 'nw');
+  assert.equal(hitTestPolygonTransformHandle({ x: 30, y: -26 }, polygon), 'rotate');
+});
+
+test('resizes a lasso polygon proportionally from a bounding-box handle', () => {
+  const polygon = [{ x: 10, y: 20 }, { x: 50, y: 10 }, { x: 40, y: 60 }, { x: 20, y: 50 }];
+  const resized = resizePolygonFromHandle(polygon, 'se', { x: 90, y: 110 }, { width: 120, height: 120 });
+  assert.deepEqual(resized, [{ x: 10, y: 30 }, { x: 90, y: 10 }, { x: 70, y: 110 }, { x: 30, y: 90 }]);
+  assert.deepEqual(getPolygonBounds(resized), { x: 10, y: 10, width: 80, height: 100 });
 });

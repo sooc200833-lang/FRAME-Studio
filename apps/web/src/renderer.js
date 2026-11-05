@@ -1,6 +1,7 @@
 import { Application, Graphics, Sprite, Texture } from 'pixi.js';
 import { applyBrushTexture } from './brush/brush-engine.js';
 import { getVectorGraphicsCacheEntry, pruneVectorGraphicsCache } from './renderer/vector-graphics-cache.js';
+import { getPolygonBounds, getPolygonTransformHandles } from './selection/selection.js';
 
 export class PixiStageRenderer {
   constructor(width, height) {
@@ -217,6 +218,29 @@ export class PixiStageRenderer {
         drawDash(selectionPolygon[index], selectionPolygon[(index + 1) % selectionPolygon.length]);
       }
       outline.stroke({ color: 0x268cff, width: 1.7, alpha: 0.98 });
+
+      const bounds = getPolygonBounds(selectionPolygon);
+      const handles = getPolygonTransformHandles(selectionPolygon);
+      if (bounds && handles.length) {
+        const left = bounds.x, top = bounds.y;
+        const right = left + bounds.width, bottom = top + bounds.height;
+        drawDash({ x: left, y: top }, { x: right, y: top });
+        drawDash({ x: right, y: top }, { x: right, y: bottom });
+        drawDash({ x: right, y: bottom }, { x: left, y: bottom });
+        drawDash({ x: left, y: bottom }, { x: left, y: top });
+        const rotation = handles.find(handle => handle.id === 'rotate');
+        if (rotation) {
+          outline.moveTo(rotation.x, top).lineTo(rotation.x, rotation.y + 7);
+          outline.stroke({ color: 0x268cff, width: 1.3, alpha: 0.9 });
+        }
+        for (const handle of handles) {
+          const isRotation = handle.id === 'rotate';
+          outline.circle(handle.x, handle.y, isRotation ? 9 : 8)
+            .fill(isRotation ? 0xe5b85c : 0xf8fafc)
+            .stroke({ color: isRotation ? 0x24242a : 0x268cff, width: isRotation ? 1.5 : 1.7 });
+        }
+      }
+
       this.app.stage.addChildAt(outline, this.app.stage.children.length - 1);
       this.strokeGraphics.push(outline);
     }
