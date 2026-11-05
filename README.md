@@ -2,19 +2,22 @@
 
 2D animation and 3D line-art studio, designed iPad-first with a dark interface.
 
-## Product direction
+## Current web prototype
 
-FRAME Studio is an original drawing and animation application inspired by the broad workflow of modern digital-art tools. Its focus is comic production, editable line art, area-based coloring, line animation, and 3D-to-2D workflows.
+- PixiJS 8.20.1 GPU-backed stage renderer.
+- Canvas-backed paint layers for raster pen, eraser, and connected-region fill.
+- Separate vector line objects for the vector pen.
+- Individual vector line selection, movement, color/width editing, and deletion.
+- Vector strokes participate in fill-boundary compositing and PNG export.
+- Node.js unit tests for fill and vector-line algorithms.
 
-## Current prototype
+### Key files
 
-The web prototype now uses **PixiJS 8.20.1** for GPU-backed stage presentation. Editable paint buffers remain independent, and the connected-region fill algorithm lives in a renderer-independent module.
-
-- PixiJS stage renderer adapter: `apps/web/src/renderer.js`
-- Drawing tools and fill engine: `apps/web/src/main.js`
-- Web entry point: `apps/web/index.html`
-
-The renderer is deliberately isolated so the document and paint model can later be reused by native iPad and other front ends.
+- PixiJS renderer: `apps/web/src/renderer.js`
+- Drawing interaction and document state: `apps/web/src/main.js`
+- Flood-fill engine: `apps/web/src/fill/flood-fill.js`
+- Vector-line engine: `apps/web/src/line/line-engine.js`
+- Tests: `tests/`
 
 ## Run locally
 
@@ -23,42 +26,38 @@ Requirements: Node.js 20.19+ or 22.12+.
 ```bash
 npm install
 npm run dev
-# Run fill-engine unit tests in a separate terminal
-npm test
 ```
 
-Open the local URL printed by Vite. To create a production build:
+Run unit tests and production build:
 
 ```bash
+npm test
 npm run build
-npm run preview
 ```
 
-## Development status
+## Current development status
 
-- [x] Private GitHub repository connected
-- [x] Vite project structure established
-- [x] PixiJS stage renderer integrated
-- [x] Separate line-art and paint layers
-- [x] Visible-layer composite used for flood-fill boundaries
-- [x] Fill tolerance control
-- [x] Extract renderer-independent connected-region fill module
-- [x] Add protected edge expansion beneath upper line-art layers
-- [x] Add unit tests for region detection, tolerance, and edge protection
-- [ ] Improve color-distance metrics and anti-alias edge quality with visual fixtures
-- [ ] Add automated browser tests for drawing, fill, undo, and export
-- [ ] Build independent vector line selection and Line Boil
-- [ ] Add comic tone and filter tools
-- [ ] Add timeline and keyframe animation
-- [ ] Add 3D primitive assembly and 2D line conversion
-- [ ] Add secure server-side GPT/Claude API integration
-- [ ] Develop native iPad drawing support
+- [x] Vite project and PixiJS renderer
+- [x] Raster paint layers and connected-region fill
+- [x] Protected edge expansion beneath upper line art
+- [x] Renderer-independent fill module and unit tests
+- [x] Independent vector strokes with stable IDs
+- [x] Individual line selection and movement
+- [x] Selected line color/width editing and deletion
+- [x] Vector lines included in fill boundaries and PNG export
+- [ ] Pressure-sensitive vector strokes and brush textures
+- [ ] Line Boil animation and per-line animation controls
+- [ ] Comic tone and filter tools
+- [ ] Timeline, keyframes, and onion skin
+- [ ] 3D primitive assembly and 2D line conversion
+- [ ] Secure server-side GPT/Claude API integration
+- [ ] Native iPad Pencil input and performance work
 
 ## Architecture principles
 
-1. Keep the drawing document format independent of the web and native iPad front ends.
+1. Keep the project document independent of the web and native iPad front ends.
 2. Separate rendering, fill, line, tone, animation, and 3D modules.
 3. Keep provider API keys on a server; never commit secrets to this repository.
-4. Prefer small, testable changes with a clear commit history.
+4. Preserve third-party license notices and test each module independently.
 
 See [docs/roadmap.md](docs/roadmap.md), [docs/architecture.md](docs/architecture.md), and [docs/open-source.md](docs/open-source.md). Third-party dependency rules are tracked in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
