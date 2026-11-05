@@ -5,7 +5,7 @@ import { expandRegionMask, findConnectedRegion } from './fill/flood-fill.js';
 import { animateLineStrokes, lineBoilPhase } from './line/line-boil.js';
 import { activeFrame, addFrame, createTimeline, deleteFrame, frameAtTime, getOnionSkin, selectFrame, updateFrameCels, updateFrameStrokes } from './animation/timeline.js';
 import { normalizeRasterCels } from './animation/frame-cels.js';
-import { containsSelectionPoint, moveSelectionRect, normalizeSelectionRect, pointInPolygon, resizeSelectionRect, resolveSelectionTargets, transformPolygon, translatePolygon } from './selection/selection.js';
+import { containsSelectionPoint, moveSelectionRect, normalizeSelectionRect, lineStrokeIntersectsPolygon, pointInPolygon, resizeSelectionRect, resolveSelectionTargets, transformLineStrokes, transformPolygon, translatePolygon } from './selection/selection.js';
 import {
   createLineStroke,
   hitTestLineStrokes,
@@ -132,6 +132,12 @@ async function restoreGroupedTransform(record, direction) {
     const context = entry.layer.canvas.getContext('2d');
     context.clearRect(0, 0, W, H);
     context.drawImage(image, 0, 0);
+  }
+  if (record.vectorBefore && record.vectorAfter) {
+    const snapshot = direction === 'undo' ? record.vectorBefore : record.vectorAfter;
+    const restored = JSON.parse(snapshot);
+    vectorStrokes.splice(0, vectorStrokes.length, ...restored);
+    selectedStrokeId = null;
   }
   saveActiveFrame();
   render(layers.map((_, index) => index));
@@ -608,6 +614,11 @@ function applySelectionTransform() {
   if (!targets.length) return;
 
   const transformedPolygon = transformPolygon(polygon, angle, scale);
+  const vectorBefore = lineSnapshot();
+  const hasSelectedVectors = vectorStrokes.some(stroke => lineStrokeIntersectsPolygon(stroke, polygon));
+  const transformedVectors = hasSelectedVectors
+    ? transformLineStrokes(vectorStrokes, polygon, angle, scale)
+    : null;
   const center = polygon.reduce((sum, point) => ({
     x: sum.x + point.x / polygon.length,
     y: sum.y + point.y / polygon.length,
@@ -651,8 +662,15 @@ function applySelectionTransform() {
     context.restore();
     context.drawImage(transformed, 0, 0);
   }
-  groupedTransformUndo = targets.length > 1 ? {
+  if (hasSelectedVectors) {
+    vectorStrokes.splice(0, vectorStrokes.length, ...transformedVectors);
+    selectedStrokeId = null;
+  }
+  const vectorAfter = hasSelectedVectors ? lineSnapshot() : null;
+  groupedTransformUndo = (targets.length > 1 || hasSelectedVectors) ? {
     entries: prepared.map(({ layer, before }) => ({ layer, before, after: layer.canvas.toDataURL('image/png') })),
+    vectorBefore: hasSelectedVectors ? vectorBefore : null,
+    vectorAfter,
   } : null;
   groupedTransformRedo = null;
 
