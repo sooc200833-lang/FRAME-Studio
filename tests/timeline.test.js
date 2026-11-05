@@ -82,3 +82,17 @@ test('per-frame exposure duration can be changed independently and is clamped', 
   assert.equal(second.durationMs, 20);
   assert.equal(setFrameDuration(timeline, 'missing', 100), false);
 });
+
+test('moving frames changes order without changing frame identity or exposure', () => {
+  const timeline = createTimeline({ fps: 12 });
+  const first = activeFrame(timeline);
+  const second = addFrame(timeline);
+  const third = addFrame(timeline);
+  setFrameDuration(timeline, first.id, 120);
+  setFrameDuration(timeline, second.id, 240);
+  assert.equal(moveFrame(timeline, third.id, -1), true);
+  assert.deepEqual(timeline.frames.map(frame => frame.id), [first.id, third.id, second.id]);
+  assert.equal(timeline.frames[0].durationMs, 120);
+  assert.equal(timeline.frames[2].durationMs, 240);
+  assert.equal(moveFrame(timeline, first.id, -1), false);
+});
