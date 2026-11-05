@@ -1,21 +1,24 @@
 # FRAME Studio Roadmap
 
 ## Phase 0 — Repository foundation
-- Establish project goals and module boundaries.
-- Import the existing browser prototype and verify its behavior before modifying it.
-- Add a repeatable test and release process.
+- [x] Establish project goals and module boundaries.
+- [x] Create a Vite-based web workspace.
+- [x] Add a PixiJS renderer adapter with Canvas-backed paint buffers.
+- [ ] Add a repeatable automated test and release process.
 
 ## Phase 1 — Drawing and area fill
-- Composite visible layers to identify color boundaries.
-- Flood-fill the connected region at the tapped pixel.
-- Write the result to the active paint layer without modifying source line art.
-- Expose tolerance and edge behavior settings.
-- Add undo/redo coverage for fill operations.
+- [x] Composite visible layers to identify color boundaries.
+- [x] Flood-fill the connected region at the tapped pixel.
+- [x] Write the result to the active paint layer without modifying source line art.
+- [x] Expose fill tolerance.
+- [ ] Implement edge expansion and anti-alias cleanup.
+- [ ] Add undo/redo coverage and automated fill tests.
 
 ## Phase 2 — Line Studio
 - Represent line objects independently where possible.
 - Support selection, transforms, width, texture, and stroke properties.
 - Add controllable Line Boil animation with stable line identity.
+- Evaluate Paper.js behind a line-engine adapter.
 
 ## Phase 3 — Tone Studio
 - Add halftone patterns, tone density, gradients, and comic-oriented filters.
@@ -29,6 +32,7 @@
 - Combine primitives into editable figure-like assemblies.
 - Convert 3D geometry into adjustable 2D line art.
 - Keep 3D source geometry editable after line conversion.
+- Evaluate Three.js as an isolated 3D viewport.
 
 ## Phase 6 — AI Studio
 - Support GPT and Claude through a server-side API proxy.
@@ -41,4 +45,5 @@
 - Maintain compatibility with the shared project document format.
 
 ## Current next action
-Import and inspect the existing v0.1 prototype. Do not mark flood fill complete until it is implemented and tested with enclosed regions, open boundaries, and line art on a separate visible layer.
+
+Run the Vite prototype on a desktop browser and an iPad browser. Verify pen, eraser, line, layer visibility, fill boundaries, undo/redo, and PNG export. Do not mark edge expansion complete until it has dedicated tests for antialiased and imperfect line boundaries.
