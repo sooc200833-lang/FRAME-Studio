@@ -1,7 +1,7 @@
 import './styles.css';
 import { PixiStageRenderer } from './renderer.js';
 import { expandRegionMask, findConnectedRegion } from './fill/flood-fill.js';
-import { animateLineStrokes, lineBoilPhase } from './line/line-boil.js';
+import { animateLineStrokes, lineBoilPhase } from './line/line-boil.js';\nimport { activeFrame, addFrame, createTimeline, deleteFrame, getOnionSkin, selectFrame, updateFrameStrokes } from './animation/timeline.js';
 import {
   createLineStroke,
   hitTestLineStrokes,
@@ -34,7 +34,7 @@ let lastAnimationPaint = 0;
 const palette = ['#24242a', '#ffffff', '#e95d4f', '#e8b64f', '#6c9c85', '#6f86c9', '#b78bc7'];
 const vectorStrokes = [];
 const lineUndo = [];
-const lineRedo = [];
+const lineRedo = [];\nconst timeline = createTimeline({ fps: 12 });\nlet onionEnabled = true;\nlet loadingFrame = false;
 
 function makeLayer(name) {
   const canvas = document.createElement('canvas');
@@ -267,7 +267,7 @@ function animationTick(timestamp) {
       amplitude: Number(document.getElementById('boilAmplitude').value),
       frequency: Number(document.getElementById('boilFrequency').value),
     });
-    renderer.sync(layers, [], displayStrokes, selectedStrokeId);
+    renderer.sync(layers, [], displayStrokes, selectedStrokeId, onionEnabled ? getOnionSkin(timeline) : []);
     lastAnimationPaint = timestamp;
   }
   animationFrame = requestAnimationFrame(animationTick);
