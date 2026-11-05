@@ -66,7 +66,16 @@ export function coalescedPointerEvents(event) {
         coordinate(last, 'clientX', 'x') === coordinate(event, 'clientX', 'x') &&
         coordinate(last, 'clientY', 'y') === coordinate(event, 'clientY', 'y');
       const samePressure = Number(last?.pressure ?? 0.5) === Number(event?.pressure ?? 0.5);
-      return samePosition && samePressure ? samples : [...samples, event];
+      if (samePosition && samePressure) return samples;
+
+      // PointerEvent fields are commonly inherited accessors, so object spread
+      // drops them. Snapshot the fields consumed by the drawing pipeline and
+      // deliberately omit getCoalescedEvents itself.
+      const dispatched = { ...event };
+      for (const key of ['clientX', 'clientY', 'pressure', 'pointerType']) {
+        if (event[key] !== undefined) dispatched[key] = event[key];
+      }
+      return [...samples, dispatched];
     }
   }
   return [event];
