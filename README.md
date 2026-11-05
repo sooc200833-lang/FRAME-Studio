@@ -27,4 +27,4 @@ FRAME Studio is an original drawing and animation application inspired by the br
 3. Keep provider API keys on a server; never commit secrets to this repository.
 4. Prefer small, testable changes with a clear commit history.
 
-See [docs/roadmap.md](docs/roadmap.md) and [docs/architecture.md](docs/architecture.md).
+See [docs/roadmap.md](docs/roadmap.md), [docs/architecture.md](docs/architecture.md), and [docs/open-source.md](docs/open-source.md). Third-party dependency rules are tracked in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
