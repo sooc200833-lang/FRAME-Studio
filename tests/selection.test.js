@@ -36,6 +36,13 @@ test('translates freeform polygon while keeping it inside canvas bounds', () => 
   ]);
 });
 
+test('preserves lasso polygon shape and clamps movement at the top-left canvas edge', () => {
+  const polygon = [{ x: 12, y: 18 }, { x: 42, y: 18 }, { x: 32, y: 48 }];
+  const moved = translatePolygon(polygon, -100, -100, { width: 100, height: 100 });
+  assert.deepEqual(moved, [{ x: 0, y: 0 }, { x: 30, y: 0 }, { x: 20, y: 30 }]);
+  assert.deepEqual(polygon, [{ x: 12, y: 18 }, { x: 42, y: 18 }, { x: 32, y: 48 }]);
+});
+
 test('rotates a polygon around its centroid', () => {
   const polygon = [{ x: 0, y: 0 }, { x: 20, y: 0 }, { x: 20, y: 10 }, { x: 0, y: 10 }];
   const rotated = transformPolygon(polygon, 90, 1);
