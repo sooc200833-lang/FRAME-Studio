@@ -8,7 +8,7 @@ import { animateLineStrokes, lineBoilPhase } from './line/line-boil.js';
 import { activeFrame, addFrame, createTimeline, deleteFrame, frameAtTime, getOnionSkin, selectFrame, updateFrameCels, updateFrameStrokes, updateFrameTransformCels } from './animation/timeline.js';
 import { normalizeRasterCels, normalizeRasterTransformCels } from './animation/frame-cels.js';
 import { cloneRasterTransformRecords, composeRasterTransformStack, createTranslationMatrix, createRotationMatrix, rasterizeRasterTransformStack } from './selection/raster-transform.js';
-import { containsSelectionPoint, hitTestSelectionHandle, moveSelectionRect, normalizeSelectionRect, lineStrokeIntersectsPolygon, pointInPolygon, resizeSelectionRectFromHandle, resolveSelectionTargets, transformLineStrokes, transformPolygon, translatePolygon, getSelectionPreviewTransform, getPolygonBounds, getPolygonCentroid, hitTestPolygonTransformHandle, resizePolygonFromHandle } from './selection/selection.js';
+import { containsSelectionPoint, hitTestSelectionHandle, moveSelectionRect, normalizeSelectionRect, lineStrokeIntersectsPolygon, pointInPolygon, resizeSelectionRectFromHandle, resolveSelectionTargets, transformLineStrokes, transformLineStrokesByMatrix, transformPolygon, translatePolygon, getSelectionPreviewTransform, getPolygonBounds, getPolygonCentroid, hitTestPolygonTransformHandle, resizePolygonFromHandle } from './selection/selection.js';
 import {
   createLineStroke,
   hitTestLineStrokes,
@@ -1806,7 +1806,7 @@ function bindCanvasEvents() {
         selectionRect = { ...drag.originalRect };
         selectionPolygon = null;
       }
-      if (drag.mode === 'rotate' && Math.abs(drag.rotation || 0) > 0.1 && drag.sources?.length && drag.originalRect) {
+      if (drag.mode === 'rotate' && Math.abs(drag.rotation || 0) > 0.1 && drag.originalRect) {
         const original = drag.originalRect;
         const center = { x: original.x + original.width / 2, y: original.y + original.height / 2 };
         commitSelectionDragSources(drag, () => getSelectionDragTransform(drag))
