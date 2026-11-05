@@ -221,3 +221,30 @@ export function getSelectionPreviewTransform(originalRect, targetRect = null, ro
     rotationRadians: rotationDegrees * Math.PI / 180,
   };
 }
+
+
+/**
+ * Apply an affine selection transform to vector strokes intersecting a polygon.
+ * Matrix follows the Canvas2D [a, b, c, d, e, f] convention.
+ */
+export function transformLineStrokesByMatrix(strokes, polygon, matrix) {
+  if (!Array.isArray(matrix) || matrix.length !== 6 || !matrix.every(Number.isFinite)) {
+    throw new TypeError('A finite six-value affine matrix is required.');
+  }
+  const [a, b, c, d, e, f] = matrix;
+  const determinant = a * d - b * c;
+  const widthScale = Math.sqrt(Math.abs(determinant));
+  const selectedIds = new Set(
+    strokes.filter(stroke => lineStrokeIntersectsPolygon(stroke, polygon)).map(stroke => stroke.id),
+  );
+  return strokes.map(stroke => {
+    const points = stroke.points.map(point => selectedIds.has(stroke.id)
+      ? { x: a * point.x + c * point.y + e, y: b * point.x + d * point.y + f }
+      : { x: point.x, y: point.y });
+    return {
+      ...stroke,
+      width: selectedIds.has(stroke.id) ? Math.max(0.5, stroke.width * widthScale) : stroke.width,
+      points,
+    };
+  });
+}
