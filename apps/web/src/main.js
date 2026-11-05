@@ -1817,6 +1817,7 @@ function bindCanvasEvents() {
         selectionRect = { ...drag.originalRect };
         selectionPolygon = null;
       }
+      if (drag.mode !== 'new') updateSelectionDragPreview(drag);
       if (drag.mode === 'rotate' && Math.abs(drag.rotation || 0) > 0.1 && drag.originalRect) {
         const original = drag.originalRect;
         const center = { x: original.x + original.width / 2, y: original.y + original.height / 2 };
