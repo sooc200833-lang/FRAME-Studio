@@ -12,9 +12,39 @@ function smoothStep(value) {
   return t * t * (3 - 2 * t);
 }
 
+function buildArcLengths(points) {
+  const lengths = new Float64Array(points.length);
+  for (let index = 1; index < points.length; index++) {
+    lengths[index] = lengths[index - 1] + Math.hypot(
+      points[index].x - points[index - 1].x,
+      points[index].y - points[index - 1].y,
+    );
+  }
+  return lengths;
+}
+
+function tangentAt(points, index) {
+  const point = points[index];
+  let before = index - 1;
+  let after = index + 1;
+
+  while (before >= 0 && Math.hypot(point.x - points[before].x, point.y - points[before].y) < 1e-4) before--;
+  while (after < points.length && Math.hypot(points[after].x - point.x, points[after].y - point.y) < 1e-4) after++;
+
+  if (before < 0 && after >= points.length) return { x: 1, y: 0 };
+  if (before < 0) before = index;
+  if (after >= points.length) after = index;
+
+  let dx = points[after].x - points[before].x;
+  let dy = points[after].y - points[before].y;
+  const length = Math.hypot(dx, dy) || 1;
+  return { x: dx / length, y: dy / length };
+}
+
 /**
- * Returns a temporary animated copy. The source stroke is never mutated,
- * so animation can be paused or exported from the original geometry.
+ * Builds a non-destructive line-boil preview in the stroke's local normal
+ * direction. The wave is parameterized by travelled distance, not point
+ * index, so its shape does not change when input sampling density changes.
  */
 export function computeLineBoilPoints(stroke, {
   phase = 0,
@@ -27,23 +57,28 @@ export function computeLineBoilPoints(stroke, {
 
   const safeAmplitude = Math.max(0, Math.min(24, Number(amplitude) || 0));
   const safeFrequency = Math.max(0.005, Math.min(0.5, Number(frequency) || 0.08));
+  if (safeAmplitude === 0) return points.map(point => ({ x: point.x, y: point.y }));
+
+  const lengths = buildArcLengths(points);
+  const totalLength = lengths[lengths.length - 1];
+  if (totalLength < 1e-4) return points.map(point => ({ x: point.x, y: point.y }));
+
   const seedPhase = (seed % 10000) / 997;
-  const lastIndex = points.length - 1;
+  const spatialFrequency = safeFrequency * 0.075;
+  const endpointGuard = Math.min(48, Math.max(12, totalLength * 0.14));
 
   return points.map((point, index) => {
-    const before = points[Math.max(0, index - 1)];
-    const after = points[Math.min(lastIndex, index + 1)];
-    const dx = after.x - before.x;
-    const dy = after.y - before.y;
-    const length = Math.hypot(dx, dy) || 1;
-    const normalX = -dy / length;
-    const normalY = dx / length;
-    const along = index / lastIndex;
-    const endpointGuard = smoothStep(Math.min(1, along * 5)) *
-      smoothStep(Math.min(1, (1 - along) * 5));
-    const waveA = Math.sin(index * safeFrequency * 2.1 + phase + seedPhase);
-    const waveB = Math.sin(index * safeFrequency * 0.83 - phase * 1.37 + seedPhase * 2.3);
-    const displacement = (waveA * 0.68 + waveB * 0.32) * safeAmplitude * endpointGuard;
+    const tangent = tangentAt(points, index);
+    const normalX = -tangent.y;
+    const normalY = tangent.x;
+    const distance = lengths[index];
+    const envelope = smoothStep(distance / endpointGuard) *
+      smoothStep((totalLength - distance) / endpointGuard);
+
+    const waveA = Math.sin(distance * spatialFrequency + phase + seedPhase);
+    const waveB = Math.sin(distance * spatialFrequency * 0.47 - phase * 1.31 + seedPhase * 2.3);
+    const waveC = Math.sin(distance * spatialFrequency * 1.91 + phase * 0.73 - seedPhase * 1.7);
+    const displacement = (waveA * 0.52 + waveB * 0.31 + waveC * 0.17) * safeAmplitude * envelope;
 
     return {
       x: point.x + normalX * displacement,
