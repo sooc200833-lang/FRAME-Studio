@@ -1817,7 +1817,7 @@ function bindCanvasEvents() {
         selectionRect = { ...drag.originalRect };
         selectionPolygon = null;
       }
-      if (drag.mode === 'rotate' && Math.abs(drag.rotation || 0) > 0.1 && drag.originalRect)
+      if (drag.mode === 'rotate' && Math.abs(drag.rotation || 0) > 0.1 && drag.originalRect) {
         const original = drag.originalRect;
         const center = { x: original.x + original.width / 2, y: original.y + original.height / 2 };
         commitSelectionDragSources(drag, () => getSelectionDragTransform(drag))
@@ -1829,6 +1829,7 @@ function bindCanvasEvents() {
         ];
         selectionRect = null;
         selectionPolygon = transformPolygon(polygon, drag.rotation, 1);
+      }
       }
       if (drag.mode === 'move' || drag.mode === 'resize') {
         const original = drag.originalRect;
