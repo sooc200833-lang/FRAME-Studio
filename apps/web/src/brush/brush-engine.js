@@ -174,10 +174,11 @@ export function applyBrushTexture(context, outline, samples, options = {}) {
   context.clip();
 
   const preset = options.preset;
+  const baseAlpha = context.globalAlpha;
   if (preset === 'pencil') {
     context.globalCompositeOperation = 'destination-out';
     for (const mark of marks) {
-      context.globalAlpha = mark.alpha;
+      context.globalAlpha = baseAlpha * mark.alpha;
       context.beginPath();
       context.ellipse(mark.x, mark.y, mark.radius * 1.45, mark.radius, 0, 0, Math.PI * 2);
       context.fill();
@@ -186,7 +187,7 @@ export function applyBrushTexture(context, outline, samples, options = {}) {
     context.globalCompositeOperation = 'source-atop';
     context.strokeStyle = options.color || '#24242a';
     for (const mark of marks) {
-      context.globalAlpha = mark.alpha;
+      context.globalAlpha = baseAlpha * mark.alpha;
       context.lineWidth = mark.width;
       context.lineCap = 'round';
       context.beginPath();
