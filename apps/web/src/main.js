@@ -1419,21 +1419,14 @@ function bindCanvasEvents() {
         : null;
       const inside = selectionPolygon?.length >= 3 && pointInPolygon(point, selectionPolygon);
       if (handle || inside) {
-        const sourceCanvas = document.createElement('canvas');
-        sourceCanvas.width = W; sourceCanvas.height = H;
-        const context = sourceCanvas.getContext('2d');
-        context.save();
-        context.beginPath();
-        selectionPolygon.forEach((p, index) => index ? context.lineTo(p.x, p.y) : context.moveTo(p.x, p.y));
-        context.closePath();
-        context.clip();
-        context.drawImage(layers[active].canvas, 0, 0);
-        context.restore();
         const originalPolygon = selectionPolygon.map(p => ({ ...p }));
+        const sources = capturePolygonLayerSources(originalPolygon);
+        const activeSource = sources.find(source => source.layer === layers[active]) || sources[0];
         const center = getPolygonCentroid(originalPolygon);
         const mode = handle === 'rotate' ? 'lassoRotate' : (handle ? 'lassoResize' : 'lassoMove');
         selectionDrag = {
-          mode, handle, start: point, originalPolygon, sourceCanvas,
+          mode, handle, start: point, originalPolygon, sources,
+          sourceCanvas: activeSource?.sourceCanvas,
           startAngle: Math.atan2(point.y - center.y, point.x - center.x),
           rotation: 0,
         };
@@ -1456,13 +1449,13 @@ function bindCanvasEvents() {
         else if (handle) mode = 'resize';
         else if (containsSelectionPoint(existing, point)) mode = 'move';
       }
-      const sourceCanvas = document.createElement('canvas');
-      if (mode !== 'new' && existing) {
-        sourceCanvas.width = Math.max(1, Math.ceil(existing.width));
-        sourceCanvas.height = Math.max(1, Math.ceil(existing.height));
-        sourceCanvas.getContext('2d').drawImage(layers[active].canvas, existing.x, existing.y, existing.width, existing.height, 0, 0, sourceCanvas.width, sourceCanvas.height);
-      }
-      selectionDrag = { mode, handle, start: point, originalRect: existing ? { ...existing } : null, sourceCanvas, startAngle: existing ? Math.atan2(point.y - (existing.y + existing.height / 2), point.x - (existing.x + existing.width / 2)) : 0 };
+      const sources = mode !== 'new' && existing ? captureRectLayerSources(existing) : [];
+      const activeSource = sources.find(source => source.layer === layers[active]) || sources[0];
+      selectionDrag = {
+        mode, handle, start: point, originalRect: existing ? { ...existing } : null,
+        sources, sourceCanvas: activeSource?.sourceCanvas,
+        startAngle: existing ? Math.atan2(point.y - (existing.y + existing.height / 2), point.x - (existing.x + existing.width / 2)) : 0,
+      };
       if (mode === 'new') {
         selectionPolygon = null;
         selectionRect = normalizeSelectionRect(point, point);
