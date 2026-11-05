@@ -2,7 +2,7 @@
 
 ## Status
 
-The affine model, transform-stack compositor, and per-frame transform metadata are implemented. The renderer and export/fill composite now read a separate presentation canvas, and frame switching hydrates each transform source. Selection commits are **not yet wired** to append transform records; existing selection gestures remain destructive until that integration lands.
+The affine model, transform-stack compositor, per-frame transform metadata, and selection transform commits are implemented. Lasso and rectangular selection drags plus the inspector angle/scale action append non-destructive transform records. Undo/redo restores transform stacks, and a layer-panel command explicitly rasterizes them. Painting on a transformed layer creates a new layer above it so new marks do not disappear behind the transformed content.
 
 ## Why the current workflow needs a model change
 
@@ -55,9 +55,8 @@ Implemented:
 - `composite()`: fill-boundary and PNG export composites use the presentation canvas, with layer masks applied afterward.
 
 Not yet implemented:
-- Selection drag and inspector transform commits do not yet append transform records.
-- A user-facing rasterize command is not yet exposed.
-- Drawing/eraser behavior while a transform stack is active needs a defined editing workflow before the stack is enabled in the UI.
-- Browser interaction and physical iPad/Apple Pencil testing remain outstanding.
+- Vector strokes are still transformed through their existing editable-object path, not stored in the raster transform stack.
+- The auto-created paint layer is a workflow choice; direct painting into an existing transformed layer requires explicit rasterization first.
+- Browser interaction, long-session performance checks, and physical iPad/Apple Pencil testing remain outstanding.
 
-The next integration must address those editing semantics before enabling non-destructive transforms in normal drawing workflows.
+The next integration should add automated interaction-level coverage and verify transform persistence through layer operations and export in a real browser.
