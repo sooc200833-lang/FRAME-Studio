@@ -155,6 +155,8 @@ function lineSnapshot() {
 }
 
 function commitLineHistory(snapshot) {
+  groupedTransformUndo = null;
+  groupedTransformRedo = null;
   lineUndo.push(snapshot);
   if (lineUndo.length > 50) lineUndo.shift();
   lineRedo.length = 0;
@@ -255,6 +257,8 @@ async function decodeRasterCels(cels) {
 }
 
 async function loadTimelineFrame(frameId, saveCurrent = true) {
+  groupedTransformUndo = null;
+  groupedTransformRedo = null;
   if (saveCurrent && !loadingFrame) saveActiveFrame();
   if (!selectFrame(timeline, frameId)) return;
   const token = ++frameLoadToken;
