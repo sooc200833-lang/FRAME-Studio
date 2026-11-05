@@ -29,6 +29,8 @@ let strokeSamples = [];
 let strokeIsStylus = false;
 let pressureEnabled = true;
 let brushSmoothing = 0.28;
+let brushOpacity = 1;
+let pressureCurve = getBrushPreset('ink').pressureCurve;
 let maskEditing = false;
 let selectionRect = null;
 let selectionPolygon = null;
@@ -1013,7 +1015,20 @@ function bindControls() {
     });
   };
 
-  document.getElementById('brushPreset').onchange = event => { brushPreset = event.target.value; };
+  document.getElementById('brushPreset').onchange = event => {
+    brushPreset = event.target.value;
+    pressureCurve = currentBrushPreset().pressureCurve;
+    document.getElementById('pressureCurve').value = String(Math.round(pressureCurve * 100));
+    document.getElementById('pressureCurveOut').value = pressureCurve.toFixed(2);
+  };
+  document.getElementById('brushOpacity').oninput = event => {
+    brushOpacity = Number(event.target.value) / 100;
+    document.getElementById('brushOpacityOut').value = event.target.value + '%';
+  };
+  document.getElementById('pressureCurve').oninput = event => {
+    pressureCurve = Number(event.target.value) / 100;
+    document.getElementById('pressureCurveOut').value = pressureCurve.toFixed(2);
+  };
   const sizeInput = document.getElementById('size');
   const sizeOutput = document.getElementById('sizeOut');
   const sizePresets = document.getElementById('sizePresets');
@@ -1201,9 +1216,10 @@ function bindCanvasEvents() {
       const outline = createBrushOutline(strokeSamples, {
         size, stylus: strokeIsStylus, pressureEnabled,
         preset: brushPreset,
+        pressureCurve,
         complete: false,
       });
-      renderer.previewPolygon(outline, maskEditing ? (tool === 'eraser' ? 0xffffff : 0x171719) : (tool === 'eraser' ? 0xf4f0e8 : Number.parseInt(color.slice(1), 16)), maskEditing || tool === 'eraser' ? 0.9 : currentBrushPreset().opacity);
+      renderer.previewPolygon(outline, maskEditing ? (tool === 'eraser' ? 0xffffff : 0x171719) : (tool === 'eraser' ? 0xf4f0e8 : Number.parseInt(color.slice(1), 16)), maskEditing || tool === 'eraser' ? 0.9 : currentBrushPreset().opacity * brushOpacity);
     }
   });
 
@@ -1401,6 +1417,7 @@ function bindCanvasEvents() {
       const outline = createBrushOutline(strokeSamples, {
         size, stylus: strokeIsStylus, pressureEnabled,
         preset: brushPreset,
+        pressureCurve,
         complete: true,
       });
       if (outline.length >= 3) {
