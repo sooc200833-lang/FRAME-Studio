@@ -69,3 +69,8 @@ output{color:var(--accent);min-width:35px;text-align:right}
 .layer-actions button:disabled{opacity:.35;cursor:not-allowed}
 #layerBlend{max-width:125px;background:#29292d;color:var(--text);border:1px solid var(--line);border-radius:6px;padding:5px}
 #layerOpacity{accent-color:var(--accent)}
+
+/* Stylus and stroke quality controls */
+.check-field{display:flex;align-items:center;gap:8px;margin:10px 0;color:var(--text);font-size:12px}
+.check-field input{accent-color:var(--accent);width:15px;height:15px}
+#brushSmoothing{accent-color:var(--accent)}
