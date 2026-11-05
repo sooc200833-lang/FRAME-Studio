@@ -69,3 +69,14 @@ test('frameAtTime loops through frame durations', () => {
   assert.equal(frameAtTime(timeline, 150).id, second.id);
   assert.equal(frameAtTime(timeline, 350).id, 'frame-1');
 });
+
+test('onion skin exposes read-only frame stroke references without deep cloning geometry', () => {
+  const timeline = createTimeline();
+  updateFrameStrokes(timeline, 'frame-1', [line]);
+  const middle = addFrame(timeline, { duplicate: true });
+  addFrame(timeline, { duplicate: true });
+  selectFrame(timeline, middle.id);
+  const ghosts = getOnionSkin(timeline);
+  assert.equal(ghosts[0].strokes, timeline.frames[0].strokes);
+  assert.equal(ghosts[0].strokes[0].points, timeline.frames[0].strokes[0].points);
+});
