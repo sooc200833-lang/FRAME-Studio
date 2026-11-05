@@ -10,6 +10,7 @@ import {
   normalizePointerPressure,
   pressureToWidth,
   stabilizePoint,
+  resolveBrushStrokeOptions,
 } from '../apps/web/src/brush/brush-engine.js';
 
 test('mouse and touch use a stable neutral pressure', () => {
@@ -150,4 +151,38 @@ test('texture painting clips marks to the brush outline and restores context', (
   assert.equal(calls[0], 'save');
   assert.equal(calls.at(-1), 'restore');
   assert.equal(context.globalAlpha, 0.6);
+});
+
+test('coalesced pointer samples preserve inherited event coordinates and final sample', () => {
+  const sample = { clientX: 10, clientY: 20, pressure: 0.4, pointerType: 'pen' };
+  const prototype = { clientX: 30, clientY: 40, pressure: 0.8, pointerType: 'pen' };
+  const event = Object.assign(Object.create(prototype), {
+    getCoalescedEvents: () => [sample],
+  });
+  const result = coalescedPointerEvents(event);
+  assert.equal(result.length, 2);
+  assert.equal(result[1].clientX, 30);
+  assert.equal(result[1].clientY, 40);
+  assert.equal(result[1].pressure, 0.8);
+  assert.equal(result[1].pointerType, 'pen');
+  assert.equal('getCoalescedEvents' in result[1], false);
+});
+
+test('canonical brush options keep live preview and committed geometry identical', () => {
+  for (const preset of ['pencil', 'ink', 'marker', 'brush']) {
+    const options = {
+      size: 17,
+      stylus: true,
+      pressureEnabled: true,
+      preset,
+      pressureCurve: 1.12,
+      smoothing: getBrushPreset(preset).smoothing,
+      streamline: 0.37,
+      complete: true,
+    };
+    assert.deepEqual(
+      resolveBrushStrokeOptions(options),
+      resolveBrushStrokeOptions({ ...options }),
+    );
+  }
 });
