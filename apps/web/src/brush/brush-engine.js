@@ -75,6 +75,7 @@ export function coalescedPointerEvents(event) {
       // drops them. Snapshot the fields consumed by the drawing pipeline and
       // deliberately omit getCoalescedEvents itself.
       const dispatched = { ...event };
+      delete dispatched.getCoalescedEvents;
       for (const key of ['clientX', 'clientY', 'pressure', 'pointerType']) {
         if (event[key] !== undefined) dispatched[key] = event[key];
       }
