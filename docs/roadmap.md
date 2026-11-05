@@ -22,7 +22,9 @@
 - [x] Edit selected stroke color and width; delete selected strokes.
 - [x] Include vector strokes in fill-boundary composites and PNG export.
 - [ ] Add per-line texture and pressure profiles.
-- [ ] Add controllable Line Boil animation with stable line identity.
+- [x] Add deterministic Line Boil deformation with stable per-line phase seeds.
+- [x] Add live preview controls for amplitude, pattern frequency, and playback speed.
+- [ ] Add per-line animation settings, frame caching, and timeline keyframes.
 - [ ] Evaluate Paper.js behind a line-engine adapter.
 
 ## Phase 3 — Tone Studio
