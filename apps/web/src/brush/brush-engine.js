@@ -59,9 +59,57 @@ export function stabilizePoint(previous, current, strength = 0.28) {
 export function coalescedPointerEvents(event) {
   if (typeof event?.getCoalescedEvents === 'function') {
     const samples = event.getCoalescedEvents();
-    if (samples?.length) return samples;
+    if (samples?.length) {
+      const last = samples[samples.length - 1];
+      const coordinate = (sample, primary, fallback) => sample?.[primary] ?? sample?.[fallback];
+      const eventX = coordinate(event, 'clientX', 'x');
+      const eventY = coordinate(event, 'clientY', 'y');
+      if (eventX === undefined && eventY === undefined) return samples;
+      const samePosition =
+        coordinate(last, 'clientX', 'x') === eventX &&
+        coordinate(last, 'clientY', 'y') === eventY;
+      const samePressure = Number(last?.pressure ?? 0.5) === Number(event?.pressure ?? 0.5);
+      if (samePosition && samePressure) return samples;
+
+      // PointerEvent fields are commonly inherited accessors, so object spread
+      // drops them. Snapshot the fields consumed by the drawing pipeline and
+      // deliberately omit getCoalescedEvents itself.
+      const dispatched = { ...event };
+      delete dispatched.getCoalescedEvents;
+      for (const key of ['clientX', 'clientY', 'pressure', 'pointerType']) {
+        if (event[key] !== undefined) dispatched[key] = event[key];
+      }
+      return [...samples, dispatched];
+    }
   }
   return [event];
+}
+
+/**
+ * Canonical stroke options shared by live preview and committed rendering.
+ * Keeping this resolver in one place prevents preview/commit geometry drift.
+ */
+export function resolveBrushStrokeOptions({
+  size = 7,
+  stylus = false,
+  pressureEnabled = true,
+  preset = 'ink',
+  pressureCurve,
+  smoothing,
+  streamline,
+  complete = false,
+} = {}) {
+  const profile = getBrushPreset(preset);
+  return {
+    size,
+    stylus,
+    pressureEnabled,
+    preset,
+    pressureCurve: pressureCurve ?? profile.pressureCurve,
+    smoothing: smoothing ?? profile.smoothing,
+    streamline: streamline ?? profile.streamline,
+    complete: Boolean(complete),
+  };
 }
 
 /**
