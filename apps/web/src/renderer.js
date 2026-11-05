@@ -117,6 +117,18 @@ export class PixiStageRenderer {
     this.previewStroke([from, to], color, width);
   }
 
+  previewPolygon(points, color, alpha = 1) {
+    if (!this.preview) return;
+    this.preview.clear();
+    if (!points || points.length < 3) return;
+    this.preview.moveTo(points[0][0], points[0][1]);
+    for (let index = 1; index < points.length; index++) {
+      this.preview.lineTo(points[index][0], points[index][1]);
+    }
+    this.preview.closePath();
+    this.preview.fill({ color, alpha });
+  }
+
   clearPreview() {
     this.preview?.clear();
   }
