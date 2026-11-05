@@ -1,5 +1,6 @@
 import './styles.css';
 import { PixiStageRenderer } from './renderer.js';
+import { clientToCanvasPoint, parseCssTransformMatrix } from './viewport/coordinates.js';
 import { applyBrushTexture, coalescedPointerEvents, createBrushOutline, getBrushPreset, normalizePointerPressure, resolveBrushStrokeOptions, stabilizePoint } from './brush/brush-engine.js';
 import { expandRegionMask, findConnectedRegion } from './fill/flood-fill.js';
 import { animateLineStrokes, lineBoilPhase } from './line/line-boil.js';
