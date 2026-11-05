@@ -1,6 +1,8 @@
 import './styles.css';
 import { PixiStageRenderer } from './renderer.js';
 import { applyBrushTexture, coalescedPointerEvents, createBrushOutline, getBrushPreset, normalizePointerPressure, resolveBrushStrokeOptions, stabilizePoint } from './brush/brush-engine.js';
+
+let brushCommitCanvas;
 import { expandRegionMask, findConnectedRegion } from './fill/flood-fill.js';
 import { animateLineStrokes, lineBoilPhase } from './line/line-boil.js';
 import { activeFrame, addFrame, createTimeline, deleteFrame, frameAtTime, getOnionSkin, selectFrame, updateFrameCels, updateFrameStrokes } from './animation/timeline.js';
@@ -1428,21 +1430,46 @@ function bindCanvasEvents() {
           if (targetLayer.maskUndo.length > 25) targetLayer.maskUndo.shift();
           targetLayer.maskRedo = [];
         }
-        context.save();
-        context.globalCompositeOperation = drawingMask ? (tool === 'eraser' ? 'source-over' : 'destination-out') : (tool === 'eraser' ? 'destination-out' : 'source-over');
-        context.globalAlpha = drawingMask ? 1 : (tool === 'eraser' ? 1 : currentBrushPreset().opacity * brushOpacity);
-        context.fillStyle = drawingMask ? '#fff' : color;
-        context.beginPath();
-        context.moveTo(outline[0][0], outline[0][1]);
-        for (let index = 1; index < outline.length; index++) {
-          context.lineTo(outline[index][0], outline[index][1]);
+        const drawOutline = targetContext => {
+          targetContext.beginPath();
+          targetContext.moveTo(outline[0][0], outline[0][1]);
+          for (let index = 1; index < outline.length; index++) targetContext.lineTo(outline[index][0], outline[index][1]);
+          targetContext.closePath();
+          targetContext.fill();
+        };
+
+        const hasTexture = !drawingMask && tool === 'pen' && brushPreset !== 'ink';
+        if (hasTexture) {
+          // Render textured strokes in isolation so grain/cutout operations cannot
+          // alter pixels that were already present on the destination layer.
+          if (!brushCommitCanvas) {
+            brushCommitCanvas = document.createElement('canvas');
+            brushCommitCanvas.width = W;
+            brushCommitCanvas.height = H;
+          }
+          const isolated = brushCommitCanvas.getContext('2d');
+          isolated.clearRect(0, 0, W, H);
+          isolated.save();
+          isolated.globalCompositeOperation = 'source-over';
+          isolated.globalAlpha = currentBrushPreset().opacity * brushOpacity;
+          isolated.fillStyle = color;
+          drawOutline(isolated);
+          applyBrushTexture(isolated, outline, strokeSamples, { preset: brushPreset, size, color });
+          isolated.restore();
+
+          context.save();
+          context.globalCompositeOperation = 'source-over';
+          context.globalAlpha = 1;
+          context.drawImage(brushCommitCanvas, 0, 0);
+          context.restore();
+        } else {
+          context.save();
+          context.globalCompositeOperation = drawingMask ? (tool === 'eraser' ? 'source-over' : 'destination-out') : (tool === 'eraser' ? 'destination-out' : 'source-over');
+          context.globalAlpha = drawingMask ? 1 : (tool === 'eraser' ? 1 : currentBrushPreset().opacity * brushOpacity);
+          context.fillStyle = drawingMask ? '#fff' : color;
+          drawOutline(context);
+          context.restore();
         }
-        context.closePath();
-        context.fill();
-        if (!drawingMask && tool === 'pen') {
-          applyBrushTexture(context, outline, strokeSamples, { preset: brushPreset, size, color, opacity: currentBrushPreset().opacity * brushOpacity });
-        }
-        context.restore();
       }
       strokeSamples = [];
       strokeIsStylus = false;
@@ -1458,6 +1485,9 @@ function bindCanvasEvents() {
 
 async function start() {
   inputSurface = await renderer.init(host);
+  brushCommitCanvas = document.createElement('canvas');
+  brushCommitCanvas.width = W;
+  brushCommitCanvas.height = H;
   bindControls();
   bindCanvasEvents();
 
