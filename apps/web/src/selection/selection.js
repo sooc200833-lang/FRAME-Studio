@@ -92,13 +92,34 @@ function segmentsIntersect(a, b, c, d) {
     (Math.abs(cdB) < 1e-9 && onSegment(c, d, b));
 }
 
+function pointToSegmentDistance(point, start, end) {
+  const dx = end.x - start.x;
+  const dy = end.y - start.y;
+  const lengthSquared = dx * dx + dy * dy;
+  if (lengthSquared <= Number.EPSILON) return Math.hypot(point.x - start.x, point.y - start.y);
+  const t = Math.max(0, Math.min(1, ((point.x - start.x) * dx + (point.y - start.y) * dy) / lengthSquared));
+  return Math.hypot(point.x - (start.x + dx * t), point.y - (start.y + dy * t));
+}
+
 export function lineStrokeIntersectsPolygon(stroke, polygon) {
   const points = stroke?.points || [];
+  if (!Array.isArray(polygon) || polygon.length < 3 || points.length < 2) return false;
   if (points.some(point => pointInPolygon(point, polygon))) return true;
-  if (points.length < 2 || polygon.length < 3) return false;
+
+  // A vector stroke is a visible area, not an infinitely thin centerline.
+  // Include near misses where its rendered width overlaps the selection edge.
+  const radius = Math.max(0, Number(stroke.width) || 0) / 2;
   for (let i = 0; i < points.length - 1; i++) {
+    const start = points[i], end = points[i + 1];
     for (let j = 0; j < polygon.length; j++) {
-      if (segmentsIntersect(points[i], points[i + 1], polygon[j], polygon[(j + 1) % polygon.length])) return true;
+      const edgeStart = polygon[j], edgeEnd = polygon[(j + 1) % polygon.length];
+      if (segmentsIntersect(start, end, edgeStart, edgeEnd)) return true;
+      if (radius > 0 && Math.min(
+        pointToSegmentDistance(start, edgeStart, edgeEnd),
+        pointToSegmentDistance(end, edgeStart, edgeEnd),
+        pointToSegmentDistance(edgeStart, start, end),
+        pointToSegmentDistance(edgeEnd, start, end),
+      ) <= radius) return true;
     }
   }
   return false;
