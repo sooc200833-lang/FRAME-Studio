@@ -67,7 +67,19 @@ function makeLayer(name) {
 }
 
 const layers = [makeLayer('면 / 톤'), makeLayer('선화')];
+const layerGroups = [];
 let active = 0;
+let activeGroupId = null;
+
+function groupFor(layer) { return layerGroups.find(group => group.id === layer.groupId) || null; }
+function applyGroupState() {
+  for (const layer of layers) {
+    const group = groupFor(layer);
+    layer.renderVisible = layer.visible && (!group || group.visible);
+    layer.renderOpacity = (layer.opacity ?? 1) * (group?.opacity ?? 1);
+    layer.renderBlendMode = group?.blendMode && group.blendMode !== 'normal' ? group.blendMode : (layer.blendMode || 'normal');
+  }
+}
 let selectedStrokeId = null;
 
 function currentBrushPreset() { return getBrushPreset(brushPreset); }
@@ -161,10 +173,11 @@ function composite() {
   context.fillStyle = '#f4f0e8';
   context.fillRect(0, 0, W, H);
   layers.forEach(layer => {
-    if (!layer.visible) return;
+    if (!(layer.renderVisible ?? layer.visible)) return;
     context.save();
-    context.globalAlpha = layer.opacity ?? 1;
-    context.globalCompositeOperation = layer.blendMode === 'add' ? 'lighter' : (layer.blendMode === 'normal' || !layer.blendMode ? 'source-over' : layer.blendMode);
+    context.globalAlpha = layer.renderOpacity ?? layer.opacity ?? 1;
+    const blendMode = layer.renderBlendMode || layer.blendMode || 'normal';
+    context.globalCompositeOperation = blendMode === 'add' ? 'lighter' : (blendMode === 'normal' ? 'source-over' : blendMode);
     if (layer.maskEnabled && layer.maskCanvas) {
       const masked = document.createElement('canvas');
       masked.width = W; masked.height = H;
@@ -183,6 +196,7 @@ function composite() {
 }
 
 function render(dirtyIndices = [], displayStrokes = vectorStrokes) {
+  applyGroupState();
   if (!loadingFrame) updateFrameStrokes(timeline, timeline.activeFrameId, vectorStrokes);
   renderer.sync(layers, dirtyIndices, displayStrokes, selectedStrokeId, onionEnabled ? getOnionSkin(timeline) : []);
   document.getElementById('status').textContent = tool.toUpperCase();
@@ -389,10 +403,34 @@ function floodFill(x, y) {
 function drawLayers() {
   const list = document.getElementById('layers');
   list.replaceChildren();
-
-  layers.forEach((layer, index) => {
+  layerGroups.forEach(group => {
     const item = document.createElement('div');
-    item.className = 'layer' + (index === active ? ' selected' : '');
+    item.className = 'layer-group' + (group.id === activeGroupId ? ' selected' : '');
+    const visibility = document.createElement('button');
+    visibility.textContent = group.visible ? '▣' : '□';
+    visibility.setAttribute('aria-label', group.visible ? '그룹 숨기기' : '그룹 표시');
+    visibility.onclick = event => { event.stopPropagation(); group.visible = !group.visible; render(); };
+    const name = document.createElement('strong');
+    name.textContent = '▾ ' + group.name;
+    const count = document.createElement('small');
+    count.textContent = layers.filter(layer => layer.groupId === group.id).length + '개';
+    item.append(visibility, name, count);
+    item.onclick = () => { activeGroupId = group.id; updateLayerInspector(); drawLayers(); };
+    list.append(item);
+    layers.forEach((layer, index) => {
+      if (layer.groupId !== group.id) return;
+      appendLayerRow(list, layer, index, true);
+    });
+  });
+  layers.forEach((layer, index) => {
+    if (layer.groupId) return;
+    appendLayerRow(list, layer, index, false);
+  });
+}
+
+function appendLayerRow(list, layer, index, nested) {
+    const item = document.createElement('div');
+    item.className = 'layer' + (index === active ? ' selected' : '') + (nested ? ' nested' : '');
 
     const visibility = document.createElement('button');
     visibility.textContent = layer.visible ? '◉' : '○';
@@ -408,6 +446,7 @@ function drawLayers() {
     item.onclick = event => {
       if (event.target !== visibility) {
         active = index;
+        activeGroupId = layer.groupId || null;
         maskEditing = false;
         document.getElementById('maskEdit')?.classList.remove('active');
         document.getElementById('maskState').textContent = '일반 그림 편집 중';
@@ -421,6 +460,16 @@ function drawLayers() {
 function updateLayerInspector() {
   const layer = layers[active];
   if (!layer) return;
+  const group = groupFor(layer);
+  const groupControls = document.getElementById('groupInspector');
+  if (groupControls) {
+    groupControls.hidden = !group;
+    if (group) {
+      document.getElementById('groupOpacity').value = Math.round(group.opacity * 100);
+      document.getElementById('groupOpacityOut').value = Math.round(group.opacity * 100) + '%';
+      document.getElementById('groupBlend').value = group.blendMode;
+    }
+  }
   const opacity = document.getElementById('layerOpacity');
   const opacityOut = document.getElementById('layerOpacityOut');
   const blend = document.getElementById('layerBlend');
@@ -509,6 +558,35 @@ function bindControls() {
     };
   });
 
+  document.getElementById('groupAdd').onclick = () => {
+    const id = 'group-' + (layerGroups.length + 1);
+    layerGroups.push({ id, name: '그룹 ' + (layerGroups.length + 1), visible: true, opacity: 1, blendMode: 'normal' });
+    layers[active].groupId = id;
+    activeGroupId = id;
+    render();
+  };
+  document.getElementById('groupRemove').onclick = () => {
+    const group = layerGroups.find(item => item.id === activeGroupId);
+    if (!group) return;
+    layers.forEach(layer => { if (layer.groupId === group.id) delete layer.groupId; });
+    layerGroups.splice(layerGroups.indexOf(group), 1);
+    activeGroupId = null;
+    render();
+  };
+  document.getElementById('groupOpacity').oninput = event => {
+    const group = layerGroups.find(item => item.id === activeGroupId);
+    if (!group) return;
+    group.opacity = Number(event.target.value) / 100;
+    document.getElementById('groupOpacityOut').value = event.target.value + '%';
+    render();
+  };
+  document.getElementById('groupBlend').onchange = event => {
+    const group = layerGroups.find(item => item.id === activeGroupId);
+    if (!group) return;
+    group.blendMode = event.target.value;
+    render();
+  };
+
   document.getElementById('addLayer').onclick = () => {
     if (playbackActive) setPlaybackEnabled(false);
     layers.push(makeLayer('레이어 ' + (layers.length + 1)));
@@ -548,6 +626,7 @@ function bindControls() {
     copy.canvas.getContext('2d').drawImage(source.canvas, 0, 0);
     if (source.maskCanvas) copy.maskCanvas.getContext('2d').drawImage(source.maskCanvas, 0, 0);
     copy.maskEnabled = source.maskEnabled;
+    copy.groupId = source.groupId;
     layers.push(copy);
     active = layers.length - 1;
     saveActiveFrame();
