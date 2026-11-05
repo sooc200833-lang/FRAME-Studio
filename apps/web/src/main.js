@@ -1,10 +1,15 @@
 import './styles.css';
 import { PixiStageRenderer } from './renderer.js';
 import { expandRegionMask, findConnectedRegion } from './fill/flood-fill.js';
+import {
+  createLineStroke,
+  hitTestLineStrokes,
+  translateLineStroke,
+  updateLineStrokeStyle,
+} from './line/line-engine.js';
 
 const W = 1200;
 const H = 900;
-const buffer = document.getElementById('artboardBuffer');
 const host = document.getElementById('pixiHost');
 const renderer = new PixiStageRenderer(W, H);
 
@@ -15,8 +20,16 @@ let size = 7;
 let down = false;
 let last = null;
 let start = null;
+let drawingPoints = null;
+let movingStroke = false;
+let moveSnapshot = null;
+let moveChanged = false;
+let nextLineId = 1;
 
 const palette = ['#24242a', '#ffffff', '#e95d4f', '#e8b64f', '#6c9c85', '#6f86c9', '#b78bc7'];
+const vectorStrokes = [];
+const lineUndo = [];
+const lineRedo = [];
 
 function makeLayer(name) {
   const canvas = document.createElement('canvas');
@@ -27,6 +40,11 @@ function makeLayer(name) {
 
 const layers = [makeLayer('면 / 톤'), makeLayer('선화')];
 let active = 0;
+let selectedStrokeId = null;
+
+function selectedStroke() {
+  return vectorStrokes.find(stroke => stroke.id === selectedStrokeId) || null;
+}
 
 function save(layer) {
   layer.undo.push(layer.canvas.toDataURL());
@@ -47,6 +65,43 @@ function restore(layer, stack, other) {
   image.src = stack.pop();
 }
 
+function lineSnapshot() {
+  return JSON.stringify(vectorStrokes);
+}
+
+function commitLineHistory(snapshot) {
+  lineUndo.push(snapshot);
+  if (lineUndo.length > 50) lineUndo.shift();
+  lineRedo.length = 0;
+}
+
+function restoreLines(stack, other) {
+  if (!stack.length) return;
+  other.push(lineSnapshot());
+  const restored = JSON.parse(stack.pop());
+  vectorStrokes.splice(0, vectorStrokes.length, ...restored);
+  if (!selectedStroke()) selectedStrokeId = null;
+  render();
+}
+
+function drawVectorStrokes(context, strokes = vectorStrokes) {
+  context.save();
+  context.lineCap = 'round';
+  context.lineJoin = 'round';
+  for (const stroke of strokes) {
+    if (!stroke.points.length) continue;
+    context.beginPath();
+    context.moveTo(stroke.points[0].x, stroke.points[0].y);
+    for (let index = 1; index < stroke.points.length; index++) {
+      context.lineTo(stroke.points[index].x, stroke.points[index].y);
+    }
+    context.strokeStyle = stroke.color;
+    context.lineWidth = stroke.width;
+    context.stroke();
+  }
+  context.restore();
+}
+
 function composite() {
   const canvas = document.createElement('canvas');
   canvas.width = W;
@@ -57,13 +112,15 @@ function composite() {
   layers.forEach(layer => {
     if (layer.visible) context.drawImage(layer.canvas, 0, 0);
   });
+  drawVectorStrokes(context);
   return context;
 }
 
 function render(dirtyIndices = []) {
-  renderer.sync(layers, dirtyIndices);
+  renderer.sync(layers, dirtyIndices, vectorStrokes, selectedStrokeId);
   document.getElementById('status').textContent = tool.toUpperCase();
   drawLayers();
+  updateLineInspector();
 }
 
 function position(event) {
@@ -107,6 +164,18 @@ function buildProtectionMask() {
       const alpha = pixels[point * 4 + 3];
       if (alpha > protection[point]) protection[point] = alpha;
     }
+  }
+
+  const vectorCanvas = document.createElement('canvas');
+  vectorCanvas.width = W;
+  vectorCanvas.height = H;
+  const vectorContext = vectorCanvas.getContext('2d');
+  vectorContext.strokeStyle = '#000';
+  drawVectorStrokes(vectorContext);
+  const vectorAlpha = vectorContext.getImageData(0, 0, W, H).data;
+  for (let point = 0; point < W * H; point++) {
+    const alpha = vectorAlpha[point * 4 + 3];
+    if (alpha > protection[point]) protection[point] = alpha;
   }
   return protection;
 }
@@ -174,6 +243,25 @@ function drawLayers() {
   });
 }
 
+function updateLineInspector() {
+  const stroke = selectedStroke();
+  const panel = document.getElementById('lineTools');
+  panel.hidden = !stroke;
+  if (!stroke) return;
+  document.getElementById('lineColor').value = stroke.color;
+  document.getElementById('lineWidth').value = stroke.width;
+  document.getElementById('lineWidthOut').value = stroke.width + 'px';
+}
+
+function applySelectedStyle(changes) {
+  const stroke = selectedStroke();
+  if (!stroke) return;
+  commitLineHistory(lineSnapshot());
+  const index = vectorStrokes.findIndex(item => item.id === selectedStrokeId);
+  vectorStrokes[index] = updateLineStrokeStyle(stroke, changes);
+  render();
+}
+
 function bindControls() {
   document.querySelectorAll('[data-tool]').forEach(button => {
     button.onclick = () => {
@@ -199,11 +287,14 @@ function bindControls() {
   };
 
   document.getElementById('undo').onclick = () => {
-    restore(layers[active], layers[active].undo, layers[active].redo);
+    if ((tool === 'vector' || tool === 'select') && lineUndo.length) restoreLines(lineUndo, lineRedo);
+    else restore(layers[active], layers[active].undo, layers[active].redo);
   };
   document.getElementById('redo').onclick = () => {
-    restore(layers[active], layers[active].redo, layers[active].undo);
+    if ((tool === 'vector' || tool === 'select') && lineRedo.length) restoreLines(lineRedo, lineUndo);
+    else restore(layers[active], layers[active].redo, layers[active].undo);
   };
+
   document.getElementById('toggle').onclick = () => {
     document.getElementById('inspector').classList.toggle('hidden');
   };
@@ -231,6 +322,20 @@ function bindControls() {
     document.getElementById('edgeOut').value = event.target.value + 'px';
   };
 
+  document.getElementById('lineColor').oninput = event => applySelectedStyle({ color: event.target.value });
+  document.getElementById('lineWidth').oninput = event => {
+    document.getElementById('lineWidthOut').value = event.target.value + 'px';
+    applySelectedStyle({ width: Number(event.target.value) });
+  };
+  document.getElementById('deleteLine').onclick = () => {
+    if (!selectedStroke()) return;
+    commitLineHistory(lineSnapshot());
+    const index = vectorStrokes.findIndex(item => item.id === selectedStrokeId);
+    vectorStrokes.splice(index, 1);
+    selectedStrokeId = null;
+    render();
+  };
+
   const paletteElement = document.getElementById('palette');
   palette.forEach(value => {
     const button = document.createElement('button');
@@ -242,6 +347,7 @@ function bindControls() {
       paletteElement.querySelectorAll('button').forEach(item => {
         item.classList.toggle('selected', item === button);
       });
+      if (selectedStroke()) applySelectedStyle({ color: value });
     };
     paletteElement.append(button);
     if (value === color) button.classList.add('selected');
@@ -260,10 +366,27 @@ function bindCanvasEvents() {
       return;
     }
 
+    if (tool === 'select') {
+      const hit = hitTestLineStrokes(vectorStrokes, point, 9);
+      selectedStrokeId = hit?.id || null;
+      movingStroke = Boolean(hit);
+      moveSnapshot = hit ? lineSnapshot() : null;
+      moveChanged = false;
+      last = point;
+      render();
+      return;
+    }
+
+    if (tool === 'vector') {
+      down = true;
+      drawingPoints = [point];
+      renderer.previewStroke(drawingPoints, Number.parseInt(color.slice(1), 16), size);
+      return;
+    }
+
     down = true;
     start = last = point;
     save(layers[active]);
-
     if (tool === 'pen' || tool === 'eraser') {
       stroke(point, { x: point.x + 0.01, y: point.y + 0.01 });
       render([active]);
@@ -271,8 +394,33 @@ function bindCanvasEvents() {
   });
 
   inputSurface.addEventListener('pointermove', event => {
-    if (!down) return;
     const point = position(event);
+
+    if (tool === 'select' && movingStroke && down === false && moveSnapshot) {
+      const dx = point.x - last.x;
+      const dy = point.y - last.y;
+      if (dx !== 0 || dy !== 0) {
+        const index = vectorStrokes.findIndex(item => item.id === selectedStrokeId);
+        if (index >= 0) {
+          vectorStrokes[index] = translateLineStroke(vectorStrokes[index], dx, dy);
+          moveChanged = true;
+          last = point;
+          render();
+        }
+      }
+      return;
+    }
+
+    if (!down) return;
+
+    if (tool === 'vector') {
+      const previous = drawingPoints[drawingPoints.length - 1];
+      if (Math.hypot(point.x - previous.x, point.y - previous.y) >= 1.25) {
+        drawingPoints.push(point);
+        renderer.previewStroke(drawingPoints, Number.parseInt(color.slice(1), 16), size);
+      }
+      return;
+    }
 
     if (tool === 'line') {
       renderer.previewLine(start, point, Number.parseInt(color.slice(1), 16), size);
@@ -284,8 +432,39 @@ function bindCanvasEvents() {
   });
 
   const end = event => {
+    if (tool === 'select' && movingStroke && moveSnapshot) {
+      if (moveChanged) commitLineHistory(moveSnapshot);
+      movingStroke = false;
+      moveSnapshot = null;
+      moveChanged = false;
+      down = false;
+      render();
+      return;
+    }
+
     if (!down) return;
     const point = position(event);
+
+    if (tool === 'vector') {
+      const previous = drawingPoints[drawingPoints.length - 1];
+      if (Math.hypot(point.x - previous.x, point.y - previous.y) > 0.1) drawingPoints.push(point);
+      if (drawingPoints.length === 1) drawingPoints.push({ x: point.x + 0.1, y: point.y + 0.1 });
+      commitLineHistory(lineSnapshot());
+      const created = createLineStroke({
+        id: 'line-' + nextLineId++,
+        points: drawingPoints,
+        color,
+        width: size,
+      });
+      vectorStrokes.push(created);
+      selectedStrokeId = created.id;
+      drawingPoints = null;
+      renderer.clearPreview();
+      down = false;
+      render();
+      return;
+    }
+
     if (tool === 'line') {
       stroke(start, point);
       renderer.clearPreview();
@@ -303,7 +482,6 @@ async function start() {
   bindControls();
   bindCanvasEvents();
 
-  // Sample line art stays on its own upper layer; paint starts on the lower layer.
   const lineContext = layers[1].canvas.getContext('2d');
   lineContext.strokeStyle = '#24242a';
   lineContext.lineWidth = 12;
