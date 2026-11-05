@@ -86,3 +86,11 @@ The web prototype includes raster drawing, connected-region fill, PixiJS renderi
 - Clicking inside an existing lasso extracts the active raster layer through a polygon clip; dragging moves those pixels while clearing only the original polygon area.
 - Polygon hit testing and bounded translation are pure helpers covered by unit tests.
 - The lasso currently transforms the active raster layer only. Rotation, feathering, vector inclusion, and multi-layer transforms are not yet implemented.
+
+
+## Selection transform
+- Rectangular and lasso selections can be rotated and scaled around the average of their polygon vertices.
+- Transform applies to the active raster layer: pixels inside the selection are extracted to a temporary canvas, transformed, and composited back after clearing the original selected area.
+- The transformed boundary is retained as a polygon selection, including after rotating a rectangular selection.
+- Rotation range is -180° to 180° and scale range is 25% to 200%. Pixels transformed beyond the canvas are clipped by the canvas bounds.
+- This is a committed transform, not a live preview; multi-layer and vector selection transforms remain future work.
