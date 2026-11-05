@@ -82,10 +82,10 @@ export function getOnionSkin(timeline, { previous = true, next = true, opacity =
   if (index < 0) return [];
   const result = [];
   if (previous && timeline.frames[index - 1]) {
-    result.push({ side: 'previous', tint: 0x55aaff, alpha: opacity, strokes: cloneStrokes(timeline.frames[index - 1].strokes) });
+    result.push({ side: 'previous', tint: 0x55aaff, alpha: opacity, strokes: timeline.frames[index - 1].strokes });
   }
   if (next && timeline.frames[index + 1]) {
-    result.push({ side: 'next', tint: 0xff6b8a, alpha: opacity, strokes: cloneStrokes(timeline.frames[index + 1].strokes) });
+    result.push({ side: 'next', tint: 0xff6b8a, alpha: opacity, strokes: timeline.frames[index + 1].strokes });
   }
   return result;
 }
