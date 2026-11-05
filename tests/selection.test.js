@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { containsSelectionPoint, getSelectionRectHandles, hitTestSelectionHandle, moveSelectionRect, normalizeSelectionRect, lineStrokeIntersectsPolygon, pointInPolygon, resizeSelectionRect, resizeSelectionRectFromHandle, resolveSelectionTargets, transformLineStrokes, transformPolygon, translatePolygon, getSelectionPreviewTransform, getPolygonBounds, getPolygonCentroid, getPolygonTransformHandles, hitTestPolygonTransformHandle, resizePolygonFromHandle } from '../apps/web/src/selection/selection.js';
+import { containsSelectionPoint, getSelectionRectHandles, hitTestSelectionHandle, moveSelectionRect, normalizeSelectionRect, lineStrokeIntersectsPolygon, pointInPolygon, resizeSelectionRect, resizeSelectionRectFromHandle, resolveSelectionTargets, transformLineStrokes, transformPolygon, translatePolygon, getSelectionPreviewTransform, getPolygonBounds, getPolygonCentroid, getPolygonTransformHandles, hitTestPolygonTransformHandle, resizePolygonFromHandle, transformLineStrokesByMatrix } from '../apps/web/src/selection/selection.js';
 
 test('normalizes a drag rectangle in any direction', () => {
   assert.deepEqual(normalizeSelectionRect({ x: 90, y: 80 }, { x: 10, y: 20 }), { x: 10, y: 20, width: 80, height: 60 });
@@ -140,4 +140,29 @@ test('resizes a lasso polygon proportionally from a bounding-box handle', () => 
   const resized = resizePolygonFromHandle(polygon, 'se', { x: 90, y: 110 }, { width: 120, height: 120 });
   assert.deepEqual(resized, [{ x: 10, y: 30 }, { x: 90, y: 10 }, { x: 70, y: 110 }, { x: 30, y: 90 }]);
   assert.deepEqual(getPolygonBounds(resized), { x: 10, y: 10, width: 80, height: 100 });
+});
+
+
+test('applies affine translation and non-uniform scale to intersecting vector strokes', () => {
+  const polygon = [{ x: 0, y: 0 }, { x: 20, y: 0 }, { x: 20, y: 20 }, { x: 0, y: 20 }];
+  const strokes = [
+    { id: 'inside', width: 4, color: '#000', points: [{ x: 2, y: 4 }, { x: 8, y: 10 }] },
+    { id: 'outside', width: 2, color: '#f00', points: [{ x: 50, y: 50 }, { x: 60, y: 50 }] },
+  ];
+  const result = transformLineStrokesByMatrix(strokes, polygon, [2, 0, 0, 0.5, 10, 3]);
+  assert.deepEqual(result[0].points, [{ x: 14, y: 5 }, { x: 26, y: 8 }]);
+  assert.equal(result[0].width, 4);
+  assert.deepEqual(result[1].points, strokes[1].points);
+  assert.equal(result[1].width, strokes[1].width);
+  assert.deepEqual(strokes[0].points, [{ x: 2, y: 4 }, { x: 8, y: 10 }]);
+});
+
+test('applies affine rotation to a vector path without changing its color or identity', () => {
+  const polygon = [{ x: 0, y: 0 }, { x: 20, y: 0 }, { x: 20, y: 20 }, { x: 0, y: 20 }];
+  const stroke = { id: 'turn', width: 3, color: '#123456', points: [{ x: 10, y: 0 }, { x: 10, y: 10 }] };
+  const result = transformLineStrokesByMatrix([stroke], polygon, [0, 1, -1, 0, 20, 0]);
+  assert.deepEqual(result[0].points, [{ x: 20, y: 10 }, { x: 10, y: 10 }]);
+  assert.equal(result[0].id, 'turn');
+  assert.equal(result[0].color, '#123456');
+  assert.equal(result[0].width, 3);
 });
