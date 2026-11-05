@@ -5,38 +5,41 @@
 - Large central canvas, timeline, contextual inspector, and compact tool strip.
 - Original UI and assets; use other creative applications only as broad workflow inspiration.
 
-## Proposed workspace
-- `apps/web`: browser prototype and web application.
+## Workspace
+- `apps/web`: Vite browser application.
+- `apps/web/src/renderer.js`: PixiJS stage renderer.
+- `apps/web/src/fill/flood-fill.js`: renderer-independent connected-region fill and edge-mask expansion.
+- `apps/web/src/line/line-engine.js`: vector line data, hit testing, translation, and style operations.
+- `apps/web/src/main.js`: drawing interactions, paint layers, vector strokes, and document state.
 - `apps/ipad`: future native iPad client.
-- `packages/document-model`: shared document schema, layers, frames, metadata.
-- `packages/drawing-engine`: input normalization and stroke creation.
-- `packages/fill-engine`: compositing, connected-region detection, fill output.
-- `packages/line-engine`: line objects, selection, stroke rendering, Line Boil.
-- `packages/tone-engine`: halftone and comic filters.
-- `packages/animation-engine`: timeline, frames, keyframes, playback.
-- `packages/rendering-engine`: shared rendering abstractions.
-- `packages/3d-engine`: primitives, assemblies, and line extraction.
-- `services/ai-api`: server-side provider proxy and usage controls.
-- `docs`: product decisions, architecture, and roadmap.
+- `packages/document-model`: future shared document schema, layers, frames, and metadata.
+- `packages/animation-engine`: future timeline, frames, keyframes, and playback.
+- `packages/tone-engine`: future halftone and comic filters.
+- `packages/3d-engine`: future primitives, assemblies, and line extraction.
+- `services/ai-api`: future server-side provider proxy and usage controls.
 
-## Document model principles
-- Keep source line art and paint/fill layers independently editable.
-- A fill operation reads the composited visible image but writes only to the selected paint layer.
-- Store operations in a form that supports undo/redo.
-- Preserve frame and layer identity across animation edits.
-- Keep project data portable between web and native clients.
+## Rendering boundary
+- PixiJS owns visible stage presentation.
+- Editable raster paint remains in ordinary Canvas buffers.
+- Editable vector lines remain plain document objects with stable IDs and point arrays.
+- The PixiJS renderer draws raster layers and vector strokes but does not own the source document data.
+- The fill engine operates on a composite image and does not depend on PixiJS.
 
-## Flood-fill behavior
-1. Composite visible layers into a temporary boundary image.
+## Raster and fill behavior
+1. Composite visible raster layers and vector strokes into a temporary boundary image.
 2. Sample the pixel under the user's tap.
-3. Find the connected region using a configurable color-distance tolerance.
-4. Apply the selected color to the active paint layer, respecting alpha/edge settings.
-5. Record the operation for undo/redo.
+3. Find the connected region using configurable RGBA tolerance.
+4. Optionally expand the fill mask while protecting opaque upper-layer pixels and vector line pixels.
+5. Apply the selected color to the active raster paint layer.
+6. Record the operation for undo/redo.
 
-## Security
-- Never commit API keys, personal access tokens, or credentials.
-- GPT/Claude requests must go through a server-side proxy.
-- Apply per-user limits and avoid logging secrets.
+## Vector line model
+- The vector pen creates a stroke object containing a stable ID, point array, color, and width.
+- Selection uses distance-to-segment hit testing, checking topmost strokes first.
+- Moving a selected line changes its point coordinates without rasterizing its geometry.
+- Color and width edits update the line object.
+- Vector strokes are rendered by PixiJS and raster-composited for fill-boundary detection and PNG export.
+- The raster eraser currently affects raster paint layers only; vector deletion is performed through line selection.
 
 ## Current implementation status
-This repository currently contains project documentation only. The browser prototype has not yet been imported into this repository, and no production drawing engine or flood-fill implementation is claimed complete.
+The web prototype includes raster drawing, connected-region fill, PixiJS rendering, editable vector line objects, line selection/movement/style editing, and PNG export. Node unit tests cover the fill and line-engine algorithms. Browser and iPad interaction testing remains a separate verification step.
