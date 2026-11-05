@@ -46,7 +46,8 @@ npm run build
 - [x] Selected line color/width editing and deletion
 - [x] Vector lines included in fill boundaries and PNG export
 - [ ] Pressure-sensitive vector strokes and brush textures
-- [ ] Line Boil animation and per-line animation controls
+- [x] Live Line Boil preview with non-destructive deterministic deformation
+- [ ] Per-line Line Boil settings, timeline keyframes, and frame caching
 - [ ] Comic tone and filter tools
 - [ ] Timeline, keyframes, and onion skin
 - [ ] 3D primitive assembly and 2D line conversion
