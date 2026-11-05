@@ -104,3 +104,97 @@ export function createBrushOutline(samples, {
     end: { cap: true, taper: 0 },
   });
 }
+
+/**
+ * Generate deterministic texture marks along a brush path. The marks are
+ * clipped to the final outline when painted, so texture never leaks outside.
+ */
+export function createBrushTextureMarks(samples, { preset = 'ink', size = 7, seed } = {}) {
+  if (!Array.isArray(samples) || samples.length < 2) return [];
+  if (!['pencil', 'marker', 'brush'].includes(preset)) return [];
+
+  const first = samples[0];
+  let state = Number.isFinite(seed)
+    ? seed >>> 0
+    : ((Math.round(first.x * 31) ^ Math.round(first.y * 17) ^ preset.length * 2654435761) >>> 0);
+  const random = () => {
+    state = (state * 1664525 + 1013904223) >>> 0;
+    return state / 4294967296;
+  };
+  const marks = [];
+  const width = Math.max(1, Number(size) || 1);
+
+  for (let index = 1; index < samples.length; index++) {
+    const from = samples[index - 1];
+    const to = samples[index];
+    const dx = to.x - from.x;
+    const dy = to.y - from.y;
+    const length = Math.hypot(dx, dy);
+    if (length < 0.25) continue;
+    const tangentX = dx / length;
+    const tangentY = dy / length;
+    const normalX = -tangentY;
+    const normalY = tangentX;
+    const spacing = preset === 'pencil' ? Math.max(2.2, width * 0.42) : Math.max(4, width * 0.7);
+    const count = Math.max(1, Math.ceil(length / spacing));
+
+    for (let step = 0; step < count; step++) {
+      const t = (step + 0.5) / count;
+      const centerX = from.x + dx * t;
+      const centerY = from.y + dy * t;
+      const across = (random() - 0.5) * width * (preset === 'pencil' ? 0.9 : 0.58);
+      const x = centerX + normalX * across;
+      const y = centerY + normalY * across;
+
+      if (preset === 'pencil') {
+        marks.push({ type: 'grain', x, y, radius: 0.25 + random() * Math.min(0.8, width * 0.055), alpha: 0.12 + random() * 0.18 });
+      } else if (preset === 'marker') {
+        const run = 3 + random() * Math.min(9, width * 0.55);
+        marks.push({ type: 'band', x: x - tangentX * run * 0.5, y: y - tangentY * run * 0.5, x2: x + tangentX * run * 0.5, y2: y + tangentY * run * 0.5, width: 0.35 + random() * 0.55, alpha: 0.035 + random() * 0.045 });
+      } else {
+        const run = 2 + random() * Math.min(7, width * 0.42);
+        marks.push({ type: 'bristle', x: x - tangentX * run * 0.5, y: y - tangentY * run * 0.5, x2: x + tangentX * run * 0.5, y2: y + tangentY * run * 0.5, width: 0.25 + random() * Math.max(0.5, width * 0.045), alpha: 0.08 + random() * 0.12 });
+      }
+    }
+  }
+  return marks;
+}
+
+/** Paint a brush's subtle surface texture inside its already-filled outline. */
+export function applyBrushTexture(context, outline, samples, options = {}) {
+  if (!context || !Array.isArray(outline) || outline.length < 3) return 0;
+  const marks = createBrushTextureMarks(samples, options);
+  if (!marks.length) return 0;
+
+  context.save();
+  context.beginPath();
+  context.moveTo(outline[0][0], outline[0][1]);
+  for (let index = 1; index < outline.length; index++) context.lineTo(outline[index][0], outline[index][1]);
+  context.closePath();
+  context.clip();
+
+  const preset = options.preset;
+  if (preset === 'pencil') {
+    context.globalCompositeOperation = 'destination-out';
+    for (const mark of marks) {
+      context.globalAlpha = mark.alpha;
+      context.beginPath();
+      context.ellipse(mark.x, mark.y, mark.radius * 1.45, mark.radius, 0, 0, Math.PI * 2);
+      context.fill();
+    }
+  } else {
+    context.globalCompositeOperation = 'source-atop';
+    context.strokeStyle = options.color || '#24242a';
+    for (const mark of marks) {
+      context.globalAlpha = mark.alpha;
+      context.lineWidth = mark.width;
+      context.lineCap = 'round';
+      context.beginPath();
+      context.moveTo(mark.x, mark.y);
+      context.lineTo(mark.x2, mark.y2);
+      context.stroke();
+    }
+  }
+  context.restore();
+  return marks.length;
+}
