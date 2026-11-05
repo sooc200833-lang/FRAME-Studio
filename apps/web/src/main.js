@@ -7,7 +7,7 @@ import { expandRegionMask, findConnectedRegion } from './fill/flood-fill.js';
 import { animateLineStrokes, lineBoilPhase } from './line/line-boil.js';
 import { activeFrame, addFrame, createTimeline, deleteFrame, frameAtTime, getOnionSkin, selectFrame, updateFrameCels, updateFrameStrokes } from './animation/timeline.js';
 import { normalizeRasterCels } from './animation/frame-cels.js';
-import { containsSelectionPoint, hitTestSelectionHandle, moveSelectionRect, normalizeSelectionRect, lineStrokeIntersectsPolygon, pointInPolygon, resizeSelectionRectFromHandle, resolveSelectionTargets, transformLineStrokes, transformPolygon, translatePolygon } from './selection/selection.js';
+import { containsSelectionPoint, hitTestSelectionHandle, moveSelectionRect, normalizeSelectionRect, lineStrokeIntersectsPolygon, pointInPolygon, resizeSelectionRectFromHandle, resolveSelectionTargets, transformLineStrokes, transformPolygon, translatePolygon, getSelectionPreviewTransform } from './selection/selection.js';
 import {
   createLineStroke,
   hitTestLineStrokes,
@@ -376,6 +376,7 @@ function render(dirtyIndices = [], displayStrokes = vectorStrokes) {
   applyGroupState();
   if (!loadingFrame) updateFrameStrokes(timeline, timeline.activeFrameId, vectorStrokes);
   renderer.sync(layers, dirtyIndices, displayStrokes, selectedStrokeId, onionEnabled ? getOnionSkin(timeline) : [], selectionRect, selectionPolygon, selectedNodeIndex, nodeEditEnabled);
+  if (selectionDrag?.previewCanvas) renderer.setLayerPreview(layers[active], selectionDrag.previewCanvas);
   document.getElementById('status').textContent = tool.toUpperCase();
   drawLayers();
   updateLayerInspector();
@@ -799,6 +800,39 @@ function selectionOutlinePolygon() {
   ];
 }
 
+function updateSelectionDragPreview(drag) {
+  if (!drag?.sourceCanvas || !drag.originalRect || !['move', 'resize', 'rotate'].includes(drag.mode)) {
+    if (drag) drag.previewCanvas = null;
+    return;
+  }
+
+  const previewCanvas = document.createElement('canvas');
+  previewCanvas.width = W;
+  previewCanvas.height = H;
+  const context = previewCanvas.getContext('2d');
+  context.drawImage(layers[active].canvas, 0, 0);
+
+  const original = drag.originalRect;
+  const transform = getSelectionPreviewTransform(original, selectionRect, drag.rotation || 0);
+  context.clearRect(original.x, original.y, original.width, original.height);
+
+  if (drag.mode === 'rotate') {
+    context.save();
+    context.translate(transform.center.x, transform.center.y);
+    context.rotate(transform.rotationRadians);
+    context.drawImage(drag.sourceCanvas, -drag.sourceCanvas.width / 2, -drag.sourceCanvas.height / 2);
+    context.restore();
+  } else if (selectionRect) {
+    context.save();
+    context.translate(selectionRect.x, selectionRect.y);
+    context.scale(transform.scaleX, transform.scaleY);
+    context.drawImage(drag.sourceCanvas, 0, 0);
+    context.restore();
+  }
+
+  drag.previewCanvas = previewCanvas;
+}
+
 function applySelectionTransform() {
   const polygon = selectionOutlinePolygon();
   if (!polygon) return;
@@ -926,6 +960,7 @@ function bindControls() {
   });
 
   document.getElementById('selectionDeselect').onclick = () => {
+    if (selectionDrag?.previewCanvas) renderer.clearLayerPreview(layers[active]);
     selectionRect = null;
     selectionPolygon = null;
     selectionDrag = null;
@@ -1454,6 +1489,7 @@ function bindCanvasEvents() {
         selectionRect = null;
         selectionPolygon = transformPolygon(originalPolygon, selectionDrag.rotation, 1);
       }
+      if (selectionDrag.mode !== 'new') updateSelectionDragPreview(selectionDrag);
       render();
       return;
     }
@@ -1527,6 +1563,13 @@ function bindCanvasEvents() {
     }
 
     if (tool === 'marquee' && down && selectionDrag) {
+      if (event.type === 'pointercancel') {
+        renderer.clearLayerPreview(layers[active]);
+        selectionDrag = null;
+        down = false;
+        render([active]);
+        return;
+      }
       const point = position(event);
       const drag = selectionDrag;
       if (drag.mode === 'new') selectionRect = normalizeSelectionRect(drag.start, point);
@@ -1580,6 +1623,7 @@ function bindCanvasEvents() {
         }
       }
       if (drag.mode === 'new' && (!selectionRect || selectionRect.width < 2 || selectionRect.height < 2)) selectionRect = null;
+      renderer.clearLayerPreview(layers[active]);
       selectionDrag = null;
       down = false;
       render([active]);
