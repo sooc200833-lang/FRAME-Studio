@@ -62,3 +62,4 @@ npm run build
 4. Preserve third-party license notices and test each module independently.
 
 See [docs/roadmap.md](docs/roadmap.md), [docs/architecture.md](docs/architecture.md), and [docs/open-source.md](docs/open-source.md). Third-party dependency rules are tracked in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+\n\n## Motion Studio preview (v0.6)\n\n- Vector-line snapshots are stored independently per frame.\n- Add, duplicate, delete, and select animation frames from the bottom timeline.\n- Toggle previous/next onion-skin ghosts (blue for previous, pink for next).\n- This is an early vector-line animation MVP; paint-layer frame snapshots, playback, and keyframes are not implemented yet.\n
