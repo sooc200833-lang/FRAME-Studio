@@ -138,6 +138,6 @@ test('provides lasso resize and rotation handles with hit testing', () => {
 test('resizes a lasso polygon proportionally from a bounding-box handle', () => {
   const polygon = [{ x: 10, y: 20 }, { x: 50, y: 10 }, { x: 40, y: 60 }, { x: 20, y: 50 }];
   const resized = resizePolygonFromHandle(polygon, 'se', { x: 90, y: 110 }, { width: 120, height: 120 });
-  assert.deepEqual(resized, [{ x: 10, y: 20 }, { x: 90, y: 10 }, { x: 70, y: 110 }, { x: 30, y: 90 }]);
+  assert.deepEqual(resized, [{ x: 10, y: 30 }, { x: 90, y: 10 }, { x: 70, y: 110 }, { x: 30, y: 90 }]);
   assert.deepEqual(getPolygonBounds(resized), { x: 10, y: 10, width: 80, height: 100 });
 });
