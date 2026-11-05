@@ -65,3 +65,10 @@ The web prototype includes raster drawing, connected-region fill, PixiJS renderi
 - PixiJS displays a masked presentation canvas while the source paint canvas remains intact.
 - The document composite and PNG export apply the same mask, so the visible result is preserved outside the editor.
 - Mask strokes have their own undo/redo snapshots. Masks are layer-level metadata shared by the current frame cels; per-frame masks and groups remain future work.
+
+
+## Layer folder groups
+- Raster layers may reference a document-level folder group by stable `groupId`.
+- Folder groups provide visibility, opacity, and blend-mode controls; layers can be moved into or out of the selected folder without rasterizing their content.
+- Effective group visibility, opacity, and blend settings are applied to PixiJS presentation and the raster composite used for fill and PNG export.
+- Current group implementation is a flat folder list. Isolated group compositing, nested folders, and per-frame group metadata are not implemented yet.
