@@ -59,3 +59,13 @@ output{color:var(--accent);min-width:35px;text-align:right}
   .timeline-actions button{padding:4px 6px;font-size:10px}
   .fps-control input{width:42px}
 }
+
+/* Expanded color and layer controls */
+.swatch{width:27px;height:27px;flex:0 0 27px;border-radius:7px;border:1px solid #ffffff22}
+.color-picker-row{display:flex;align-items:center;justify-content:space-between;margin:8px 0 12px;color:var(--muted);font-size:12px}
+#customColor{width:54px;height:30px;padding:2px;border:1px solid var(--line);border-radius:6px;background:#29292d}
+.layer-actions{display:flex;gap:6px;margin:8px 0}
+.layer-actions button{flex:1;padding:6px 7px;font-size:11px}
+.layer-actions button:disabled{opacity:.35;cursor:not-allowed}
+#layerBlend{max-width:125px;background:#29292d;color:var(--text);border:1px solid var(--line);border-radius:6px;padding:5px}
+#layerOpacity{accent-color:var(--accent)}
