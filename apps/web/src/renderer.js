@@ -64,7 +64,7 @@ export class PixiStageRenderer {
     graphics.stroke({ color, width, alpha, cap: 'round', join: 'round' });
   }
 
-  sync(layers, dirtyIndices = [], strokes = [], selectedStrokeId = null, onionSkin = [], selectionRect = null, selectionPolygon = null) {
+  sync(layers, dirtyIndices = [], strokes = [], selectedStrokeId = null, onionSkin = [], selectionRect = null, selectionPolygon = null, nodeEditEnabled = false) {
     if (!this.app) return;
 
     // Rebuild vector overlays after paint-layer sprites and before the live preview.
@@ -127,6 +127,15 @@ export class PixiStageRenderer {
       }
       this.drawPath(graphics, stroke.points, Number.parseInt(stroke.color.slice(1), 16), stroke.width);
       this.app.stage.addChildAt(graphics, this.app.stage.children.length - 1);
+      if (nodeEditEnabled && stroke.id === selectedStrokeId) {
+        const handles = new Graphics();
+        for (let index = 0; index < stroke.points.length; index++) {
+          const point = stroke.points[index];
+          handles.circle(point.x, point.y, 5).fill({ color: 0xf4f0e8 }).stroke({ color: 0xd69b3d, width: 2 });
+        }
+        this.app.stage.addChildAt(handles, this.app.stage.children.length - 1);
+        this.strokeGraphics.push(handles);
+      }
       this.strokeGraphics.push(graphics);
     }
 
