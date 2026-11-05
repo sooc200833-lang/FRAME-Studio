@@ -51,7 +51,15 @@ let playbackStartedAt = 0;
 let playbackStartOffset = 0;
 let playbackRaf = 0;
 
-const palette = ['#17171b','#45434a','#77727a','#b8b2aa','#f5f0e8','#ffffff','#8f3037','#d94b52','#f07862','#f2a65a','#f2cf67','#9b9b43','#4f8a62','#74b58b','#3f9b9c','#63c5c7','#3c6c9e','#668bd0','#8c70bd','#b48bd0','#d58eb7','#9a6a50','#c08b68','#e3b9a0'];
+const paletteGroups = {
+  기본: ['#17171b','#45434a','#77727a','#b8b2aa','#dedbd4','#f5f0e8','#ffffff'],
+  따뜻한색: ['#5b2028','#8f3037','#bd4145','#d94b52','#f07862','#f2a65a','#f2cf67','#9a6a50','#c08b68','#e3b9a0'],
+  차가운색: ['#18324a','#244f70','#3c6c9e','#668bd0','#3f9b9c','#63c5c7','#6f8caa','#a9c4d6'],
+  자연색: ['#263d32','#42664b','#4f8a62','#74b58b','#9b9b43','#b2a45a','#79644b','#a68c68'],
+  파스텔: ['#f2c6c7','#f4d4b5','#f4e6a1','#d6e6b8','#bfe4df','#c7d9f4','#d7c8ed','#edcbe0'],
+};
+let activePaletteGroup = '기본';
+const recentColors = [];
 const vectorStrokes = [];
 const lineUndo = [];
 const lineRedo = [];
@@ -90,6 +98,92 @@ function applyGroupState() {
 let selectedStrokeId = null;
 
 function currentBrushPreset() { return getBrushPreset(brushPreset); }
+
+function normalizeHex(value) {
+  return /^#[0-9a-f]{6}$/i.test(value) ? value.toLowerCase() : '#24242a';
+}
+
+function setCurrentColor(value, { applyToSelectedLine = true, remember = true } = {}) {
+  color = normalizeHex(value);
+  const picker = document.getElementById('customColor');
+  if (picker) picker.value = color;
+  const preview = document.getElementById('activeColorPreview');
+  if (preview) preview.style.background = color;
+  const hex = document.getElementById('activeColorHex');
+  if (hex) hex.textContent = color.toUpperCase();
+  if (remember) {
+    const index = recentColors.indexOf(color);
+    if (index >= 0) recentColors.splice(index, 1);
+    recentColors.unshift(color);
+    recentColors.length = Math.min(recentColors.length, 10);
+    renderRecentPalette();
+  }
+  renderPaletteSwatches();
+  if (applyToSelectedLine && selectedStroke()) applySelectedStyle({ color });
+}
+
+function renderPaletteCategories() {
+  const host = document.getElementById('paletteCategories');
+  if (!host) return;
+  host.replaceChildren();
+  Object.keys(paletteGroups).forEach(name => {
+    const button = document.createElement('button');
+    button.className = 'palette-category' + (name === activePaletteGroup ? ' active' : '');
+    button.textContent = name;
+    button.onclick = () => {
+      activePaletteGroup = name;
+      renderPaletteCategories();
+      renderPaletteSwatches();
+    };
+    host.append(button);
+  });
+}
+
+function renderPaletteSwatches() {
+  const host = document.getElementById('palette');
+  if (!host) return;
+  host.replaceChildren();
+  (paletteGroups[activePaletteGroup] || []).forEach(value => {
+    const button = document.createElement('button');
+    button.className = 'swatch' + (value === color ? ' selected' : '');
+    button.style.background = value;
+    button.title = value.toUpperCase();
+    button.setAttribute('aria-label', value);
+    button.onclick = () => setCurrentColor(value);
+    host.append(button);
+  });
+}
+
+function renderRecentPalette() {
+  const host = document.getElementById('recentPalette');
+  if (!host) return;
+  host.replaceChildren();
+  recentColors.forEach(value => {
+    const button = document.createElement('button');
+    button.className = 'swatch' + (value === color ? ' selected' : '');
+    button.style.background = value;
+    button.title = value.toUpperCase();
+    button.setAttribute('aria-label', '최근 색상 ' + value);
+    button.onclick = () => setCurrentColor(value);
+    host.append(button);
+  });
+}
+
+function addCurrentColorToPalette() {
+  const colors = paletteGroups[activePaletteGroup];
+  if (colors.includes(color)) return;
+  colors.push(color);
+  renderPaletteSwatches();
+}
+
+function selectInspectorPanel(panelId) {
+  document.querySelectorAll('.panel-tab').forEach(button => {
+    button.classList.toggle('active', button.dataset.panel === panelId);
+  });
+  document.querySelectorAll('.panel-content').forEach(panel => {
+    panel.classList.toggle('active', panel.id === panelId);
+  });
+}
 
 function selectedStroke() {
   return vectorStrokes.find(stroke => stroke.id === selectedStrokeId) || null;
@@ -874,6 +968,12 @@ function bindControls() {
   document.getElementById('toggle').onclick = () => {
     document.getElementById('inspector').classList.toggle('hidden');
   };
+  document.getElementById('inspectorClose').onclick = () => {
+    document.getElementById('inspector').classList.add('hidden');
+  };
+  document.querySelectorAll('.panel-tab').forEach(button => {
+    button.onclick = () => selectInspectorPanel(button.dataset.panel);
+  });
   document.getElementById('export').onclick = () => {
     const output = composite().canvas;
     output.toBlob(blob => {
@@ -888,10 +988,29 @@ function bindControls() {
   };
 
   document.getElementById('brushPreset').onchange = event => { brushPreset = event.target.value; };
-  document.getElementById('size').oninput = event => {
-    size = Number(event.target.value);
-    document.getElementById('sizeOut').value = size + 'px';
+  const sizeInput = document.getElementById('size');
+  const sizeOutput = document.getElementById('sizeOut');
+  const sizePresets = document.getElementById('sizePresets');
+  const presetSizes = [2, 4, 7, 12, 20, 32, 48, 72];
+  const updateSize = value => {
+    size = Math.max(1, Math.min(100, Number(value) || 1));
+    sizeInput.value = String(size);
+    sizeOutput.textContent = size + ' px';
+    sizePresets.querySelectorAll('button').forEach(button => {
+      button.classList.toggle('active', Number(button.dataset.size) === size);
+    });
   };
+  presetSizes.forEach(value => {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.dataset.size = String(value);
+    button.textContent = value;
+    button.title = value + ' px';
+    button.onclick = () => updateSize(value);
+    sizePresets.append(button);
+  });
+  sizeInput.oninput = event => updateSize(event.target.value);
+  updateSize(size);
   document.getElementById('pressureEnabled').onchange = event => {
     pressureEnabled = event.target.checked;
   };
@@ -955,30 +1074,17 @@ function bindControls() {
     render();
   };
 
-  const paletteElement = document.getElementById('palette');
   const customColor = document.getElementById('customColor');
-  customColor.value = color;
-  customColor.oninput = event => {
-    color = event.target.value;
-    paletteElement.querySelectorAll('button').forEach(item => item.classList.remove('selected'));
-    if (selectedStroke()) applySelectedStyle({ color });
+  customColor.oninput = event => setCurrentColor(event.target.value);
+  document.getElementById('addPaletteColor').onclick = addCurrentColorToPalette;
+  document.getElementById('resetPalette').onclick = () => {
+    paletteGroups.기본 = ['#17171b','#45434a','#77727a','#b8b2aa','#dedbd4','#f5f0e8','#ffffff'];
+    activePaletteGroup = '기본';
+    renderPaletteCategories();
+    renderPaletteSwatches();
   };
-  palette.forEach(value => {
-    const button = document.createElement('button');
-    button.className = 'swatch';
-    button.style.background = value;
-    button.setAttribute('aria-label', value);
-    button.onclick = () => {
-      color = value;
-      customColor.value = value;
-      paletteElement.querySelectorAll('button').forEach(item => {
-        item.classList.toggle('selected', item === button);
-      });
-      if (selectedStroke()) applySelectedStyle({ color: value });
-    };
-    paletteElement.append(button);
-    if (value === color) button.classList.add('selected');
-  });
+  renderPaletteCategories();
+  setCurrentColor(color, { remember: true });
 }
 
 function bindCanvasEvents() {
