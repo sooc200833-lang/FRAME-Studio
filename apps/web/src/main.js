@@ -832,7 +832,7 @@ function updateSelectionDragPreview(drag) {
     } else if (drag.mode === 'lassoResize') {
       const originalBounds = getPolygonBounds(originalPolygon);
       const targetBounds = getPolygonBounds(selectionPolygon);
-      if (originalBounds && targetBounds) {
+      if (originalBounds && targetBounds && originalBounds.width > 0 && originalBounds.height > 0) {
         const scaleX = targetBounds.width / originalBounds.width;
         const scaleY = targetBounds.height / originalBounds.height;
         context.save();
