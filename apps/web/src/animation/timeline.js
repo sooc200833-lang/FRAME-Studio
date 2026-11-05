@@ -1,3 +1,5 @@
+import { cloneRasterCels } from './frame-cels.js';
+
 function cloneStrokes(strokes = []) {
   return strokes.map(stroke => ({
     ...stroke,
@@ -5,8 +7,8 @@ function cloneStrokes(strokes = []) {
   }));
 }
 
-function makeFrame(id, strokes = [], durationMs = 1000 / 12) {
-  return { id, durationMs: Math.max(1, Number(durationMs) || 1000 / 12), strokes: cloneStrokes(strokes) };
+function makeFrame(id, strokes = [], durationMs = 1000 / 12, cels = []) {
+  return { id, durationMs: Math.max(1, Number(durationMs) || 1000 / 12), strokes: cloneStrokes(strokes), cels: cloneRasterCels(cels) };
 }
 
 export function createTimeline({ fps = 12, frames = [] } = {}) {
@@ -15,6 +17,7 @@ export function createTimeline({ fps = 12, frames = [] } = {}) {
     frame.id || `frame-${index + 1}`,
     frame.strokes,
     frame.durationMs || 1000 / safeFps,
+    frame.cels,
   ));
   const initialFrames = normalized.length ? normalized : [makeFrame('frame-1')];
   return {
@@ -36,6 +39,13 @@ export function updateFrameStrokes(timeline, frameId, strokes) {
   return true;
 }
 
+export function updateFrameCels(timeline, frameId, cels) {
+  const frame = timeline.frames.find(item => item.id === frameId);
+  if (!frame) return false;
+  frame.cels = cloneRasterCels(cels);
+  return true;
+}
+
 export function selectFrame(timeline, frameId) {
   if (!timeline.frames.some(frame => frame.id === frameId)) return false;
   timeline.activeFrameId = frameId;
@@ -48,6 +58,7 @@ export function addFrame(timeline, { duplicate = false } = {}) {
     `frame-${timeline.nextId++}`,
     duplicate && current ? current.strokes : [],
     current?.durationMs || 1000 / timeline.fps,
+    duplicate && current ? current.cels : [],
   );
   const index = current ? timeline.frames.indexOf(current) + 1 : timeline.frames.length;
   timeline.frames.splice(index, 0, frame);
