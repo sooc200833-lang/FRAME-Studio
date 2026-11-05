@@ -56,3 +56,59 @@ export function cloneLineStrokes(strokes) {
     points: stroke.points.map(point => ({ x: point.x, y: point.y })),
   }));
 }
+
+/**
+ * Smooth a vector stroke with Chaikin corner cutting.
+ * Endpoints remain fixed; each iteration replaces interior corners with
+ * two weighted points, producing a softer editable polyline.
+ */
+export function smoothLineStroke(stroke, iterations = 1) {
+  if (!stroke || !Array.isArray(stroke.points) || stroke.points.length < 3) return stroke;
+  const count = Math.max(1, Math.min(4, Math.floor(Number(iterations) || 1)));
+  let points = stroke.points.map(point => ({ x: point.x, y: point.y }));
+  for (let pass = 0; pass < count; pass++) {
+    const next = [points[0]];
+    for (let index = 0; index < points.length - 1; index++) {
+      const a = points[index], b = points[index + 1];
+      next.push(
+        { x: a.x * 0.75 + b.x * 0.25, y: a.y * 0.75 + b.y * 0.25 },
+        { x: a.x * 0.25 + b.x * 0.75, y: a.y * 0.25 + b.y * 0.75 },
+      );
+    }
+    next.push(points[points.length - 1]);
+    points = next;
+  }
+  return { ...stroke, points };
+}
+
+function pointLineDistance(point, start, end) {
+  const dx = end.x - start.x, dy = end.y - start.y;
+  const length = dx * dx + dy * dy;
+  if (!length) return Math.hypot(point.x - start.x, point.y - start.y);
+  const t = Math.max(0, Math.min(1, ((point.x - start.x) * dx + (point.y - start.y) * dy) / length));
+  return Math.hypot(point.x - (start.x + t * dx), point.y - (start.y + t * dy));
+}
+
+/** Reduce redundant vector nodes with the Ramer-Douglas-Peucker algorithm. */
+export function simplifyLineStroke(stroke, tolerance = 1.5) {
+  if (!stroke || !Array.isArray(stroke.points) || stroke.points.length <= 2) return stroke;
+  const epsilon = Math.max(0, Number(tolerance) || 0);
+  const points = stroke.points;
+  const keep = new Uint8Array(points.length);
+  keep[0] = 1;
+  keep[points.length - 1] = 1;
+  const stack = [[0, points.length - 1]];
+  while (stack.length) {
+    const [start, end] = stack.pop();
+    let maxDistance = epsilon, maxIndex = -1;
+    for (let index = start + 1; index < end; index++) {
+      const distance = pointLineDistance(points[index], points[start], points[end]);
+      if (distance > maxDistance) { maxDistance = distance; maxIndex = index; }
+    }
+    if (maxIndex >= 0) {
+      keep[maxIndex] = 1;
+      stack.push([start, maxIndex], [maxIndex, end]);
+    }
+  }
+  return { ...stroke, points: points.filter((_, index) => keep[index]).map(point => ({ x: point.x, y: point.y })) };
+}
