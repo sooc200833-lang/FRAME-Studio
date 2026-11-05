@@ -30,8 +30,7 @@ output{color:var(--accent);min-width:35px;text-align:right}
 .layer{display:flex;gap:7px;align-items:center;padding:8px;margin:5px 0;background:#29292d;border:1px solid transparent;border-radius:7px;font-size:12px}
 .layer.selected{border-color:var(--accent)}
 .layer span{flex:1}
-.timeline{border-top:1px solid var(--line);padding:10px 14px;color:var(--muted);font-size:12px}
-.timeline span{color:#777}
+.timeline{border-top:1px solid var(--line);padding:8px 12px;color:var(--muted);font-size:12px;overflow:hidden}.timeline-head{display:flex;align-items:center;gap:12px;height:30px}.timeline-head strong{font-size:11px;letter-spacing:.08em;color:#ddd}.timeline-head>span{font-variant-numeric:tabular-nums}.timeline-actions{margin-left:auto;display:flex;gap:5px}.timeline-actions button{padding:4px 9px;font-size:11px}.frame-strip{display:flex;gap:6px;overflow-x:auto;padding:6px 1px 3px}.frame-cell{flex:0 0 52px;height:48px;padding:0;font-size:12px;background:#29292d}.frame-cell.active{border-color:var(--accent);background:#51452e;color:#ffe0a0}
 .note{font-size:11px;color:var(--muted);line-height:1.5;margin-top:12px}
 @media(max-width:760px){
   .workspace{grid-template-columns:46px minmax(0,1fr)}
@@ -48,3 +47,4 @@ output{color:var(--accent);min-width:35px;text-align:right}
 .boil-toggle{width:100%;margin-top:6px;border-color:#76613a;color:#f3d18b}
 .boil-toggle.active{background:#51452e;border-color:var(--accent);color:#ffe0a0}
 #boilTools .field input{width:92px}
+
