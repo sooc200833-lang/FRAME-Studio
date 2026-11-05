@@ -1254,6 +1254,25 @@ function bindControls() {
       context.clearRect(0, 0, W, H);
       context.fillStyle = '#fff';
       context.fillRect(0, 0, W, H);
+    } else if (layer.transformRecords?.length) {
+      const before = layer.canvas.toDataURL('image/png');
+      const beforeTransforms = snapshotRuntimeTransformRecords(layer.transformRecords);
+      save(layer);
+      layer.canvas.getContext('2d').clearRect(0, 0, W, H);
+      layer.transformRecords = [];
+      groupedTransformUndo = {
+        entries: [{
+          layer,
+          before,
+          after: layer.canvas.toDataURL('image/png'),
+          beforeTransforms,
+          afterTransforms: [],
+        }],
+        vectorBefore: null,
+        vectorAfter: null,
+      };
+      groupedTransformRedo = null;
+      saveActiveFrame();
     } else {
       save(layer);
       layer.canvas.getContext('2d').clearRect(0, 0, W, H);
