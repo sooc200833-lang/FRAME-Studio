@@ -166,3 +166,18 @@ test('applies affine rotation to a vector path without changing its color or ide
   assert.equal(result[0].color, '#123456');
   assert.equal(result[0].width, 3);
 });
+
+
+test('selects a thick vector stroke when its visible width overlaps a selection edge', () => {
+  const polygon = [{ x: 10, y: 10 }, { x: 30, y: 10 }, { x: 30, y: 30 }, { x: 10, y: 30 }];
+  const nearThick = { width: 12, points: [{ x: 0, y: 4.5 }, { x: 40, y: 4.5 }] };
+  const nearThin = { width: 8, points: [{ x: 0, y: 4.5 }, { x: 40, y: 4.5 }] };
+  assert.equal(lineStrokeIntersectsPolygon(nearThick, polygon), true);
+  assert.equal(lineStrokeIntersectsPolygon(nearThin, polygon), false);
+});
+
+test('does not select a thick vector stroke that remains outside the selection boundary', () => {
+  const polygon = [{ x: 10, y: 10 }, { x: 30, y: 10 }, { x: 30, y: 30 }, { x: 10, y: 30 }];
+  const stroke = { width: 6, points: [{ x: 0, y: 0 }, { x: 5, y: 0 }] };
+  assert.equal(lineStrokeIntersectsPolygon(stroke, polygon), false);
+});
