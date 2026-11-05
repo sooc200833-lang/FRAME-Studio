@@ -81,3 +81,12 @@ output{color:var(--accent);min-width:35px;text-align:right}
 /* Layer mask controls */
 #maskState{margin:4px 0 10px;min-height:28px}
 #maskEdit.active{border-color:var(--accent);background:#51452e;color:#ffe0a0}
+
+/* Layer folders */
+.layer-group{display:flex;align-items:center;gap:7px;margin:9px 0 4px;padding:8px;background:#343038;border:1px solid #51475a;border-radius:7px;font-size:12px;cursor:pointer}
+.layer-group.selected{border-color:var(--accent)}
+.layer-group strong{flex:1;color:#e9d9b7}
+.layer-group small{color:var(--muted)}
+.layer.nested{margin-left:15px;border-left:2px solid #51475a}
+#groupInspector{border-top:1px solid var(--line);margin-top:12px;padding-top:2px}
+#groupBlend{max-width:125px;background:#29292d;color:var(--text);border:1px solid var(--line);border-radius:6px;padding:5px}
