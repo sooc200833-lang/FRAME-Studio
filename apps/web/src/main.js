@@ -5,7 +5,7 @@ import { expandRegionMask, findConnectedRegion } from './fill/flood-fill.js';
 import { animateLineStrokes, lineBoilPhase } from './line/line-boil.js';
 import { activeFrame, addFrame, createTimeline, deleteFrame, frameAtTime, getOnionSkin, selectFrame, updateFrameCels, updateFrameStrokes } from './animation/timeline.js';
 import { normalizeRasterCels } from './animation/frame-cels.js';
-import { containsSelectionPoint, moveSelectionRect, normalizeSelectionRect, resizeSelectionRect } from './selection/selection.js';
+import { containsSelectionPoint, moveSelectionRect, normalizeSelectionRect, pointInPolygon, resizeSelectionRect, translatePolygon } from './selection/selection.js';
 import {
   createLineStroke,
   hitTestLineStrokes,
@@ -31,6 +31,7 @@ let pressureEnabled = true;
 let brushSmoothing = 0.28;
 let maskEditing = false;
 let selectionRect = null;
+let selectionPolygon = null;
 let selectionDrag = null;
 let lineStartPoint = null;
 let drawingPoints = null;
@@ -201,7 +202,7 @@ function composite() {
 function render(dirtyIndices = [], displayStrokes = vectorStrokes) {
   applyGroupState();
   if (!loadingFrame) updateFrameStrokes(timeline, timeline.activeFrameId, vectorStrokes);
-  renderer.sync(layers, dirtyIndices, displayStrokes, selectedStrokeId, onionEnabled ? getOnionSkin(timeline) : [], selectionRect);
+  renderer.sync(layers, dirtyIndices, displayStrokes, selectedStrokeId, onionEnabled ? getOnionSkin(timeline) : [], selectionRect, selectionPolygon);
   document.getElementById('status').textContent = tool.toUpperCase();
   drawLayers();
   updateLayerInspector();
@@ -563,6 +564,7 @@ function bindControls() {
 
   document.getElementById('selectionDeselect').onclick = () => {
     selectionRect = null;
+    selectionPolygon = null;
     selectionDrag = null;
     down = false;
     render();
@@ -819,6 +821,27 @@ function bindCanvasEvents() {
     inputSurface.setPointerCapture(event.pointerId);
     const point = position(event);
 
+    if (tool === 'lasso') {
+      down = true;
+      if (selectionPolygon && pointInPolygon(point, selectionPolygon)) {
+        const sourceCanvas = document.createElement('canvas');
+        sourceCanvas.width = W; sourceCanvas.height = H;
+        const context = sourceCanvas.getContext('2d');
+        context.save();
+        context.beginPath();
+        selectionPolygon.forEach((p, index) => index ? context.lineTo(p.x, p.y) : context.moveTo(p.x, p.y));
+        context.closePath();
+        context.clip();
+        context.drawImage(layers[active].canvas, 0, 0);
+        context.restore();
+        selectionDrag = { mode: 'lassoMove', start: point, originalPolygon: selectionPolygon.map(p => ({ ...p })), sourceCanvas };
+      } else {
+        selectionPolygon = [point];
+        selectionDrag = { mode: 'lassoNew', start: point };
+      }
+      return;
+    }
+
     if (tool === 'marquee') {
       down = true;
       const existing = selectionRect;
@@ -894,6 +917,50 @@ function bindCanvasEvents() {
           render();
         }
       }
+      return;
+    }
+
+    if (tool === 'lasso' && down && selectionDrag) {
+      if (selectionDrag.mode === 'lassoNew') {
+        const points = selectionPolygon;
+        const previous = points[points.length - 1];
+        if (Math.hypot(point.x - previous.x, point.y - previous.y) >= 2.5) points.push(point);
+      } else if (selectionDrag.mode === 'lassoMove') {
+        selectionPolygon = translatePolygon(selectionDrag.originalPolygon, point.x - selectionDrag.start.x, point.y - selectionDrag.start.y, { width: W, height: H });
+      }
+      render();
+      return;
+    }
+
+    if (tool === 'lasso' && down && selectionDrag) {
+      const point = position(event);
+      const drag = selectionDrag;
+      if (drag.mode === 'lassoNew') {
+        const lastPoint = selectionPolygon[selectionPolygon.length - 1];
+        if (Math.hypot(point.x - lastPoint.x, point.y - lastPoint.y) > 1) selectionPolygon.push(point);
+        if (selectionPolygon.length < 3) selectionPolygon = null;
+      } else if (drag.mode === 'lassoMove') {
+        const moved = selectionPolygon;
+        const original = drag.originalPolygon;
+        const dx = moved[0].x - original[0].x;
+        const dy = moved[0].y - original[0].y;
+        if (Math.abs(dx) > 0.5 || Math.abs(dy) > 0.5) {
+          const layer = layers[active];
+          save(layer);
+          const context = layer.canvas.getContext('2d');
+          context.save();
+          context.beginPath();
+          original.forEach((p, index) => index ? context.lineTo(p.x, p.y) : context.moveTo(p.x, p.y));
+          context.closePath();
+          context.clip();
+          context.clearRect(0, 0, W, H);
+          context.restore();
+          context.drawImage(drag.sourceCanvas, dx, dy);
+        }
+      }
+      selectionDrag = null;
+      down = false;
+      render([active]);
       return;
     }
 
