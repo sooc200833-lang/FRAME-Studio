@@ -1658,13 +1658,13 @@ function bindCanvasEvents() {
     if (tool === 'lasso' && down && selectionDrag) {
       const drag = selectionDrag;
       if (event.type === 'pointercancel') {
-        renderer.clearLayerPreview(layers[active]);
+        clearSelectionDragPreviews(drag);
         selectionPolygon = drag.originalPolygon
           ? drag.originalPolygon.map(point => ({ ...point }))
           : null;
         selectionDrag = null;
         down = false;
-        render([active]);
+        render(layers.map((_, index) => index));
         return;
       }
       const point = position(event);
@@ -1679,23 +1679,20 @@ function bindCanvasEvents() {
         const dx = selectionPolygon[0].x - original[0].x;
         const dy = selectionPolygon[0].y - original[0].y;
         if (Math.abs(dx) > 0.5 || Math.abs(dy) > 0.5) {
-          const layer = layers[active];
-          save(layer);
-          const context = layer.canvas.getContext('2d');
-          context.save();
-          context.beginPath();
-          original.forEach((p, index) => index ? context.lineTo(p.x, p.y) : context.moveTo(p.x, p.y));
-          context.closePath();
-          context.clip();
-          context.clearRect(0, 0, W, H);
-          context.restore();
-          context.drawImage(drag.sourceCanvas, dx, dy);
-          saveActiveFrame();
-          render([active]);
+          commitSelectionDragSources(drag, source => {
+            const context = source.layer.canvas.getContext('2d');
+            context.save();
+            context.beginPath();
+            original.forEach((p, index) => index ? context.lineTo(p.x, p.y) : context.moveTo(p.x, p.y));
+            context.closePath();
+            context.clip();
+            context.clearRect(0, 0, W, H);
+            context.restore();
+            context.drawImage(source.sourceCanvas, dx, dy);
+          });
         }
       } else if (['lassoResize', 'lassoRotate'].includes(drag.mode) && selectionPolygon?.length) {
         const original = drag.originalPolygon;
-        const layer = layers[active];
         const originalBounds = getPolygonBounds(original);
         const targetBounds = getPolygonBounds(selectionPolygon);
         const changed = drag.mode === 'lassoRotate'
@@ -1707,41 +1704,40 @@ function bindCanvasEvents() {
             || Math.abs(originalBounds.height - targetBounds.height) > 0.5
           );
         if (changed) {
-          save(layer);
-          const context = layer.canvas.getContext('2d');
-          context.save();
-          context.beginPath();
-          original.forEach((p, index) => index ? context.lineTo(p.x, p.y) : context.moveTo(p.x, p.y));
-          context.closePath();
-          context.clip();
-          context.clearRect(0, 0, W, H);
-          context.restore();
+          commitSelectionDragSources(drag, source => {
+            const context = source.layer.canvas.getContext('2d');
+            context.save();
+            context.beginPath();
+            original.forEach((p, index) => index ? context.lineTo(p.x, p.y) : context.moveTo(p.x, p.y));
+            context.closePath();
+            context.clip();
+            context.clearRect(0, 0, W, H);
+            context.restore();
 
-          if (drag.mode === 'lassoResize' && originalBounds && targetBounds) {
-            const scaleX = targetBounds.width / originalBounds.width;
-            const scaleY = targetBounds.height / originalBounds.height;
-            context.save();
-            context.translate(targetBounds.x - originalBounds.x * scaleX, targetBounds.y - originalBounds.y * scaleY);
-            context.scale(scaleX, scaleY);
-            context.drawImage(drag.sourceCanvas, 0, 0);
-            context.restore();
-          } else if (drag.mode === 'lassoRotate') {
-            const center = getPolygonCentroid(original);
-            context.save();
-            context.translate(center.x, center.y);
-            context.rotate((drag.rotation || 0) * Math.PI / 180);
-            context.translate(-center.x, -center.y);
-            context.drawImage(drag.sourceCanvas, 0, 0);
-            context.restore();
-          }
-          saveActiveFrame();
-          render([active]);
+            if (drag.mode === 'lassoResize' && originalBounds && targetBounds && originalBounds.width > 0 && originalBounds.height > 0) {
+              const scaleX = targetBounds.width / originalBounds.width;
+              const scaleY = targetBounds.height / originalBounds.height;
+              context.save();
+              context.translate(targetBounds.x - originalBounds.x * scaleX, targetBounds.y - originalBounds.y * scaleY);
+              context.scale(scaleX, scaleY);
+              context.drawImage(source.sourceCanvas, 0, 0);
+              context.restore();
+            } else if (drag.mode === 'lassoRotate') {
+              const center = getPolygonCentroid(original);
+              context.save();
+              context.translate(center.x, center.y);
+              context.rotate((drag.rotation || 0) * Math.PI / 180);
+              context.translate(-center.x, -center.y);
+              context.drawImage(source.sourceCanvas, 0, 0);
+              context.restore();
+            }
+          });
         }
       }
-      renderer.clearLayerPreview(layers[active]);
+      clearSelectionDragPreviews(drag);
       selectionDrag = null;
       down = false;
-      render([active]);
+      render(layers.map((_, index) => index));
       return;
     }
 
