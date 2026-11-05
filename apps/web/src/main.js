@@ -107,8 +107,16 @@ function drawVectorStrokes(context, strokes = vectorStrokes) {
     if (!stroke.points.length) continue;
     context.beginPath();
     context.moveTo(stroke.points[0].x, stroke.points[0].y);
-    for (let index = 1; index < stroke.points.length; index++) {
-      context.lineTo(stroke.points[index].x, stroke.points[index].y);
+    if (stroke.points.length === 2) {
+      context.lineTo(stroke.points[1].x, stroke.points[1].y);
+    } else {
+      for (let index = 1; index < stroke.points.length - 1; index++) {
+        const current = stroke.points[index];
+        const next = stroke.points[index + 1];
+        context.quadraticCurveTo(current.x, current.y, (current.x + next.x) / 2, (current.y + next.y) / 2);
+      }
+      const lastPoint = stroke.points[stroke.points.length - 1];
+      context.lineTo(lastPoint.x, lastPoint.y);
     }
     context.strokeStyle = stroke.color;
     context.lineWidth = stroke.width;
@@ -128,7 +136,7 @@ function composite() {
     if (!layer.visible) return;
     context.save();
     context.globalAlpha = layer.opacity ?? 1;
-    context.globalCompositeOperation = layer.blendMode === 'add' ? 'lighter' : (layer.blendMode || 'source-over');
+    context.globalCompositeOperation = layer.blendMode === 'add' ? 'lighter' : (layer.blendMode === 'normal' || !layer.blendMode ? 'source-over' : layer.blendMode);
     context.drawImage(layer.canvas, 0, 0);
     context.restore();
   });
