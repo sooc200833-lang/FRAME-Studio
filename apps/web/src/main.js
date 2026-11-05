@@ -1830,7 +1830,6 @@ function bindCanvasEvents() {
         selectionRect = null;
         selectionPolygon = transformPolygon(polygon, drag.rotation, 1);
       }
-      }
       if (drag.mode === 'move' || drag.mode === 'resize') {
         const original = drag.originalRect;
         const target = selectionRect;
