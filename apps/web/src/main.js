@@ -159,7 +159,7 @@ async function decodeRasterCels(cels) {
 }
 
 async function loadTimelineFrame(frameId, saveCurrent = true) {
-  if (saveCurrent) saveActiveFrame();
+  if (saveCurrent && !loadingFrame) saveActiveFrame();
   if (!selectFrame(timeline, frameId)) return;
   const token = ++frameLoadToken;
   loadingFrame = true;
@@ -197,6 +197,7 @@ function drawTimeline() {
 }
 
 function setPlaybackEnabled(enabled) {
+  if (enabled && loadingFrame) return;
   playbackActive = enabled;
   const button = document.getElementById('playToggle');
   button.textContent = enabled ? 'Ⅱ 일시정지' : '▶ 재생';
@@ -213,7 +214,7 @@ function setPlaybackEnabled(enabled) {
   } else {
     if (playbackRaf) cancelAnimationFrame(playbackRaf);
     playbackRaf = 0;
-    saveActiveFrame();
+    if (!loadingFrame) saveActiveFrame();
     render();
   }
 }
@@ -546,7 +547,7 @@ function bindControls() {
 
 function bindCanvasEvents() {
   inputSurface.addEventListener('pointerdown', event => {
-    if (event.button !== 0) return;
+    if (event.button !== 0 || loadingFrame) return;
     if (playbackActive) setPlaybackEnabled(false);
     if (boilEnabled) setBoilEnabled(false);
     inputSurface.setPointerCapture(event.pointerId);
