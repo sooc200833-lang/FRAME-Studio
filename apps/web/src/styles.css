@@ -156,3 +156,14 @@ output{color:var(--accent);min-width:35px;text-align:right}
 @media(max-width:760px){
   .workspace.inspector-collapsed{grid-template-columns:46px minmax(0,1fr)}
 }
+
+
+/* Layer stack thumbnails and ordering controls */
+.layer{display:grid;grid-template-columns:24px 18px 48px minmax(0,1fr) auto;align-items:center;gap:6px;min-height:54px;padding:5px 6px}
+.layer-thumbnail{width:48px;height:36px;object-fit:contain;border:1px solid #484850;border-radius:5px;background:#f5f3ed}
+.layer-name{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px}
+.layer-order{display:flex;flex-direction:column;gap:1px}
+.layer-order button{width:22px;height:19px;min-height:19px;padding:0;border:0;background:#303037;color:#c9c9d0;font-size:11px;line-height:1}
+.layer-order button:disabled{opacity:.25}
+.layer-order button:not(:disabled):hover{background:#514735;color:#f2d69a}
+.layer-group{min-height:34px}
