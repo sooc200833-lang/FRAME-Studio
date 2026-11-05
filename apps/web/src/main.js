@@ -806,10 +806,11 @@ function updateSelectionDragPreview(drag) {
     return;
   }
 
-  const previewCanvas = document.createElement('canvas');
-  previewCanvas.width = W;
-  previewCanvas.height = H;
+  const previewCanvas = drag.previewCanvas || document.createElement('canvas');
+  if (previewCanvas.width !== W) previewCanvas.width = W;
+  if (previewCanvas.height !== H) previewCanvas.height = H;
   const context = previewCanvas.getContext('2d');
+  context.clearRect(0, 0, W, H);
   context.drawImage(layers[active].canvas, 0, 0);
 
   const original = drag.originalRect;
