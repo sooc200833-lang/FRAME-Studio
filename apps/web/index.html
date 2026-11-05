@@ -4,13 +4,13 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
 <meta name="theme-color" content="#171719">
-<title>FRAME Studio — v0.9</title>
+<title>FRAME Studio — v1.0</title>
 </head>
 <body>
 <div class="app">
   <header>
     <div class="brand">FRAME<span>•</span>STUDIO</div>
-    <span class="version">v0.9 · MOTION STUDIO</span>
+    <span class="version">v1.0 · DRAWING ENGINE</span>
     <div class="spacer"></div>
     <button id="undo" aria-label="실행 취소">↶</button>
     <button id="redo" aria-label="다시 실행">↷</button>
@@ -40,6 +40,8 @@
     <aside class="inspector" id="inspector">
       <h3>BRUSH & FILL</h3>
       <div class="field"><label for="size">크기</label><input id="size" type="range" min="1" max="60" value="7"><output id="sizeOut">7px</output></div>
+      <label class="check-field"><input id="pressureEnabled" type="checkbox" checked><span>Apple Pencil 필압 반영</span></label>
+      <div class="field"><label for="brushSmoothing">획 안정화</label><input id="brushSmoothing" type="range" min="0" max="80" value="28"><output id="brushSmoothingOut">28%</output></div>
       <div class="field"><label for="tolerance">채우기 허용 오차</label><input id="tolerance" type="range" min="0" max="100" value="24"><output id="tolOut">24</output></div>
       <div class="field"><label for="edge">선화 아래 확장</label><input id="edge" type="range" min="0" max="4" value="1"><output id="edgeOut">1px</output></div>
       <section id="boilTools">
