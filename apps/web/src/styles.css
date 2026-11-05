@@ -44,3 +44,7 @@ output{color:var(--accent);min-width:35px;text-align:right}
 .delete-line{width:100%;margin-top:4px;border-color:#744d4d;color:#f0a6a6}
 #lineColor{width:52px;height:30px;padding:2px;border:1px solid var(--line);border-radius:6px;background:#29292d}
 [hidden]{display:none!important}
+
+.boil-toggle{width:100%;margin-top:6px;border-color:#76613a;color:#f3d18b}
+.boil-toggle.active{background:#51452e;border-color:var(--accent);color:#ffe0a0}
+#boilTools .field input{width:92px}
