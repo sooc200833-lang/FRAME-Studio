@@ -90,3 +90,6 @@ output{color:var(--accent);min-width:35px;text-align:right}
 .layer.nested{margin-left:15px;border-left:2px solid #51475a}
 #groupInspector{border-top:1px solid var(--line);margin-top:12px;padding-top:2px}
 #groupBlend{max-width:125px;background:#29292d;color:var(--text);border:1px solid var(--line);border-radius:6px;padding:5px}
+
+.transform-apply{width:100%;margin:6px 0;border-color:#76613a;color:#f3d18b}
+#selectionAngle,#selectionScale{accent-color:var(--accent)}
