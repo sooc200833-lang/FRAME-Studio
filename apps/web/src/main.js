@@ -20,7 +20,7 @@ let color = '#24242a';
 let size = 7;
 let down = false;
 let last = null;
-let start = null;
+let lineStartPoint = null;
 let drawingPoints = null;
 let movingStroke = false;
 let moveSnapshot = null;
@@ -439,7 +439,7 @@ function bindCanvasEvents() {
     }
 
     down = true;
-    start = last = point;
+    lineStartPoint = last = point;
     save(layers[active]);
     if (tool === 'pen' || tool === 'eraser') {
       stroke(point, { x: point.x + 0.01, y: point.y + 0.01 });
@@ -477,7 +477,7 @@ function bindCanvasEvents() {
     }
 
     if (tool === 'line') {
-      renderer.previewLine(start, point, Number.parseInt(color.slice(1), 16), size);
+      renderer.previewLine(lineStartPoint, point, Number.parseInt(color.slice(1), 16), size);
     } else if (tool === 'pen' || tool === 'eraser') {
       stroke(last, point);
       render([active]);
@@ -520,7 +520,7 @@ function bindCanvasEvents() {
     }
 
     if (tool === 'line') {
-      stroke(start, point);
+      stroke(lineStartPoint, point);
       renderer.clearPreview();
       render([active]);
     }
