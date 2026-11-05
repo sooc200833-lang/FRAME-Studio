@@ -56,10 +56,11 @@ header{display:flex;align-items:center;gap:10px;padding:0 14px;background:#1c1c1
 <script>
 const canvas=document.getElementById('artboard'),ctx=canvas.getContext('2d',{willReadFrequently:true});
 const W=canvas.width,H=canvas.height;
-let tool='pen',color='#24242a',size=7,active=1,down=false,last=null,start=null;
+let tool='pen',color='#24242a',size=7,down=false,last=null,start=null;
 const palette=['#24242a','#ffffff','#e95d4f','#e8b64f','#6c9c85','#6f86c9','#b78bc7'];
 function layer(name){const c=document.createElement('canvas');c.width=W;c.height=H;return{name,visible:true,canvas:c,undo:[],redo:[]}}
-let layers=[layer('선화'),layer('면 / 톤')];
+let layers=[layer('면 / 톤'),layer('선화')];
+let active=1;
 function save(l){l.undo.push(l.canvas.toDataURL());if(l.undo.length>25)l.undo.shift();l.redo=[]}
 function restore(l,stack,other){if(!stack.length)return;other.push(l.canvas.toDataURL());const im=new Image();im.onload=()=>{const g=l.canvas.getContext('2d');g.clearRect(0,0,W,H);g.drawImage(im,0,0);render()};im.src=stack.pop()}
 function composite(){const c=document.createElement('canvas');c.width=W;c.height=H;const g=c.getContext('2d',{willReadFrequently:true});g.fillStyle='#f4f0e8';g.fillRect(0,0,W,H);layers.forEach(l=>{if(l.visible)g.drawImage(l.canvas,0,0)});return g}
@@ -97,7 +98,7 @@ document.getElementById('tolerance').oninput=e=>document.getElementById('tolOut'
 document.getElementById('edge').oninput=e=>document.getElementById('edgeOut').value=e.target.value+'px';
 const pal=document.getElementById('palette');palette.forEach(c=>{const b=document.createElement('button');b.className='swatch';b.style.background=c;b.onclick=()=>{color=c;pal.querySelectorAll('button').forEach(x=>x.classList.toggle('selected',x===b))};pal.append(b);if(c===color)b.classList.add('selected')});
 // Enclosed sample shapes: line art is on the top layer, color goes to the separate paint layer.
-const g=layers[0].canvas.getContext('2d');g.strokeStyle='#24242a';g.lineWidth=12;g.lineJoin='round';g.beginPath();g.arc(600,280,130,0,Math.PI*2);g.stroke();g.beginPath();g.moveTo(470,520);g.lineTo(730,520);g.lineTo(730,760);g.lineTo(470,760);g.closePath();g.stroke();
+const g=layers[1].canvas.getContext('2d');g.strokeStyle='#24242a';g.lineWidth=12;g.lineJoin='round';g.beginPath();g.arc(600,280,130,0,Math.PI*2);g.stroke();g.beginPath();g.moveTo(470,520);g.lineTo(730,520);g.lineTo(730,760);g.lineTo(470,760);g.closePath();g.stroke();
 render();
 </script>
 </body>
