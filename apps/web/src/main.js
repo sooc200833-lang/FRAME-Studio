@@ -1,7 +1,7 @@
 import './styles.css';
 import { PixiStageRenderer } from './renderer.js';
 import { clientToCanvasPoint, parseCssTransformMatrix } from './viewport/coordinates.js';
-import { applyBrushTexture, coalescedPointerEvents, createBrushOutline, getBrushPreset, normalizePointerPressure, resolveBrushStrokeOptions, stabilizePoint } from './brush/brush-engine.js';
+import { applyBrushTexture, coalescedPointerEvents, createBrushOutline, createFrameScheduler, getBrushPreset, normalizePointerPressure, resolveBrushStrokeOptions, stabilizePoint } from './brush/brush-engine.js';
 import { expandRegionMask, findConnectedRegion } from './fill/flood-fill.js';
 import { animateLineStrokes, lineBoilPhase } from './line/line-boil.js';
 import { activeFrame, addFrame, createTimeline, deleteFrame, frameAtTime, getOnionSkin, selectFrame, updateFrameCels, updateFrameStrokes } from './animation/timeline.js';
@@ -1213,6 +1213,17 @@ function bindControls() {
 }
 
 function bindCanvasEvents() {
+  const drawBrushPreview = () => {
+    if (!strokeSamples.length) return;
+    const outline = createBrushOutline(strokeSamples, currentStrokeOptions(true));
+    if (!maskEditing && tool === 'pen') {
+      renderer.previewBrush(outline, color, currentBrushPreset().opacity * brushOpacity, strokeSamples, { preset: brushPreset, size, color });
+    } else {
+      renderer.previewPolygon(outline, maskEditing ? (tool === 'eraser' ? 0xffffff : 0x171719) : 0xf4f0e8, 0.9);
+    }
+  };
+  const brushPreviewScheduler = createFrameScheduler(drawBrushPreview);
+
   inputSurface.addEventListener('pointerdown', event => {
     if (event.button !== 0 || loadingFrame) return;
     if (playbackActive) setPlaybackEnabled(false);
@@ -1323,14 +1334,7 @@ function bindCanvasEvents() {
       ? [{ ...point, pressure: normalizePointerPressure(event, pressureEnabled) }]
       : [];
     if (!maskEditing) save(layers[active]);
-    if (tool === 'pen' || tool === 'eraser') {
-      const outline = createBrushOutline(strokeSamples, currentStrokeOptions(true));
-      if (!maskEditing && tool === 'pen') {
-        renderer.previewBrush(outline, color, currentBrushPreset().opacity * brushOpacity, strokeSamples, { preset: brushPreset, size, color });
-      } else {
-        renderer.previewPolygon(outline, maskEditing ? (tool === 'eraser' ? 0xffffff : 0x171719) : 0xf4f0e8, 0.9);
-      }
-    }
+    if (tool === 'pen' || tool === 'eraser') drawBrushPreview();
   });
 
   inputSurface.addEventListener('pointermove', event => {
@@ -1419,13 +1423,9 @@ function bindCanvasEvents() {
         });
         last = smoothPoint;
       }
-      const profile = currentBrushPreset();
-      const outline = createBrushOutline(strokeSamples, currentStrokeOptions(true));
-      if (!maskEditing && tool === 'pen') {
-        renderer.previewBrush(outline, color, currentBrushPreset().opacity * brushOpacity, strokeSamples, { preset: brushPreset, size, color });
-      } else {
-        renderer.previewPolygon(outline, maskEditing ? (tool === 'eraser' ? 0xffffff : 0x171719) : 0xf4f0e8, 0.9);
-      }
+      // Pointer events can arrive faster than the display refresh rate. Keep
+      // every coalesced sample, but rebuild the full outline only once per frame.
+      brushPreviewScheduler.schedule();
     }
   });
 
@@ -1508,6 +1508,7 @@ function bindCanvasEvents() {
       return;
     }
 
+    if (tool === 'pen' || tool === 'eraser') brushPreviewScheduler.cancel();
     if (!down) return;
     const point = position(event);
 
