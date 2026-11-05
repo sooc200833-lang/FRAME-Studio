@@ -100,3 +100,13 @@ export function frameAtTime(timeline, elapsedMs) {
   }
   return timeline.frames.at(-1) || null;
 }
+
+/** Set the exposure duration for one frame, in milliseconds. */
+export function setFrameDuration(timeline, frameId, durationMs) {
+  const frame = timeline.frames.find(item => item.id === frameId);
+  if (!frame) return false;
+  const duration = Number(durationMs);
+  if (!Number.isFinite(duration)) return false;
+  frame.durationMs = Math.max(20, Math.min(10000, duration));
+  return true;
+}
