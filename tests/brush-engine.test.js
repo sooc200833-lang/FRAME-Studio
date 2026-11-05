@@ -1,7 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  applyBrushTexture,
   coalescedPointerEvents,
+  createBrushTextureMarks,
   getBrushPreset,
   listBrushPresets,
   createBrushOutline,
@@ -99,4 +101,52 @@ test('preset choice changes generated brush geometry', () => {
   const pencil = createBrushOutline(samples, { size: 12, stylus: true, preset: 'pencil' });
   const marker = createBrushOutline(samples, { size: 12, stylus: true, preset: 'marker' });
   assert.ok(outlineThickness(marker) > outlineThickness(pencil));
+});
+
+
+test('pencil texture produces deterministic grain marks', () => {
+  const samples = [{ x: 0, y: 0 }, { x: 40, y: 0 }];
+  const first = createBrushTextureMarks(samples, { preset: 'pencil', size: 8 });
+  const second = createBrushTextureMarks(samples, { preset: 'pencil', size: 8 });
+  assert.ok(first.length > 0);
+  assert.deepEqual(first, second);
+  assert.ok(first.every(mark => mark.type === 'grain' && mark.radius > 0));
+});
+
+test('marker and brush textures use different directional marks', () => {
+  const samples = [{ x: 0, y: 0 }, { x: 80, y: 12 }];
+  const marker = createBrushTextureMarks(samples, { preset: 'marker', size: 14 });
+  const brush = createBrushTextureMarks(samples, { preset: 'brush', size: 14 });
+  assert.ok(marker.length > 0 && brush.length > 0);
+  assert.ok(marker.every(mark => mark.type === 'band'));
+  assert.ok(brush.every(mark => mark.type === 'bristle'));
+  assert.notDeepEqual(marker, brush);
+});
+
+test('ink preset does not add artificial surface texture', () => {
+  assert.deepEqual(createBrushTextureMarks([{ x: 0, y: 0 }, { x: 20, y: 0 }], { preset: 'ink' }), []);
+});
+
+test('texture painting clips marks to the brush outline and restores context', () => {
+  const calls = [];
+  const context = {
+    globalAlpha: 0.6,
+    save() { calls.push('save'); },
+    restore() { calls.push('restore'); },
+    beginPath() { calls.push('beginPath'); },
+    moveTo() {},
+    lineTo() {},
+    closePath() {},
+    clip() { calls.push('clip'); },
+    ellipse() {},
+    fill() { calls.push('fill'); },
+    stroke() { calls.push('stroke'); },
+  };
+  const outline = [[0, 0], [30, 0], [30, 10], [0, 10]];
+  const count = applyBrushTexture(context, outline, [{ x: 0, y: 5 }, { x: 30, y: 5 }], { preset: 'pencil', size: 6 });
+  assert.ok(count > 0);
+  assert.ok(calls.includes('clip'));
+  assert.equal(calls[0], 'save');
+  assert.equal(calls.at(-1), 'restore');
+  assert.equal(context.globalAlpha, 0.6);
 });
