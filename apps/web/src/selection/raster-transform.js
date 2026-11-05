@@ -8,6 +8,9 @@ export const IDENTITY_AFFINE_MATRIX = Object.freeze([1, 0, 0, 1, 0, 0]);
 const MATRIX_EPSILON = 1e-12;
 
 function finiteNumber(value) {
+  if (value === null || value === undefined || typeof value === 'boolean') return null;
+  if (typeof value === 'string' && value.trim() === '') return null;
+  if (typeof value !== 'number' && typeof value !== 'string') return null;
   const number = Number(value);
   return Number.isFinite(number) ? number : null;
 }
@@ -113,12 +116,16 @@ export function getTransformedBounds(points, matrixValue = IDENTITY_AFFINE_MATRI
   if (!Array.isArray(points) || points.length === 0) return null;
   const transformed = points.map(point => transformAffinePoint(matrixValue, point));
   if (transformed.some(point => !point)) return null;
-  const xs = transformed.map(point => point.x);
-  const ys = transformed.map(point => point.y);
-  const left = Math.min(...xs);
-  const top = Math.min(...ys);
-  const right = Math.max(...xs);
-  const bottom = Math.max(...ys);
+  let left = Infinity;
+  let top = Infinity;
+  let right = -Infinity;
+  let bottom = -Infinity;
+  for (const point of transformed) {
+    left = Math.min(left, point.x);
+    top = Math.min(top, point.y);
+    right = Math.max(right, point.x);
+    bottom = Math.max(bottom, point.y);
+  }
   return { x: left, y: top, width: right - left, height: bottom - top };
 }
 
