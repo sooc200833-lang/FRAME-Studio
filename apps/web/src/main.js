@@ -5,6 +5,7 @@ import { expandRegionMask, findConnectedRegion } from './fill/flood-fill.js';
 import { animateLineStrokes, lineBoilPhase } from './line/line-boil.js';
 import { activeFrame, addFrame, createTimeline, deleteFrame, frameAtTime, getOnionSkin, selectFrame, updateFrameCels, updateFrameStrokes } from './animation/timeline.js';
 import { normalizeRasterCels } from './animation/frame-cels.js';
+import { containsSelectionPoint, moveSelectionRect, normalizeSelectionRect, resizeSelectionRect } from './selection/selection.js';
 import {
   createLineStroke,
   hitTestLineStrokes,
@@ -29,6 +30,8 @@ let strokeIsStylus = false;
 let pressureEnabled = true;
 let brushSmoothing = 0.28;
 let maskEditing = false;
+let selectionRect = null;
+let selectionDrag = null;
 let lineStartPoint = null;
 let drawingPoints = null;
 let movingStroke = false;
@@ -198,7 +201,7 @@ function composite() {
 function render(dirtyIndices = [], displayStrokes = vectorStrokes) {
   applyGroupState();
   if (!loadingFrame) updateFrameStrokes(timeline, timeline.activeFrameId, vectorStrokes);
-  renderer.sync(layers, dirtyIndices, displayStrokes, selectedStrokeId, onionEnabled ? getOnionSkin(timeline) : []);
+  renderer.sync(layers, dirtyIndices, displayStrokes, selectedStrokeId, onionEnabled ? getOnionSkin(timeline) : [], selectionRect);
   document.getElementById('status').textContent = tool.toUpperCase();
   drawLayers();
   updateLayerInspector();
@@ -807,6 +810,25 @@ function bindCanvasEvents() {
     inputSurface.setPointerCapture(event.pointerId);
     const point = position(event);
 
+    if (tool === 'marquee') {
+      down = true;
+      const existing = selectionRect;
+      let mode = 'new';
+      if (existing && containsSelectionPoint(existing, point)) {
+        const handle = Math.hypot(point.x - (existing.x + existing.width), point.y - (existing.y + existing.height)) <= 14;
+        mode = handle ? 'resize' : 'move';
+      }
+      const sourceCanvas = document.createElement('canvas');
+      if (mode !== 'new' && existing) {
+        sourceCanvas.width = Math.max(1, Math.ceil(existing.width));
+        sourceCanvas.height = Math.max(1, Math.ceil(existing.height));
+        sourceCanvas.getContext('2d').drawImage(layers[active].canvas, existing.x, existing.y, existing.width, existing.height, 0, 0, sourceCanvas.width, sourceCanvas.height);
+      }
+      selectionDrag = { mode, start: point, originalRect: existing ? { ...existing } : null, sourceCanvas };
+      if (mode === 'new') selectionRect = normalizeSelectionRect(point, point);
+      return;
+    }
+
     if (tool === 'fill') {
       floodFill(point.x, point.y);
       render([active]);
@@ -866,6 +888,18 @@ function bindCanvasEvents() {
       return;
     }
 
+    if (tool === 'marquee' && down && selectionDrag) {
+      if (selectionDrag.mode === 'new') {
+        selectionRect = normalizeSelectionRect(selectionDrag.start, point);
+      } else if (selectionDrag.mode === 'move') {
+        selectionRect = moveSelectionRect(selectionDrag.originalRect, point.x - selectionDrag.start.x, point.y - selectionDrag.start.y, { width: W, height: H });
+      } else if (selectionDrag.mode === 'resize') {
+        selectionRect = resizeSelectionRect(selectionDrag.originalRect, point, { width: W, height: H });
+      }
+      render();
+      return;
+    }
+
     if (!down) return;
 
     if (tool === 'vector') {
@@ -906,6 +940,26 @@ function bindCanvasEvents() {
   });
 
   const end = event => {
+    if (tool === 'marquee' && down && selectionDrag) {
+      const drag = selectionDrag;
+      if (drag.mode === 'move' || drag.mode === 'resize') {
+        const source = drag.sourceCanvas;
+        const original = drag.originalRect;
+        const target = selectionRect;
+        if (source && original && target && (Math.abs(target.x - original.x) > 0.5 || Math.abs(target.y - original.y) > 0.5 || Math.abs(target.width - original.width) > 0.5 || Math.abs(target.height - original.height) > 0.5)) {
+          const layer = layers[active];
+          save(layer);
+          const context = layer.canvas.getContext('2d');
+          context.clearRect(original.x, original.y, original.width, original.height);
+          context.drawImage(source, target.x, target.y, target.width, target.height);
+        }
+      }
+      selectionDrag = null;
+      down = false;
+      render([active]);
+      return;
+    }
+
     if (tool === 'select' && movingStroke && moveSnapshot) {
       if (moveChanged) commitLineHistory(moveSnapshot);
       movingStroke = false;
