@@ -168,7 +168,7 @@ export function cloneRasterTransformRecords(records = []) {
  * draws the untouched source snapshot through its affine matrix.
  */
 export function composeRasterTransformStack(baseCanvas, records = [], outputCanvas = baseCanvas) {
-  if (!baseCanvas || !outputCanvas || !Array.isArray(records)) return null;
+  if (!baseCanvas || !outputCanvas || outputCanvas === baseCanvas || !Array.isArray(records)) return null;
   const width = Math.max(1, Math.floor(baseCanvas.width || 1));
   const height = Math.max(1, Math.floor(baseCanvas.height || 1));
   if (outputCanvas.width !== width) outputCanvas.width = width;
@@ -209,7 +209,7 @@ export function composeRasterTransformStack(baseCanvas, records = [], outputCanv
 
 /** Bake the currently composed presentation into the source canvas. */
 export function rasterizeRasterTransformStack(layer) {
-  if (!layer?.canvas || !layer?.presentationCanvas || !Array.isArray(layer.transformRecords)) return false;
+  if (!layer?.canvas || !layer?.presentationCanvas || layer.canvas === layer.presentationCanvas || !Array.isArray(layer.transformRecords)) return false;
   const context = layer.canvas.getContext('2d');
   if (!context) return false;
   context.clearRect(0, 0, layer.canvas.width, layer.canvas.height);
