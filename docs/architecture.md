@@ -41,5 +41,12 @@
 - Vector strokes are rendered by PixiJS and raster-composited for fill-boundary detection and PNG export.
 - The raster eraser currently affects raster paint layers only; vector deletion is performed through line selection.
 
+## Line Boil preview
+- `apps/web/src/line/line-boil.js` creates deterministic, non-destructive line deformations from stable stroke IDs.
+- A normal-direction displacement combines two sine waves; endpoint guards reduce movement at stroke ends.
+- Preview controls adjust amplitude, pattern frequency, and playback speed.
+- The original vector geometry remains unchanged and is used for fill boundaries and PNG export.
+- This is a live preview foundation, not yet a frame-keyed animation system.
+
 ## Current implementation status
 The web prototype includes raster drawing, connected-region fill, PixiJS rendering, editable vector line objects, line selection/movement/style editing, and PNG export. Node unit tests cover the fill and line-engine algorithms. Browser and iPad interaction testing remains a separate verification step.
