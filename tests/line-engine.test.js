@@ -113,15 +113,15 @@ test('rejects malformed vector edit snapshots without mutating strokes', async (
 test('samples the same quadratic centerline that is rendered on screen', () => {
   const stroke = { points: [{ x: 0, y: 0 }, { x: 50, y: 100 }, { x: 100, y: 0 }] };
   const path = sampleLineStrokePath(stroke.points, 12);
-  assert.equal(path.points.length, 14);
-  assert.deepEqual(path.points[6], { x: 43.75, y: 62.5 });
+  assert.equal(path.points.length, 26);
+  assert.deepEqual(path.points[12], { x: 43.75, y: 62.5 });
   assert.equal(path.segmentIndices[5], 0);
   assert.equal(path.segmentIndices.at(-1), 1);
 });
 
 test('hit testing follows the visible quadratic curve rather than its control polygon', () => {
   const stroke = { ...line(), points: [{ x: 0, y: 0 }, { x: 50, y: 100 }, { x: 100, y: 0 }], width: 0 };
-  assert.equal(hitTestLineStroke(stroke, { x: 43.75, y: 50 }, 1), true);
+  assert.equal(hitTestLineStroke(stroke, { x: 43.75, y: 62.5 }, 1), true);
   assert.equal(hitTestLineStroke(stroke, { x: 50, y: 100 }, 1), false);
 });
 
