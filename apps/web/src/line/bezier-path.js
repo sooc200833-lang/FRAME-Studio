@@ -13,7 +13,7 @@ function assertPoint(point, label) {
   if (!isFinitePoint(point)) throw new TypeError(`${label} must contain finite x/y coordinates.`);
 }
 
-export function createBezierPath({ id = null, anchors, segments }) {
+export function createBezierPath({ id = null, anchors, segments, anchorModes = null }) {
   if (!Array.isArray(anchors) || anchors.length < 2) {
     throw new RangeError('A Bézier path needs at least two anchors.');
   }
@@ -25,9 +25,16 @@ export function createBezierPath({ id = null, anchors, segments }) {
     assertPoint(segment?.control1, `Segment ${index} control1`);
     assertPoint(segment?.control2, `Segment ${index} control2`);
   });
+  const modes = anchorModes == null
+    ? anchors.map((_, index) => index > 0 && index < anchors.length - 1 ? 'smooth' : 'corner')
+    : anchorModes.slice();
+  if (modes.length !== anchors.length || modes.some(mode => mode !== 'corner' && mode !== 'smooth')) {
+    throw new RangeError('Each Bézier anchor needs a corner or smooth mode.');
+  }
   return {
     id,
     anchors: anchors.map(copyPoint),
+    anchorModes: modes,
     segments: segments.map(segment => ({
       control1: copyPoint(segment.control1),
       control2: copyPoint(segment.control2),
