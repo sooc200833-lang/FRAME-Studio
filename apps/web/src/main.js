@@ -1463,6 +1463,12 @@ function bindControls() {
     nodeEditEnabled = event.target.checked;
     selectedNodeIndex = null;
     selectedBezierHandle = null;
+    const stroke = selectedStroke();
+    if (nodeEditEnabled && stroke && !stroke.bezierPath) {
+      commitLineHistory(lineSnapshot());
+      const index = vectorStrokes.findIndex(item => item.id === selectedStrokeId);
+      vectorStrokes[index] = { ...stroke, bezierPath: convertLegacyPointsToBezierPath(stroke.points, stroke.id) };
+    }
     render();
   };
   document.getElementById('lineColor').oninput = event => applySelectedStyle({ color: event.target.value });
