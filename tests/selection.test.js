@@ -204,7 +204,7 @@ test('lasso intersection follows the rendered quadratic curve instead of the con
     points: [{ x: 0, y: 0 }, { x: 50, y: 100 }, { x: 100, y: 0 }],
   };
   const aroundCurve = [
-    { x: 41, y: 48 }, { x: 46, y: 48 }, { x: 46, y: 52 }, { x: 41, y: 52 },
+    { x: 41, y: 60 }, { x: 46, y: 60 }, { x: 46, y: 65 }, { x: 41, y: 65 },
   ];
   assert.equal(lineStrokeIntersectsPolygon(stroke, aroundCurve), true);
 });
