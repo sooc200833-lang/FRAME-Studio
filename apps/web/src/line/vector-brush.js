@@ -14,14 +14,31 @@ export function normalizeVectorPressure(value) {
   const pressure = Number(value);
   return Number.isFinite(pressure) ? Math.max(0.02, Math.min(1, pressure)) : 0.5;
 }
-export function getVectorPointWidth(stroke, point, index) {
+export function normalizeStrokeWidthProfile(profile, count = 5) {
+  const source = Array.isArray(profile) && profile.length ? profile : [];
+  return Array.from({ length: Math.max(2, count) }, (_, index) => {
+    const value = Number(source[index] ?? 1);
+    return Number.isFinite(value) ? Math.max(0.1, Math.min(2.2, value)) : 1;
+  });
+}
+
+export function sampleStrokeWidthProfile(profile, progress) {
+  const values = normalizeStrokeWidthProfile(profile);
+  const position = Math.max(0, Math.min(1, Number(progress) || 0)) * (values.length - 1);
+  const left = Math.floor(position);
+  const right = Math.min(values.length - 1, left + 1);
+  const mix = position - left;
+  return values[left] * (1 - mix) + values[right] * mix;
+}
+
+export function getVectorPointWidth(stroke, point, index, pointCount = index + 1) {
   const preset = getVectorBrushPreset(stroke.brushPreset);
   const pressure = normalizeVectorPressure(point.pressure ?? 0.5);
   const curve = Math.max(0.35, Math.min(2.5, Number(stroke.pressureCurve) || 1));
   const shaped = Math.pow(pressure, preset.pressurePower * curve);
-  const profile = Array.isArray(stroke.pressureProfile) && stroke.pressureProfile.length
-    ? stroke.pressureProfile[Math.min(index, stroke.pressureProfile.length - 1)] : 1;
-  return Math.max(0.35, stroke.width * Math.max(preset.minWidth, shaped) * Math.max(0.1, Number(profile) || 1));
+  const progress = pointCount <= 1 ? 0 : index / (pointCount - 1);
+  const profile = sampleStrokeWidthProfile(stroke.pressureProfile, progress);
+  return Math.max(0.35, stroke.width * Math.max(preset.minWidth, shaped) * profile);
 }
 export function createVectorBrushStyle({ brushPreset = 'ink', pressureCurve = 1, opacity, motionStyle = 'none', motionStrength = 3 } = {}) {
   const preset = getVectorBrushPreset(brushPreset);
