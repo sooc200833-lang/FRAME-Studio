@@ -165,8 +165,9 @@ export class PixiStageRenderer {
         });
         stroke.bezierPath.anchors.forEach((point, index) => {
           const selected = selectedBezierAnchor === index;
+          const smooth = (stroke.bezierPath.anchorModes?.[index] || (index > 0 && index < stroke.bezierPath.anchors.length - 1 ? 'smooth' : 'corner')) === 'smooth';
           handles.circle(point.x, point.y, selected ? 6 : 4)
-            .fill(selected ? 0xe5b85c : 0xf8f6f0)
+            .fill(selected ? 0xe5b85c : (smooth ? 0x9bcfff : 0xf8f6f0))
             .stroke({ color: 0x24242a, width: selected ? 1.8 : 1.1 });
         });
         this.app.stage.addChildAt(handles, this.app.stage.children.length - 1);

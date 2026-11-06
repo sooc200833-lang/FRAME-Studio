@@ -8,7 +8,8 @@ Vector strokes can carry an optional `bezierPath` alongside their legacy `points
 2. Enable **곡선 핸들 편집 모드** in the line inspector.
 3. Drag a blue control point to change the curve.
 4. Drag an anchor dot to move the anchor and its adjacent handles together.
-5. Enable **핸들 연결 · 부드러운 곡선** to keep the opposite handle mirrored while dragging. Hold Shift to temporarily enable linking when the option is off.
+5. Select an anchor and use **부드러운 앵커로 변경 / 모서리 앵커로 변경** to choose its tangent behavior.
+6. Enable **핸들 연결 · 부드러운 곡선** to force mirrored handles while dragging. Hold Shift to temporarily enable linking.
 
 Anchor dots and control handles are both directly draggable.
 
@@ -22,5 +23,5 @@ Anchor dots and control handles are both directly draggable.
 ## Current limitations
 
 - Dedicated corner/smooth anchor modes and independent handle-length locking are not implemented yet.
-- Shift is the current temporary mirrored-handle modifier; it is not persisted as an anchor mode.
+- Smooth/corner mode is stored per anchor. The global link checkbox and Shift temporarily override the selected anchor mode.
 - Handle editing has not yet been physically validated with Apple Pencil on iPad.

@@ -106,12 +106,18 @@ test('frame snapshots deep-clone editable Bézier geometry', () => {
     ...line,
     bezierPath: {
       id: 'curve',
-      anchors: [{ x: 0, y: 0 }, { x: 20, y: 0 }],
-      segments: [{ control1: { x: 5, y: 10 }, control2: { x: 15, y: 10 } }],
+      anchors: [{ x: 0, y: 0 }, { x: 20, y: 0 }, { x: 40, y: 0 }],
+      anchorModes: ['corner', 'smooth', 'corner'],
+      segments: [
+        { control1: { x: 5, y: 10 }, control2: { x: 15, y: 10 } },
+        { control1: { x: 25, y: 10 }, control2: { x: 35, y: 10 } },
+      ],
     },
   };
   updateFrameStrokes(timeline, 'frame-1', [stroke]);
   const duplicate = addFrame(timeline, { duplicate: true });
   duplicate.strokes[0].bezierPath.segments[0].control1.x = 999;
+  duplicate.strokes[0].bezierPath.anchorModes[1] = 'corner';
   assert.equal(timeline.frames[0].strokes[0].bezierPath.segments[0].control1.x, 5);
+  assert.equal(timeline.frames[0].strokes[0].bezierPath.anchorModes[1], 'smooth');
 });

@@ -10,7 +10,7 @@ import { normalizeRasterCels, normalizeRasterTransformCels } from './animation/f
 import { cloneRasterTransformRecords, composeRasterTransformStack, createTranslationMatrix, createRotationMatrix, rasterizeRasterTransformStack } from './selection/raster-transform.js';
 import { containsSelectionPoint, hitTestSelectionHandle, moveSelectionRect, normalizeSelectionRect, lineStrokeIntersectsPolygon, pointInPolygon, resizeSelectionRectFromHandle, resolveSelectionTargets, transformLineStrokes, transformLineStrokesByMatrix, transformPolygon, translatePolygon, getSelectionPreviewTransform, getPolygonBounds, getPolygonCentroid, hitTestPolygonTransformHandle, resizePolygonFromHandle } from './selection/selection.js';
 import { convertLegacyPointsToBezierPath } from './line/legacy-bezier-bridge.js';
-import { moveBezierAnchor, moveBezierHandle, sampleBezierPath } from './line/bezier-path.js';
+import { moveBezierAnchor, moveBezierHandle, sampleBezierPath, setBezierAnchorMode } from './line/bezier-path.js';
 
 import {
   createLineStroke,
@@ -505,6 +505,7 @@ async function loadTimelineFrame(frameId, saveCurrent = true) {
     points: stroke.points.map(point => ({ x: point.x, y: point.y })),
     ...(stroke.bezierPath ? { bezierPath: {
       ...stroke.bezierPath,
+      anchorModes: stroke.bezierPath.anchorModes ? [...stroke.bezierPath.anchorModes] : stroke.bezierPath.anchors.map((_, index) => index > 0 && index < stroke.bezierPath.anchors.length - 1 ? 'smooth' : 'corner'),
       anchors: stroke.bezierPath.anchors.map(point => ({ ...point })),
       segments: stroke.bezierPath.segments.map(segment => ({ control1: { ...segment.control1 }, control2: { ...segment.control2 } })),
     } } : {}),
@@ -875,6 +876,13 @@ function updateLineInspector() {
   if (nodeStatus) nodeStatus.textContent = stroke.bezierPath
     ? `${stroke.bezierPath.anchors.length}개 앵커 · ${stroke.bezierPath.segments.length * 2}개 핸들`
     : `${stroke.points.length}개 노드${selectedNodeIndex === null ? '' : ` · ${selectedNodeIndex + 1}번 선택`}`;
+  const anchorModeButton = document.getElementById('toggleBezierAnchorMode');
+  if (anchorModeButton) {
+    const hasAnchor = Boolean(stroke.bezierPath && Number.isInteger(selectedBezierAnchor) && selectedBezierAnchor > 0 && selectedBezierAnchor < stroke.bezierPath.anchors.length - 1);
+    const mode = hasAnchor ? (stroke.bezierPath.anchorModes?.[selectedBezierAnchor] || 'smooth') : 'corner';
+    anchorModeButton.disabled = !hasAnchor;
+    anchorModeButton.textContent = mode === 'smooth' ? '모서리 앵커로 변경' : '부드러운 앵커로 변경';
+  }
   const removeNode = document.getElementById('deleteLineNode');
   if (removeNode) removeNode.disabled = Boolean(stroke.bezierPath) || selectedNodeIndex === null || selectedNodeIndex <= 0 || selectedNodeIndex >= stroke.points.length - 1;
 }
@@ -1474,6 +1482,18 @@ function bindControls() {
     }
     render();
   };
+  document.getElementById('toggleBezierAnchorMode').onclick = () => {
+    const stroke = selectedStroke();
+    if (!stroke?.bezierPath || !Number.isInteger(selectedBezierAnchor)) return;
+    const current = stroke.bezierPath.anchorModes?.[selectedBezierAnchor] || 'corner';
+    commitLineHistory(lineSnapshot());
+    const index = vectorStrokes.findIndex(item => item.id === selectedStrokeId);
+    vectorStrokes[index] = {
+      ...stroke,
+      bezierPath: setBezierAnchorMode(stroke.bezierPath, selectedBezierAnchor, current === 'smooth' ? 'corner' : 'smooth'),
+    };
+    render();
+  };
   document.getElementById('lineColor').oninput = event => applySelectedStyle({ color: event.target.value });
   document.getElementById('lineWidth').oninput = event => {
     document.getElementById('lineWidthOut').value = event.target.value + 'px';
@@ -1728,7 +1748,7 @@ function bindCanvasEvents() {
         const index = vectorStrokes.findIndex(item => item.id === selectedStrokeId);
         vectorStrokes[index] = {
           ...stroke,
-          bezierPath: moveBezierHandle(stroke.bezierPath, bezierHandleDrag.segmentIndex, bezierHandleDrag.handle, point, { mirrorOpposite: Boolean(event.shiftKey || document.getElementById('linkBezierHandles')?.checked) }),
+          bezierPath: moveBezierHandle(stroke.bezierPath, bezierHandleDrag.segmentIndex, bezierHandleDrag.handle, point, { mirrorOpposite: event.shiftKey || (document.getElementById('linkBezierHandles')?.checked ? true : undefined) }),
         };
         nodeDragChanged = true;
         render();

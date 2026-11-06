@@ -13,7 +13,7 @@ function assertPoint(point, label) {
   if (!isFinitePoint(point)) throw new TypeError(`${label} must contain finite x/y coordinates.`);
 }
 
-export function createBezierPath({ id = null, anchors, segments }) {
+export function createBezierPath({ id = null, anchors, segments, anchorModes = null }) {
   if (!Array.isArray(anchors) || anchors.length < 2) {
     throw new RangeError('A Bézier path needs at least two anchors.');
   }
@@ -25,9 +25,16 @@ export function createBezierPath({ id = null, anchors, segments }) {
     assertPoint(segment?.control1, `Segment ${index} control1`);
     assertPoint(segment?.control2, `Segment ${index} control2`);
   });
+  const modes = anchorModes == null
+    ? anchors.map((_, index) => index > 0 && index < anchors.length - 1 ? 'smooth' : 'corner')
+    : anchorModes.slice();
+  if (modes.length !== anchors.length || modes.some(mode => mode !== 'corner' && mode !== 'smooth')) {
+    throw new RangeError('Each Bézier anchor needs a corner or smooth mode.');
+  }
   return {
     id,
     anchors: anchors.map(copyPoint),
+    anchorModes: modes,
     segments: segments.map(segment => ({
       control1: copyPoint(segment.control1),
       control2: copyPoint(segment.control2),
@@ -122,7 +129,7 @@ export function sampleBezierPath(path, { tolerance = 0.75, maxDepth = 10 } = {})
 }
 
 /** Move one control handle. Optionally mirror the opposite handle at its anchor. */
-export function moveBezierHandle(path, segmentIndex, handle, point, { mirrorOpposite = false } = {}) {
+export function moveBezierHandle(path, segmentIndex, handle, point, { mirrorOpposite } = {}) {
   if (!path?.segments || !Number.isInteger(segmentIndex) || !path.segments[segmentIndex]) return path;
   if (handle !== 'out' && handle !== 'in') throw new RangeError('Handle must be "out" or "in".');
   assertPoint(point, 'Handle point');
@@ -141,7 +148,8 @@ export function moveBezierHandle(path, segmentIndex, handle, point, { mirrorOppo
   if (isOutgoing) segment.control1 = copyPoint(point);
   else segment.control2 = copyPoint(point);
 
-  if (mirrorOpposite && opposite && oldOppositeLength > 0) {
+  const shouldMirror = mirrorOpposite ?? next.anchorModes?.[anchorIndex] === 'smooth';
+  if (shouldMirror && opposite && oldOppositeLength > 0) {
     const dx = point.x - anchor.x;
     const dy = point.y - anchor.y;
     const length = Math.hypot(dx, dy);
@@ -152,6 +160,17 @@ export function moveBezierHandle(path, segmentIndex, handle, point, { mirrorOppo
       };
     }
   }
+  return next;
+}
+
+export function setBezierAnchorMode(path, anchorIndex, mode) {
+  if (!path?.anchors || !Number.isInteger(anchorIndex) || !path.anchors[anchorIndex]) return path;
+  if (mode !== 'corner' && mode !== 'smooth') throw new RangeError('Anchor mode must be corner or smooth.');
+  if (mode === 'smooth' && (anchorIndex === 0 || anchorIndex === path.anchors.length - 1)) {
+    throw new RangeError('Endpoint anchors cannot use smooth mode because they have only one adjacent handle.');
+  }
+  const next = cloneBezierPath(path);
+  next.anchorModes[anchorIndex] = mode;
   return next;
 }
 
@@ -185,6 +204,7 @@ export function transformBezierPath(path, matrix) {
   return {
     id: path.id ?? null,
     anchors: path.anchors.map(transform),
+    anchorModes: path.anchorModes ? [...path.anchorModes] : path.anchors.map((_, index) => index > 0 && index < path.anchors.length - 1 ? 'smooth' : 'corner'),
     segments: path.segments.map(segment => ({
       control1: transform(segment.control1),
       control2: transform(segment.control2),
