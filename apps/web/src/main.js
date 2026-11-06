@@ -141,6 +141,7 @@ function applyGroupState() {
   }
 }
 let selectedStrokeId = null;
+const selectedStrokeIds = new Set();
 let showSelectedVectorHighlight = true;
 let vectorBrushPreset = 'ink';
 let vectorPressureCurve = 1;
@@ -452,7 +453,7 @@ function render(dirtyIndices = [], displayStrokes = vectorStrokes) {
   }
   applyGroupState();
   if (!loadingFrame) updateFrameStrokes(timeline, timeline.activeFrameId, vectorStrokes);
-  renderer.sync(layers, dirtyIndices, displayStrokes, selectedStrokeId, onionEnabled ? getOnionSkin(timeline) : [], selectionRect, selectionPolygon, selectedNodeIndex, nodeEditEnabled, selectedBezierHandle, selectedBezierAnchor, showSelectedVectorHighlight);
+  renderer.sync(layers, dirtyIndices, displayStrokes, selectedStrokeId, onionEnabled ? getOnionSkin(timeline) : [], selectionRect, selectionPolygon, selectedNodeIndex, nodeEditEnabled, selectedBezierHandle, selectedBezierAnchor, showSelectedVectorHighlight, selectedStrokeIds);
   document.getElementById('status').textContent = tool.toUpperCase();
   drawLayers();
   updateLayerInspector();
@@ -579,6 +580,7 @@ function updateTimelineFPS(value) {
 
 const viewport = { scale: 1, rotation: 0, x: 0, y: 0 };
 let panDrag = null;
+let shapeKind = 'rectangle';
 
 function applyViewport() {
   if (!inputSurface) return;
@@ -845,7 +847,7 @@ function animationTick(timestamp) {
       amplitude: Number(document.getElementById('boilAmplitude').value),
       frequency: Number(document.getElementById('boilFrequency').value),
     });
-    renderer.sync(layers, [], displayStrokes, selectedStrokeId, onionEnabled ? getOnionSkin(timeline) : [], selectionRect, selectionPolygon, selectedNodeIndex, nodeEditEnabled, null, null, showSelectedVectorHighlight);
+    renderer.sync(layers, [], displayStrokes, selectedStrokeId, onionEnabled ? getOnionSkin(timeline) : [], selectionRect, selectionPolygon, selectedNodeIndex, nodeEditEnabled, null, null, showSelectedVectorHighlight, selectedStrokeIds);
     lastAnimationPaint = timestamp;
   }
   animationFrame = requestAnimationFrame(animationTick);
@@ -896,11 +898,12 @@ function updateLineInspector() {
 }
 
 function applySelectedStyle(changes) {
-  const stroke = selectedStroke();
-  if (!stroke) return;
+  const ids = selectedStrokeIds.size ? selectedStrokeIds : new Set(selectedStrokeId ? [selectedStrokeId] : []);
+  if (!ids.size) return;
   commitLineHistory(lineSnapshot());
-  const index = vectorStrokes.findIndex(item => item.id === selectedStrokeId);
-  vectorStrokes[index] = updateLineStrokeStyle(stroke, changes);
+  for (let index = 0; index < vectorStrokes.length; index++) {
+    if (ids.has(vectorStrokes[index].id)) vectorStrokes[index] = updateLineStrokeStyle(vectorStrokes[index], changes);
+  }
   render();
 }
 
@@ -1150,6 +1153,7 @@ function bindViewportControls() {
 function bindControls() {
   document.getElementById('applyTone').onclick = applyMangaTone;
   document.getElementById('vectorBrushPreset').onchange = event => { vectorBrushPreset = event.target.value; };
+  document.getElementById('shapeKind').onchange = event => { shapeKind = event.target.value; };
   document.getElementById('vectorPressureCurve').oninput = event => { vectorPressureCurve = Number(event.target.value) / 100; document.getElementById('vectorPressureCurveOut').value = vectorPressureCurve.toFixed(2); };
   document.getElementById('vectorMotionStyle').onchange = event => { vectorMotionStyle = event.target.value; };
   document.getElementById('vectorMotionStrength').oninput = event => { vectorMotionStrength = Number(event.target.value); document.getElementById('vectorMotionStrengthOut').value = vectorMotionStrength + 'px'; };
@@ -1573,6 +1577,20 @@ function bindControls() {
   setCurrentColor(color, { remember: true });
 }
 
+function createShapePoints(kind, start, end) {
+  const left = Math.min(start.x, end.x), right = Math.max(start.x, end.x);
+  const top = Math.min(start.y, end.y), bottom = Math.max(start.y, end.y);
+  if (kind === 'ellipse') {
+    const cx = (left + right) / 2, cy = (top + bottom) / 2;
+    const rx = Math.max(0.5, (right - left) / 2), ry = Math.max(0.5, (bottom - top) / 2);
+    return Array.from({ length: 49 }, (_, index) => {
+      const angle = index / 48 * Math.PI * 2;
+      return { x: cx + Math.cos(angle) * rx, y: cy + Math.sin(angle) * ry };
+    });
+  }
+  return [{ x: left, y: top }, { x: right, y: top }, { x: right, y: bottom }, { x: left, y: bottom }, { x: left, y: top }];
+}
+
 function bindCanvasEvents() {
   const drawBrushPreview = () => {
     if (!strokeSamples.length) return;
@@ -1592,6 +1610,12 @@ function bindCanvasEvents() {
     inputSurface.setPointerCapture(event.pointerId);
     if (['pen', 'eraser', 'line', 'fill'].includes(tool)) ensureEditableLayerAfterTransform();
     const point = position(event);
+
+    if (tool === 'hand') {
+      panDrag = { clientX: event.clientX, clientY: event.clientY, x: viewport.x, y: viewport.y };
+      down = true;
+      return;
+    }
 
     if (tool === 'lasso') {
       down = true;
@@ -1773,6 +1797,12 @@ function bindCanvasEvents() {
   });
 
   inputSurface.addEventListener('pointermove', event => {
+    if (panDrag) {
+      viewport.x = panDrag.x + event.clientX - panDrag.clientX;
+      viewport.y = panDrag.y + event.clientY - panDrag.clientY;
+      applyViewport();
+      return;
+    }
     const point = position(event);
 
     if (tool === 'select' && bezierAnchorDrag) {
@@ -1889,6 +1919,23 @@ function bindCanvasEvents() {
 
     if (!down) return;
 
+    if (tool === 'shape') {
+      const points = createShapePoints(shapeKind, lineStartPoint, point);
+      drawingPoints = points;
+      renderer.previewStroke(points, Number.parseInt(color.slice(1), 16), size);
+      return;
+    }
+
+    if (tool === 'shape') {
+      const points = createShapePoints(shapeKind, lineStartPoint, point);
+      commitLineHistory(lineSnapshot());
+      const created = createLineStroke({ id: 'line-' + nextLineId++, points: points.map(p => ({ ...p, pressure: 0.5 })), color, width: size, brushPreset: vectorBrushPreset, pressureCurve: vectorPressureCurve, motionStyle: vectorMotionStyle, motionStrength: vectorMotionStrength });
+      vectorStrokes.push(created);
+      selectedStrokeId = created.id;
+      selectedStrokeIds.clear(); selectedStrokeIds.add(created.id);
+      renderer.clearPreview(); drawingPoints = null; down = false; render(); return;
+    }
+
     if (tool === 'vector') {
       const previous = drawingPoints[drawingPoints.length - 1];
       if (Math.hypot(point.x - previous.x, point.y - previous.y) >= 1.25) {
@@ -1921,6 +1968,7 @@ function bindCanvasEvents() {
   });
 
   const end = event => {
+    if (panDrag) { panDrag = null; down = false; return; }
     if (tool === 'lasso' && down && selectionDrag) {
       const drag = selectionDrag;
       if (event.type === 'pointercancel') {
@@ -2111,6 +2159,7 @@ function bindCanvasEvents() {
       });
       vectorStrokes.push(created);
       selectedStrokeId = created.id;
+      selectedStrokeIds.clear(); selectedStrokeIds.add(created.id);
       drawingPoints = null;
       renderer.clearPreview();
       down = false;
@@ -2123,6 +2172,7 @@ function bindCanvasEvents() {
       const created = createLineStroke({ id: 'line-' + nextLineId++, points: [{ ...lineStartPoint, pressure: 0.5 }, { ...point, pressure: 0.5 }], color, width: size, brushPreset: vectorBrushPreset, pressureCurve: vectorPressureCurve, motionStyle: vectorMotionStyle, motionStrength: vectorMotionStrength });
       vectorStrokes.push(created);
       selectedStrokeId = created.id;
+      selectedStrokeIds.clear(); selectedStrokeIds.add(created.id);
       renderer.clearPreview();
       down = false;
       render();
