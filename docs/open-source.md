@@ -9,6 +9,14 @@ This document tracks components FRAME Studio uses and projects reviewed for arch
 | [PixiJS](https://github.com/pixijs/pixijs) | MIT | Stage rendering, textures, vector display and layer compositing |
 | [perfect-freehand](https://github.com/steveruizok/perfect-freehand) | MIT | Pressure-sensitive raster brush outlines, tapering and streamlining |
 
+## Brush engine and color-mixing work
+
+- The raster outline path continues to use the MIT-licensed `perfect-freehand` package for pressure-shaped stroke geometry.
+- PixiJS is used for live brush preview; the preview and committed Canvas 2D stroke share a constrained blend-mode mapping (`normal`, `multiply`, `screen`, `overlay`).
+- `apps/web/src/brush/smudge-engine.js` is a small, local ImageData smudge implementation with pressure-scaled radius, configurable spacing, alpha-aware color mixing, and bounded per-dab pixel work.
+- The smudge interaction is informed by the MIT-licensed [Klecks](https://github.com/bitbof/klecks) brush workflow. Its upstream smudge and blend modules were inspected, but not copied: they depend on Klecks-specific history, tile, selection-mask, and canvas abstractions.
+- [libmypaint](https://github.com/mypaint/libmypaint) is ISC-licensed and documents a mature dab-based brush model. It remains a future candidate for a separately built WebAssembly adapter; the current browser project does not yet contain a maintained, drop-in WASM build, and the native C library has GLib/json-c build dependencies.
+
 ## Reviewed reference projects
 
 | Project | Upstream license | Useful ideas | Decision |
@@ -46,4 +54,4 @@ This document tracks components FRAME Studio uses and projects reviewed for arch
 
 ## Current status
 
-PixiJS 8.20.1 and perfect-freehand 1.2.3 are integrated. Klecks, Quickdraw, Graphite and the additional projects above have been reviewed as references; no upstream source code from those projects is copied or bundled. The renderer is being updated to retry WebGL, WebGPU and Canvas backends independently so a backend initialization failure does not immediately prevent the editor from starting.
+PixiJS 8.20.1 and perfect-freehand 1.2.3 are integrated. Klecks, Quickdraw, Graphite, miniPaint, Pencil2D, MyPaint, and libmypaint have been reviewed as references. No upstream source code from these reference projects is copied or bundled. The local smudge engine is an independent implementation.
