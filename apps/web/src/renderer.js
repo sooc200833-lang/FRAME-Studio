@@ -5,6 +5,7 @@ import { applyBrushTexture } from './brush/brush-engine.js';
 import { getVectorGraphicsCacheEntry, pruneVectorGraphicsCache } from './renderer/vector-graphics-cache.js';
 import { getPolygonBounds, getPolygonTransformHandles } from './selection/selection.js';
 import { createRendererInitOptions, initializeWithBackendFallback } from './renderer/renderer-options.js';
+import { toPixiBrushBlendMode } from './brush/blend-modes.js';
 
 export class PixiStageRenderer {
   constructor(width, height) {
@@ -390,9 +391,7 @@ export class PixiStageRenderer {
     applyBrushTexture(context, outline, samples, options);
     context.restore();
 
-    this.previewTextureSprite.blendMode = options.blendMode === 'source-over'
-      ? 'normal'
-      : (options.blendMode || 'normal');
+    this.previewTextureSprite.blendMode = toPixiBrushBlendMode(options.blendMode);
     this.previewTextureSprite.x = left;
     this.previewTextureSprite.y = top;
     this.previewTextureSprite.width = canvasWidth;
