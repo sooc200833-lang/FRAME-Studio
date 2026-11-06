@@ -148,7 +148,7 @@ export function insertLineStrokePoint(stroke, point) {
   if (!projection) return stroke;
   const points = stroke.points.map(item => ({ x: item.x, y: item.y }));
   points.splice(projection.segmentIndex + 1, 0, projection.point);
-  return { ...stroke, points };
+  return { ...stroke, bezierPath: undefined, points };
 }
 
 /** Remove a node while always retaining the two endpoints of a valid stroke. */
@@ -157,7 +157,7 @@ export function removeLineStrokePoint(stroke, pointIndex) {
   const index = Math.floor(Number(pointIndex));
   if (!Number.isInteger(index) || index <= 0 || index >= stroke.points.length - 1) return stroke;
   const points = stroke.points.filter((_, point) => point !== index).map(item => ({ x: item.x, y: item.y }));
-  return { ...stroke, points };
+  return { ...stroke, bezierPath: undefined, points };
 }
 
 /**
