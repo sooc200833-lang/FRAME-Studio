@@ -1193,6 +1193,8 @@ function bindControls() {
     if (selectionDrag) clearSelectionDragPreviews(selectionDrag);
     selectionRect = null;
     selectionPolygon = null;
+    selectedStrokeIds.clear();
+    selectedStrokeId = null;
     selectionDrag = null;
     down = false;
     render();
@@ -1810,7 +1812,7 @@ function bindCanvasEvents() {
 
     if (tool === 'vector') {
       down = true;
-      drawingPoints = [{ ...point, pressure: event.pointerType === 'pen' ? normalizePointerPressure(event, true) : 0.5 }];
+      drawingPoints = [{ ...point, pressure: event.pointerType === 'pen' ? normalizePointerPressure(event, pressureEnabled) : 0.5 }];
       renderer.previewStroke(drawingPoints, Number.parseInt(color.slice(1), 16), size);
       return;
     }
@@ -1956,11 +1958,14 @@ function bindCanvasEvents() {
     }
 
     if (tool === 'vector') {
-      const previous = drawingPoints[drawingPoints.length - 1];
-      if (Math.hypot(point.x - previous.x, point.y - previous.y) >= 1.25) {
-        drawingPoints.push({ ...point, pressure: event.pointerType === 'pen' ? normalizePointerPressure(event, true) : 0.5 });
-        renderer.previewStroke(drawingPoints, Number.parseInt(color.slice(1), 16), size);
+      for (const sample of coalescedPointerEvents(event)) {
+        const samplePoint = position(sample);
+        const previous = drawingPoints[drawingPoints.length - 1];
+        if (Math.hypot(samplePoint.x - previous.x, samplePoint.y - previous.y) >= 1.25) {
+          drawingPoints.push({ ...samplePoint, pressure: sample.pointerType === 'pen' ? normalizePointerPressure(sample, pressureEnabled) : 0.5 });
+        }
       }
+      renderer.previewStroke(drawingPoints, Number.parseInt(color.slice(1), 16), size);
       return;
     }
 
@@ -2178,7 +2183,7 @@ function bindCanvasEvents() {
 
     if (tool === 'vector') {
       const previous = drawingPoints[drawingPoints.length - 1];
-      if (Math.hypot(point.x - previous.x, point.y - previous.y) > 0.1) drawingPoints.push({ ...point, pressure: event.pointerType === 'pen' ? normalizePointerPressure(event, true) : 0.5 });
+      if (Math.hypot(point.x - previous.x, point.y - previous.y) > 0.1) drawingPoints.push({ ...point, pressure: event.pointerType === 'pen' ? normalizePointerPressure(event, pressureEnabled) : 0.5 });
       if (drawingPoints.length === 1) drawingPoints.push({ x: point.x + 0.1, y: point.y + 0.1 });
       commitLineHistory(lineSnapshot());
       const created = createLineStroke({
