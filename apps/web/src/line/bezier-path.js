@@ -166,6 +166,9 @@ export function moveBezierHandle(path, segmentIndex, handle, point, { mirrorOppo
 export function setBezierAnchorMode(path, anchorIndex, mode) {
   if (!path?.anchors || !Number.isInteger(anchorIndex) || !path.anchors[anchorIndex]) return path;
   if (mode !== 'corner' && mode !== 'smooth') throw new RangeError('Anchor mode must be corner or smooth.');
+  if (mode === 'smooth' && (anchorIndex === 0 || anchorIndex === path.anchors.length - 1)) {
+    throw new RangeError('Endpoint anchors cannot use smooth mode because they have only one adjacent handle.');
+  }
   const next = cloneBezierPath(path);
   next.anchorModes[anchorIndex] = mode;
   return next;
