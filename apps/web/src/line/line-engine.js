@@ -129,3 +129,28 @@ export function smoothLineStroke(stroke, subdivisions = 5, tension = 0.5) {
   points[points.length - 1] = { x: source.at(-1).x, y: source.at(-1).y };
   return { ...stroke, points };
 }
+
+
+/** Restore an in-progress vector edit from its serialized pre-drag snapshot. */
+export function restoreLineStrokeSnapshot(strokes, snapshot) {
+  if (!Array.isArray(strokes) || typeof snapshot !== 'string') return false;
+  let restored;
+  try {
+    restored = JSON.parse(snapshot);
+  } catch {
+    return false;
+  }
+  if (!Array.isArray(restored)) return false;
+  strokes.splice(0, strokes.length, ...restored);
+  return true;
+}
+
+/** Detect whether an in-progress vector edit changed geometry or style. */
+export function lineStrokeSnapshotChanged(strokes, snapshot) {
+  if (!Array.isArray(strokes) || typeof snapshot !== 'string') return false;
+  try {
+    return JSON.stringify(strokes) !== snapshot;
+  } catch {
+    return true;
+  }
+}

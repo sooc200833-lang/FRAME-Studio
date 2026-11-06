@@ -84,3 +84,26 @@ test('Catmull-Rom smoothing adds editable samples and preserves exact endpoints'
   assert.deepEqual(smoothed.points.at(-1), original.points.at(-1));
   assert.deepEqual(original.points, line().points);
 });
+
+
+test('restores a cancelled node-edit transaction without replacing the stroke array', async () => {
+  const { restoreLineStrokeSnapshot, lineStrokeSnapshotChanged } = await import('../apps/web/src/line/line-engine.js');
+  const strokes = [line()];
+  const reference = strokes;
+  const snapshot = JSON.stringify(strokes);
+  strokes[0] = { ...strokes[0], points: [{ x: 12, y: 14 }, { x: 100, y: 10 }, { x: 100, y: 80 }] };
+  assert.equal(lineStrokeSnapshotChanged(strokes, snapshot), true);
+  assert.equal(restoreLineStrokeSnapshot(strokes, snapshot), true);
+  assert.equal(strokes, reference);
+  assert.deepEqual(strokes, [line()]);
+  assert.equal(lineStrokeSnapshotChanged(strokes, snapshot), false);
+});
+
+test('rejects malformed vector edit snapshots without mutating strokes', async () => {
+  const { restoreLineStrokeSnapshot } = await import('../apps/web/src/line/line-engine.js');
+  const strokes = [line()];
+  const before = structuredClone(strokes);
+  assert.equal(restoreLineStrokeSnapshot(strokes, '{broken'), false);
+  assert.equal(restoreLineStrokeSnapshot(strokes, JSON.stringify({ points: [] })), false);
+  assert.deepEqual(strokes, before);
+});
