@@ -10,7 +10,7 @@ import { normalizeRasterCels, normalizeRasterTransformCels } from './animation/f
 import { cloneRasterTransformRecords, composeRasterTransformStack, createTranslationMatrix, createRotationMatrix, rasterizeRasterTransformStack } from './selection/raster-transform.js';
 import { containsSelectionPoint, hitTestSelectionHandle, moveSelectionRect, normalizeSelectionRect, lineStrokeIntersectsPolygon, pointInPolygon, resizeSelectionRectFromHandle, resolveSelectionTargets, transformLineStrokes, transformLineStrokesByMatrix, transformPolygon, translatePolygon, getSelectionPreviewTransform, getPolygonBounds, getPolygonCentroid, hitTestPolygonTransformHandle, resizePolygonFromHandle } from './selection/selection.js';
 import { convertLegacyPointsToBezierPath } from './line/legacy-bezier-bridge.js';
-import { moveBezierAnchor, moveBezierHandle, sampleBezierPath, setBezierAnchorMode } from './line/bezier-path.js';
+import { insertBezierAnchor, moveBezierAnchor, moveBezierHandle, projectPointToBezierPath, sampleBezierPath, setBezierAnchorMode } from './line/bezier-path.js';
 
 import {
   createLineStroke,
@@ -1663,7 +1663,24 @@ function bindCanvasEvents() {
           render();
           return;
         }
-        if (stroke.bezierPath) return;
+        if (stroke.bezierPath) {
+          const projection = projectPointToBezierPath(path, point);
+          if (projection && projection.distance <= Math.max(18, stroke.width / 2 + 8)) {
+            nodeMoveSnapshot = lineSnapshot();
+            const index = vectorStrokes.findIndex(item => item.id === selectedStrokeId);
+            const nextPath = insertBezierAnchor(path, projection.segmentIndex, projection.t);
+            vectorStrokes[index] = { ...stroke, bezierPath: nextPath };
+            selectedBezierAnchor = projection.segmentIndex + 1;
+            selectedBezierHandle = null;
+            bezierAnchorDrag = { anchorIndex: selectedBezierAnchor };
+            nodeDragChanged = true;
+            nodeDragging = true;
+            down = false;
+            render();
+            return;
+          }
+          return;
+        }
         let nearestIndex = -1;
         let nearestDistance = 14;
         stroke.points.forEach((node, index) => {
