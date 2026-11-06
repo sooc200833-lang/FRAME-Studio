@@ -6,7 +6,7 @@
   --line:#34343c;--muted:#8e8e98;--text:#ececf0;
   --accent:#e5b85c;--accent-soft:#4a3f29;--accent-text:#ffe0a0;--danger:#f0a6a6;
   --glass:rgba(24,24,28,.86);
-  --topbar:56px;--timeline:132px;
+  --topbar:56px;--timeline:176px;
   --radius:14px;
 }
 *{box-sizing:border-box}
@@ -59,6 +59,8 @@ svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.7;stroke
 #status{padding:5px 9px;border-radius:999px;background:var(--glass)}
 .hud-zoom{padding:5px 9px;border-radius:999px;background:var(--glass);border:0;font-size:10px;color:#d8d0c0;font-variant-numeric:tabular-nums}
 .toast{position:absolute;left:50%;top:14px;transform:translateX(-50%);padding:8px 14px;border-radius:999px;background:var(--glass);border:1px solid #ffffff18;font-size:12px;z-index:30;pointer-events:none;animation:toast .9s ease forwards}
+.toast.has-action{display:flex;align-items:center;gap:10px;padding:6px 6px 6px 14px;pointer-events:auto;animation:none}
+.toast.has-action button{padding:5px 10px;border-radius:999px;font-size:12px;background:var(--accent-soft);border-color:var(--accent);color:var(--accent-text)}
 @keyframes toast{0%{opacity:0;transform:translate(-50%,-6px)}15%,70%{opacity:1;transform:translate(-50%,0)}100%{opacity:0}}
 
 /* ── Popovers ── */
@@ -110,7 +112,7 @@ output{color:var(--accent);min-width:38px;text-align:right;font-size:12px;font-v
 #motionEditToggle.active,#motionButton.active{background:var(--accent-soft);border-color:var(--accent);color:var(--accent-text)}
 .stage.motion-editing .canvaswrap{cursor:move}
 .stage.motion-editing #pixiHost canvas{outline:2px dashed var(--accent);outline-offset:4px}
-.key-diamond{position:absolute;top:3px;width:9px;height:9px;margin-left:-4.5px;z-index:2;background:var(--accent);transform:rotate(45deg);border-radius:1.5px;box-shadow:0 0 0 1.5px #1b1b1f}
+.key-diamond{position:absolute;top:-4px;width:9px;height:9px;margin-left:-4.5px;z-index:2;background:var(--accent);transform:rotate(45deg);border-radius:1.5px;box-shadow:0 0 0 1.5px #1b1b1f}
 
 /* Brush library cards */
 .brush-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}
@@ -195,18 +197,26 @@ output{color:var(--accent);min-width:38px;text-align:right;font-size:12px;font-v
 .fps-control output{font-size:11px;min-width:44px}
 .track{flex:1;display:flex;align-items:stretch;gap:0;min-height:0;padding:0 12px 10px}
 .track-label{flex:0 0 58px;display:grid;place-items:center;font-size:11px;color:var(--muted);background:var(--surface-2);border-radius:10px 0 0 10px;border:1px solid var(--line);border-right:0}
-.frame-strip{position:relative;flex:1;overflow-x:auto;overflow-y:hidden;padding:0 6px;background:#16161a;border:1px solid var(--line);border-radius:0 10px 10px 0;touch-action:pan-x;scrollbar-width:thin}
-.lane{position:relative;height:100%;min-height:62px}
-.tick-ruler{position:absolute;left:0;right:0;top:0;height:16px;cursor:pointer}
+.frame-strip{position:relative;flex:1;overflow:auto;background:#16161a;border:1px solid var(--line);border-radius:10px;touch-action:pan-x pan-y;scrollbar-width:thin}
+.lane{position:relative;min-height:100%;min-width:100%}
+.tick-ruler{position:sticky;top:0;height:18px;background:#16161a;z-index:4;cursor:pointer;border-bottom:1px solid #ffffff10}
+.ruler-corner{position:sticky;left:0;display:block;width:var(--label);height:100%;background:#16161a;z-index:5}
+.tick-mark.beyond{opacity:.35}
+.track-row{position:relative;height:30px;border-bottom:1px solid #ffffff08}
+.track-row.active{background:#ffffff06}
+.track-name{position:sticky;left:0;z-index:3;width:var(--label);height:100%;padding:0 8px;border:0;border-right:1px solid var(--line);border-radius:0;background:var(--surface-2);font-size:11px;color:var(--muted);text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.track-row.active .track-name{color:var(--accent-text);background:#3a3428;box-shadow:inset 3px 0 0 var(--accent)}
 .tick-mark{position:absolute;bottom:0;width:var(--tick);height:5px;border-left:1px solid #ffffff1c;font-size:9px;color:#77777f;line-height:1;padding-left:3px;font-variant-numeric:tabular-nums}
 .tick-mark.major{height:14px;border-left-color:#ffffff38}
-.frame-cell{position:absolute;top:18px;bottom:5px;padding:0;border-radius:7px;background:#2a2a30 left center/auto 100% repeat-x;border:2px solid transparent;overflow:hidden;cursor:pointer}
+.frame-cell{position:absolute;top:3px;bottom:3px;padding:0;border-radius:7px;background:#2a2a30 left center/auto 100% repeat-x;border:2px solid transparent;overflow:hidden;cursor:pointer}
 .frame-cell span{position:absolute;left:4px;bottom:3px;font-size:10px;font-weight:600;color:#fff;text-shadow:0 1px 2px #000;font-variant-numeric:tabular-nums}
 .frame-cell.has-thumb{background-color:#f4f0e8}
 .frame-cell.active{border-color:var(--accent)}
+.frame-cell.empty{background:repeating-linear-gradient(135deg,#232328 0 6px,#1e1e22 6px 12px);border:1px dashed #ffffff1c}
+.frame-cell span{font-size:9px}
 .hold-grip{position:absolute;right:0;top:0;bottom:0;width:14px;background:linear-gradient(90deg,transparent,var(--accent) 60%);cursor:ew-resize;touch-action:none}
 .hold-grip::after{content:"";position:absolute;right:4px;top:50%;width:2px;height:14px;margin-top:-7px;border-left:1px solid #1b1b1f;border-right:1px solid #1b1b1f}
-.playhead{position:absolute;top:0;bottom:0;width:2px;margin-left:-1px;background:var(--accent);box-shadow:0 0 6px var(--accent);pointer-events:none;z-index:3}
+.playhead{position:absolute;top:0;bottom:0;z-index:2;width:2px;margin-left:-1px;background:var(--accent);box-shadow:0 0 6px var(--accent);pointer-events:none;z-index:3}
 .playhead::before{content:"";position:absolute;top:0;left:50%;width:12px;height:8px;margin-left:-6px;background:var(--accent);clip-path:polygon(0 0,100% 0,50% 100%)}
 .hold-control{display:flex;align-items:center;gap:2px;padding:2px;background:var(--surface-2);border:1px solid var(--line);border-radius:10px}
 .hold-control button{width:28px;height:30px;padding:0;border:0;background:transparent;font-size:15px}
@@ -214,7 +224,7 @@ output{color:var(--accent);min-width:38px;text-align:right;font-size:12px;font-v
 
 /* ── Responsive: phones and narrow windows ── */
 @media (max-width:820px){
-  :root{--topbar:52px;--timeline:118px}
+  :root{--topbar:52px;--timeline:160px}
   .brand{display:none}
   .topbar{padding:0 6px;gap:2px}
   .topbar-group{gap:0}
