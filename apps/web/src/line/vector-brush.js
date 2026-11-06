@@ -56,3 +56,21 @@ export function createVectorBrushStyle({ brushPreset = 'ink', pressureCurve = 1,
     motionStrength: Math.max(0, Math.min(16, Number(motionStrength) || 0)),
   };
 }
+
+
+/**
+ * Estimate expressive pressure for non-stylus input.
+ * Inspired by Quickdraw's documented velocity-sensitive ink behavior:
+ * fast movement becomes thinner; slow movement remains fuller.
+ * This is an original FRAME Studio adaptation, not copied upstream code.
+ */
+export function estimateVectorMousePressure(previousPoint, nextPoint, elapsedMs, baseWidth = 7) {
+  if (!previousPoint || !nextPoint) return 1;
+  const distance = Math.hypot(nextPoint.x - previousPoint.x, nextPoint.y - previousPoint.y);
+  const elapsed = Math.max(4, Math.min(80, Number(elapsedMs) || 16));
+  const frameDistance = distance * (16 / elapsed);
+  const relativeSpeed = frameDistance / Math.max(2, Number(baseWidth) || 7);
+  const target = 0.12 + 0.88 * Math.exp(-relativeSpeed * 0.55);
+  const previousPressure = normalizeVectorPressure(previousPoint.pressure ?? 1);
+  return Math.max(0.12, Math.min(1, previousPressure * 0.32 + target * 0.68));
+}

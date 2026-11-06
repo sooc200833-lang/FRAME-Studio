@@ -6,7 +6,7 @@ This document tracks projects that FRAME Studio may use, study, or interoperate 
 
 | Project | License reported by upstream | Potential role | Decision |
 |---|---|---|---|
-| [PixiJS](https://github.com/pixijs/pixijs) | MIT | GPU-accelerated 2D stage renderer, sprites, textures, blend modes, filters | Integrated: stage rendering, smooth vector path display, layer opacity and standard blend modes |
+| [PixiJS](https://github.com/pixijs/pixijs) | MIT | GPU-accelerated 2D stage renderer, sprites, textures, blend modes, filters | Integrated: stage rendering, smooth vector path display, layer opacity and standard blend modes |\n| [Klecks](https://github.com/bitbof/klecks) | MIT | Browser painting workflows: pressure, stabilizer, touch gestures, smudge/blend brush architecture | Reference implementation reviewed; selectively adapt input and brush behaviors, do not embed its full app |\n| [Quickdraw](https://github.com/quickdrawjs/quickdraw) | MIT | Infinite-canvas interaction, stylus/finger separation, speed-sensitive ink, gesture-based history | Reference implementation reviewed; velocity-based mouse pressure adapted in FRAME vector brush |\n| [Graphite](https://github.com/GraphiteEditor/Graphite) | Apache-2.0 / MIT (mixed repository) | Non-destructive vector/raster graph, procedural effects and compositing | Architecture reference only; its Rust/WASM core is not a drop-in PixiJS dependency |
 | [Paper.js](https://github.com/paperjs/paper.js) | MIT | Vector paths, Bezier geometry, editable line objects | Candidate for Line Studio |
 | [Three.js](https://github.com/mrdoob/three.js) | MIT | 3D primitives, camera, geometry, model preview | Primary web 3D candidate |
 | [libmypaint](https://github.com/mypaint/libmypaint) | ISC | Natural brush engine and stroke dynamics | Research for a later native/WASM integration |
@@ -17,7 +17,7 @@ This document tracks projects that FRAME Studio may use, study, or interoperate 
 
 ## Integration order
 
-1. **perfect-freehand** — pressure-sensitive raster brush geometry, tapering and streamlining (integrated).
+1. **perfect-freehand** — pressure-sensitive raster brush geometry, tapering and streamlining (integrated).\n2. **Quickdraw input behavior** — velocity-derived pressure for mouse vector strokes is now adapted in `vector-brush.js`; stylus pressure remains authoritative.\n3. **Klecks brush workflow** — use as a reference for stabilizer, blend/smudge and tablet brush ergonomics; evaluate one brush family at a time.
 2. **PixiJS** — GPU stage, brush preview, masks, textures and compositing (integrated).
 3. **Paper.js** — prototype editable vector paths and selection operations behind the line-engine adapter.
 4. **Color.js / color picker research** — evaluate perceptual color spaces, palette harmony and gradient editing without replacing the document color model prematurely.

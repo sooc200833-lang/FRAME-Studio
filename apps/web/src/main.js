@@ -10,7 +10,7 @@ import { normalizeRasterCels, normalizeRasterTransformCels } from './animation/f
 import { cloneRasterTransformRecords, composeRasterTransformStack, createTranslationMatrix, createRotationMatrix, rasterizeRasterTransformStack } from './selection/raster-transform.js';
 import { containsSelectionPoint, hitTestSelectionHandle, moveSelectionRect, normalizeSelectionRect, lineStrokeIntersectsPolygon, pointInPolygon, resizeSelectionRectFromHandle, resolveSelectionTargets, transformLineStrokes, transformLineStrokesByMatrix, transformPolygon, translatePolygon, getSelectionPreviewTransform, getPolygonBounds, getPolygonCentroid, hitTestPolygonTransformHandle, resizePolygonFromHandle } from './selection/selection.js';
 import { convertLegacyPointsToBezierPath } from './line/legacy-bezier-bridge.js';
-import { getVectorBrushPreset, normalizeStrokeWidthProfile } from './line/vector-brush.js';
+import { estimateVectorMousePressure, getVectorBrushPreset, normalizeStrokeWidthProfile } from './line/vector-brush.js';
 import { buildVectorStrokeSegments } from './line/vector-rendering.js';
 import { insertBezierAnchor, moveBezierAnchor, moveBezierHandle, projectPointToBezierPath, removeBezierAnchor, sampleBezierPath, setBezierAnchorMode } from './line/bezier-path.js';
 
@@ -147,6 +147,7 @@ const selectedStrokeIds = new Set();
 let showSelectedVectorHighlight = true;
 let vectorBrushPreset = 'ink';
 let vectorPressureCurve = 1;
+let lastVectorSampleTime = 0;
 let vectorBrushOpacity = 1;
 let vectorPressureProfile = [1, 1, 1, 1, 1];
 let pressureProfileDrag = false;
@@ -1925,7 +1926,8 @@ function bindCanvasEvents() {
 
     if (tool === 'vector') {
       down = true;
-      drawingPoints = [{ ...point, pressure: event.pointerType === 'pen' ? normalizePointerPressure(event, pressureEnabled) : 0.5 }];
+      lastVectorSampleTime = Number(event.timeStamp) || 0;
+      drawingPoints = [{ ...point, pressure: event.pointerType === 'pen' ? normalizePointerPressure(event, pressureEnabled) : 1 }];
       renderer.previewStroke(drawingPoints, Number.parseInt(color.slice(1), 16), size);
       return;
     }
@@ -2074,8 +2076,13 @@ function bindCanvasEvents() {
       for (const sample of coalescedPointerEvents(event)) {
         const samplePoint = position(sample);
         const previous = drawingPoints[drawingPoints.length - 1];
+        const sampleTime = Number(sample.timeStamp ?? event.timeStamp) || lastVectorSampleTime + 16;
         if (Math.hypot(samplePoint.x - previous.x, samplePoint.y - previous.y) >= 1.25) {
-          drawingPoints.push({ ...samplePoint, pressure: sample.pointerType === 'pen' ? normalizePointerPressure(sample, pressureEnabled) : 0.5 });
+          const pressure = sample.pointerType === 'pen'
+            ? normalizePointerPressure(sample, pressureEnabled)
+            : estimateVectorMousePressure(previous, samplePoint, sampleTime - lastVectorSampleTime, size);
+          drawingPoints.push({ ...samplePoint, pressure });
+          lastVectorSampleTime = sampleTime;
         }
       }
       renderer.previewStroke(drawingPoints, Number.parseInt(color.slice(1), 16), size);
