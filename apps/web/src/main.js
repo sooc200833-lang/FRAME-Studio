@@ -407,7 +407,7 @@ function drawVectorStrokes(context, strokes = vectorStrokes) {
     context.save();
     for (const segment of buildVectorStrokeSegments(stroke)) {
       if (segment.skip) continue;
-      context.globalAlpha = segment.alpha;
+      context.globalAlpha *= segment.alpha;
       context.strokeStyle = stroke.color;
       context.lineWidth = segment.width;
       context.beginPath();
