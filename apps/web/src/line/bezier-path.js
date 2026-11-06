@@ -129,7 +129,7 @@ export function sampleBezierPath(path, { tolerance = 0.75, maxDepth = 10 } = {})
 }
 
 /** Move one control handle. Optionally mirror the opposite handle at its anchor. */
-export function moveBezierHandle(path, segmentIndex, handle, point, { mirrorOpposite = false } = {}) {
+export function moveBezierHandle(path, segmentIndex, handle, point, { mirrorOpposite } = {}) {
   if (!path?.segments || !Number.isInteger(segmentIndex) || !path.segments[segmentIndex]) return path;
   if (handle !== 'out' && handle !== 'in') throw new RangeError('Handle must be "out" or "in".');
   assertPoint(point, 'Handle point');
@@ -148,7 +148,8 @@ export function moveBezierHandle(path, segmentIndex, handle, point, { mirrorOppo
   if (isOutgoing) segment.control1 = copyPoint(point);
   else segment.control2 = copyPoint(point);
 
-  if (mirrorOpposite && opposite && oldOppositeLength > 0) {
+  const shouldMirror = mirrorOpposite ?? next.anchorModes?.[anchorIndex] === 'smooth';
+  if (shouldMirror && opposite && oldOppositeLength > 0) {
     const dx = point.x - anchor.x;
     const dy = point.y - anchor.y;
     const length = Math.hypot(dx, dy);
@@ -159,6 +160,14 @@ export function moveBezierHandle(path, segmentIndex, handle, point, { mirrorOppo
       };
     }
   }
+  return next;
+}
+
+export function setBezierAnchorMode(path, anchorIndex, mode) {
+  if (!path?.anchors || !Number.isInteger(anchorIndex) || !path.anchors[anchorIndex]) return path;
+  if (mode !== 'corner' && mode !== 'smooth') throw new RangeError('Anchor mode must be corner or smooth.');
+  const next = cloneBezierPath(path);
+  next.anchorModes[anchorIndex] = mode;
   return next;
 }
 
@@ -192,6 +201,7 @@ export function transformBezierPath(path, matrix) {
   return {
     id: path.id ?? null,
     anchors: path.anchors.map(transform),
+    anchorModes: path.anchorModes ? [...path.anchorModes] : undefined,
     segments: path.segments.map(segment => ({
       control1: transform(segment.control1),
       control2: transform(segment.control2),
