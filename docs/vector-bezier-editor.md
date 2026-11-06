@@ -7,9 +7,10 @@ Vector strokes can carry an optional `bezierPath` alongside their legacy `points
 1. Select a vector stroke with the Select tool.
 2. Enable **곡선 핸들 편집 모드** in the line inspector.
 3. Drag a blue control point to change the curve.
-4. Drag an anchor dot to move the anchor and its adjacent handles together.
-5. Select an anchor and use **부드러운 앵커로 변경 / 모서리 앵커로 변경** to choose its tangent behavior.
-6. Enable **핸들 연결 · 부드러운 곡선** to force mirrored handles while dragging. Hold Shift to temporarily enable linking.
+4. Click the visible curve to insert a new anchor at that exact curve location; the new anchor can be dragged immediately.
+5. Drag an anchor dot to move the anchor and its adjacent handles together.
+6. Select an interior anchor and use **부드러운 앵커로 변경 / 모서리 앵커로 변경** to choose its tangent behavior.
+7. Enable **핸들 연결 · 부드러운 곡선** to force mirrored handles while dragging. Hold Shift to temporarily enable linking.
 
 Anchor dots and control handles are both directly draggable.
 
