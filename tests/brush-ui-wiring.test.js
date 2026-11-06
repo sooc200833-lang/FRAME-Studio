@@ -73,7 +73,7 @@ test('every popover trigger and tool-mode host points at an existing element', a
   const hosts = [...html.matchAll(/data-host="([^"]+)"/g)].map(match => match[1]);
   assert.ok(popovers.length >= 10);
   for (const id of [...popovers, ...hosts]) assert.ok(ids.has(id), `missing #${id}`);
-  for (const id of new Set(popovers)) assert.match(html, new RegExp(`class="popover" id="${id}"`));
+  for (const id of new Set(popovers)) assert.match(html, new RegExp(`class="popover[^"]*" id="${id}"`));
 });
 
 test('brush library cards cover every raster and vector preset option', async () => {

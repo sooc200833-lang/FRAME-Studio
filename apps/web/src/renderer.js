@@ -1,6 +1,6 @@
 import { sampleLineStrokePath } from './line/line-engine.js';
 import { buildVectorStrokeSegments } from './line/vector-rendering.js';
-import { Application, Graphics, Sprite, Texture } from 'pixi.js';
+import { Application, Container, Graphics, Matrix, Sprite, Texture } from 'pixi.js';
 import { applyBrushTexture } from './brush/brush-engine.js';
 import { getVectorGraphicsCacheEntry, pruneVectorGraphicsCache } from './renderer/vector-graphics-cache.js';
 import { getPolygonBounds, getPolygonTransformHandles } from './selection/selection.js';
@@ -65,7 +65,11 @@ export class PixiStageRenderer {
     this.previewTexture = Texture.from(this.previewTextureCanvas);
     this.previewTextureSprite = new Sprite(this.previewTexture);
     this.previewTextureSprite.visible = false;
-    app.stage.addChild(this.background, this.preview, this.previewTextureSprite);
+    // Live stroke previews share one container so they can follow the active
+    // layer's movement transform while painting on a moved layer.
+    this.previewContainer = new Container();
+    this.previewContainer.addChild(this.preview, this.previewTextureSprite);
+    app.stage.addChild(this.background, this.previewContainer);
     return app.canvas;
   }
 
@@ -131,6 +135,7 @@ export class PixiStageRenderer {
 
       entry.sprite.visible = layer.renderVisible ?? layer.visible;
       entry.sprite.alpha = layer.renderOpacity ?? layer.opacity ?? 1;
+      setDisplayMatrix(entry.sprite, layer.renderMatrix);
       entry.sprite.blendMode = layer.renderBlendMode || layer.blendMode || 'normal';
       if (dirtyIndices.includes(index) || !entry.initialized) {
         const context = entry.displayCanvas.getContext('2d');
@@ -299,8 +304,7 @@ export class PixiStageRenderer {
       this.strokeGraphics.push(outline);
     }
 
-    this.app.stage.setChildIndex(this.preview, this.app.stage.children.length - 1);
-    this.app.stage.setChildIndex(this.previewTextureSprite, this.app.stage.children.length - 1);
+    this.app.stage.setChildIndex(this.previewContainer, this.app.stage.children.length - 1);
   }
 
   refreshLayerEntry(layer, sourceCanvas) {
@@ -400,6 +404,10 @@ export class PixiStageRenderer {
     this.previewTextureSprite.visible = true;
   }
 
+  setPreviewMatrix(matrix = null) {
+    if (this.previewContainer) setDisplayMatrix(this.previewContainer, matrix);
+  }
+
   clearPreview() {
     this.preview?.clear();
     if (this.previewTextureContext && this.previewTextureSprite) {
@@ -426,4 +434,12 @@ export class PixiStageRenderer {
     this.previewTextureSprite = null;
     this.app = null;
   }
+}
+
+const IDENTITY = [1, 0, 0, 1, 0, 0];
+
+/** Applies an affine [a, b, c, d, e, f] matrix (or identity) to a display object. */
+function setDisplayMatrix(displayObject, matrix) {
+  const [a, b, c, d, e, f] = Array.isArray(matrix) && matrix.length === 6 ? matrix : IDENTITY;
+  displayObject.setFromMatrix(new Matrix(a, b, c, d, e, f));
 }

@@ -51,7 +51,7 @@
 - [x] Previous/next onion-skin preview.
 - [x] Frame playback and FPS timing controls.
 - [x] Save and restore raster paint-layer snapshots independently per frame.
-- [ ] Keyframes and timeline interpolation.
+- [x] Layer movement keyframes and interpolation (see v1.2).
 - Reuse the same document model as the drawing engine.
 
 ## Phase 5 — 3D Studio
@@ -85,6 +85,15 @@ The browser drawing engine uses perfect-freehand 1.2.3 to generate pressure-awar
 - [x] Multi-touch: two-finger pinch zoom/rotate/pan, two-finger tap undo, three-finger tap redo; cancelled strokes are discarded.
 - [x] Timeline thumbnails, playhead marker, previous/next frame, pen/mouse scrubbing.
 - [ ] Physical iPad/Apple Pencil validation of gestures and palm handling.
+
+## Movement keyframes — v1.2
+- [x] Per-layer movement track: position, rotation, scale, opacity keyframes attached to frame IDs.
+- [x] Easing per segment (부드럽게, 일정하게, 점점 빠르게, 점점 느리게, 멈췄다 바뀜); geometric scale interpolation.
+- [x] Applied as a presentation transform in PixiJS, export/composite, and painting input (pen/eraser/smudge map through the inverse transform).
+- [x] 움직임 panel, canvas drag in movement-edit mode, timeline keyframe markers, separate undo/redo while editing movement.
+- [ ] Fill, selection transforms and masks editing on moved layers still work in canvas space (fill is blocked with a message).
+- [ ] Vector lines are not on layers yet, so they do not follow layer movement.
+- [ ] Held cels / clip durations so one drawing can span many frames without duplicating it.
 
 ## Current next action
 

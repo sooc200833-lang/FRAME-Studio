@@ -11,6 +11,7 @@ import { expandRegionMask, findConnectedRegion } from './fill/flood-fill.js';
 import { animateLineStrokes, lineBoilPhase } from './line/line-boil.js';
 import { activeFrame, addFrame, createTimeline, deleteFrame, frameAtTime, getOnionSkin, selectFrame, updateFrameCels, updateFrameStrokes, updateFrameTransformCels } from './animation/timeline.js';
 import { normalizeRasterCels, normalizeRasterTransformCels } from './animation/frame-cels.js';
+import { applyMatrix, evaluateMotionTrack, invertMatrix, isIdentityMotion, keyframeAt, motionMatrix, removeKeyframe, setKeyframe } from './animation/motion.js';
 import { cloneRasterTransformRecords, composeRasterTransformStack, createTranslationMatrix, createRotationMatrix, rasterizeRasterTransformStack } from './selection/raster-transform.js';
 import { containsSelectionPoint, hitTestSelectionHandle, moveSelectionRect, normalizeSelectionRect, lineStrokeIntersectsPolygon, pointInPolygon, resizeSelectionRectFromHandle, resolveSelectionTargets, transformLineStrokes, transformLineStrokesByMatrix, transformPolygon, translatePolygon, getSelectionPreviewTransform, getPolygonBounds, getPolygonCentroid, hitTestPolygonTransformHandle, resizePolygonFromHandle } from './selection/selection.js';
 import { convertLegacyPointsToBezierPath } from './line/legacy-bezier-bridge.js';
@@ -134,7 +135,7 @@ function makeLayer(name) {
   maskContext.fillRect(0, 0, W, H);
   return {
     name, visible: true, opacity: 1, blendMode: 'normal',
-    canvas, presentationCanvas, transformRecords: [],
+    canvas, presentationCanvas, transformRecords: [], motionTrack: [],
     maskCanvas, maskEnabled: false, maskUndo: [], maskRedo: [], undo: [], redo: [],
   };
 }
@@ -146,10 +147,17 @@ let activeGroupId = null;
 
 function groupFor(layer) { return layerGroups.find(group => group.id === layer.groupId) || null; }
 function applyGroupState() {
+  const frameIds = timeline.frames.map(frame => frame.id);
+  const frameIndex = Math.max(0, frameIds.indexOf(timeline.activeFrameId));
   for (const layer of layers) {
     const group = groupFor(layer);
+    // Movement keyframes are evaluated at the active frame and applied as a
+    // presentation transform; the layer's canvas pixels stay untouched.
+    const motion = evaluateMotionTrack(layer.motionTrack, frameIds, frameIndex);
+    layer.renderMotion = motion;
+    layer.renderMatrix = isIdentityMotion({ ...motion, opacity: 1 }) ? null : motionMatrix(motion, W, H);
     layer.renderVisible = layer.visible && (!group || group.visible);
-    layer.renderOpacity = (layer.opacity ?? 1) * (group?.opacity ?? 1);
+    layer.renderOpacity = (layer.opacity ?? 1) * (group?.opacity ?? 1) * motion.opacity;
     layer.renderBlendMode = group?.blendMode && group.blendMode !== 'normal' ? group.blendMode : (layer.blendMode || 'normal');
   }
 }
@@ -441,6 +449,7 @@ function composite() {
   layers.forEach(layer => {
     if (!(layer.renderVisible ?? layer.visible)) return;
     context.save();
+    if (layer.renderMatrix) context.transform(...layer.renderMatrix);
     context.globalAlpha = layer.renderOpacity ?? layer.opacity ?? 1;
     const blendMode = layer.renderBlendMode || layer.blendMode || 'normal';
     context.globalCompositeOperation = blendMode === 'add' ? 'lighter' : (blendMode === 'normal' ? 'source-over' : blendMode);
@@ -468,6 +477,8 @@ function render(dirtyIndices = [], displayStrokes = vectorStrokes) {
   applyGroupState();
   if (!loadingFrame) updateFrameStrokes(timeline, timeline.activeFrameId, vectorStrokes);
   renderer.sync(layers, dirtyIndices, displayStrokes, selectedStrokeId, onionEnabled ? getOnionSkin(timeline) : [], selectionRect, selectionPolygon, selectedNodeIndex, nodeEditEnabled, selectedBezierHandle, selectedBezierAnchor, showSelectedVectorHighlight, selectedStrokeIds);
+  renderer.setPreviewMatrix(paintsInLayerSpace() ? layers[active].renderMatrix : null);
+  syncMotionUi();
   document.getElementById('status').textContent = TOOL_LABELS[tool] || tool.toUpperCase();
   drawLayers();
   updateLayerInspector();
@@ -551,6 +562,12 @@ function drawTimeline() {
     button.title = `프레임 ${index + 1} · ${frame.strokes.length}개 선`;
     button.setAttribute('aria-label', `프레임 ${index + 1}`);
     applyFrameThumbnail(button, frame.id);
+    if (keyframeAt(layers[active]?.motionTrack, frame.id)) {
+      const diamond = document.createElement('i');
+      diamond.className = 'key-diamond';
+      diamond.title = '움직임 키프레임';
+      button.append(diamond);
+    }
     button.onclick = () => { if (frame.id !== timeline.activeFrameId) loadTimelineFrame(frame.id); };
     if (frame.id === timeline.activeFrameId) activeCell = button;
     strip.append(button);
@@ -616,7 +633,19 @@ function applyViewport() {
   document.getElementById('zoomLevel').textContent = Math.round(viewport.scale * 100) + '%';
 }
 
+// Raster painting tools draw into the active layer's own pixel space, so when
+// that layer is moved by keyframes the pointer is mapped through the inverse
+// movement transform.
+function paintsInLayerSpace() {
+  return ['pen', 'eraser', 'smudge'].includes(tool) && Boolean(layers[active]?.renderMatrix);
+}
+
 function position(event) {
+  const point = stagePosition(event);
+  return paintsInLayerSpace() ? applyMatrix(invertMatrix(layers[active].renderMatrix), point) : point;
+}
+
+function stagePosition(event) {
   const rect = inputSurface.getBoundingClientRect();
   const transform = getComputedStyle(inputSurface).transform;
   return clientToCanvasPoint(event, {
@@ -685,6 +714,10 @@ function buildProtectionMask() {
 }
 
 function floodFill(x, y) {
+  if (layers[active]?.renderMatrix) {
+    showToast('움직임이 적용된 레이어에는 아직 채우기를 쓸 수 없어요');
+    return;
+  }
   const source = composite().getImageData(0, 0, W, H).data;
   const rgb = parseHex(color);
   const result = findConnectedRegion({
@@ -1401,6 +1434,7 @@ function bindControls() {
     if (source.maskCanvas) copy.maskCanvas.getContext('2d').drawImage(source.maskCanvas, 0, 0);
     copy.maskEnabled = source.maskEnabled;
     copy.groupId = source.groupId;
+    copy.motionTrack = (source.motionTrack || []).map(keyframe => ({ ...keyframe }));
     layers.push(copy);
     active = layers.length - 1;
     saveActiveFrame();
@@ -1472,6 +1506,7 @@ function bindControls() {
   };
 
   document.getElementById('undo').onclick = () => {
+    if (motionEditing) { restoreMotion(motionUndo, motionRedo); return; }
     if (maskEditing) restoreMask(layers[active], layers[active].maskUndo, layers[active].maskRedo);
     else if (groupedTransformUndo) {
       const record = groupedTransformUndo;
@@ -1487,6 +1522,7 @@ function bindControls() {
     else restore(layers[active], layers[active].undo, layers[active].redo);
   };
   document.getElementById('redo').onclick = () => {
+    if (motionEditing) { restoreMotion(motionRedo, motionUndo); return; }
     if (maskEditing) restoreMask(layers[active], layers[active].maskRedo, layers[active].maskUndo);
     else if (groupedTransformRedo) {
       const record = groupedTransformRedo;
@@ -1768,6 +1804,7 @@ function setTool(name) {
     selectedStrokeIds.clear();
   }
   setEyedropperArmed(false);
+  if (motionEditing) setMotionEditing(false);
   const hostId = TOOL_HOST_BUTTONS[name];
   if (hostId) document.getElementById(hostId).dataset.tool = name;
   document.querySelectorAll('.topbar [data-tool]').forEach(item => {
@@ -1994,6 +2031,9 @@ function bindWorkspaceUi() {
     if (!openPopoverId) return;
     const target = event.target;
     if (target.closest('.popover') || target.closest('[data-popover]')) return;
+    // The movement panel stays open while scrubbing frames, and while
+    // dragging the layer on the canvas in movement-edit mode.
+    if (openPopoverId === 'motionPopover' && (target.closest('.timeline') || (motionEditing && target.closest('#canvasWrap')))) return;
     closePopovers();
     if (target.closest('#canvasWrap')) {
       event.stopPropagation();
@@ -2037,8 +2077,130 @@ function bindWorkspaceUi() {
   document.getElementById('frameNext').onclick = () => stepFrame(1);
   bindTimelineScrub();
   bindHsvPicker();
+  bindMotionControls();
   syncBrushUi();
   syncHsvPicker();
+}
+
+// ───────────────────────── Layer movement keyframes ─────────────────────────
+
+let motionEditing = false;
+let motionUndo = [];
+let motionRedo = [];
+let motionSliderEdit = null;
+const MOTION_FIELDS = [
+  { id: 'motionX', key: 'x', toInput: value => value, fromInput: value => value, format: value => Math.round(value) + 'px' },
+  { id: 'motionY', key: 'y', toInput: value => value, fromInput: value => value, format: value => Math.round(value) + 'px' },
+  { id: 'motionRotation', key: 'rotation', toInput: value => value, fromInput: value => value, format: value => Math.round(value) + '°' },
+  { id: 'motionScale', key: 'scale', toInput: value => value * 100, fromInput: value => value / 100, format: value => Math.round(value * 100) + '%' },
+  { id: 'motionOpacity', key: 'opacity', toInput: value => value * 100, fromInput: value => value / 100, format: value => Math.round(value * 100) + '%' },
+];
+
+function activeFrameIndex() {
+  return Math.max(0, timeline.frames.findIndex(frame => frame.id === timeline.activeFrameId));
+}
+
+function currentLayerMotion(layer = layers[active]) {
+  return evaluateMotionTrack(layer?.motionTrack, timeline.frames.map(frame => frame.id), activeFrameIndex());
+}
+
+function pushMotionHistory(layer, before, after) {
+  if (JSON.stringify(before) === JSON.stringify(after)) return;
+  motionUndo.push({ layer, before, after });
+  if (motionUndo.length > 60) motionUndo.shift();
+  motionRedo = [];
+}
+
+function commitMotionTrack(layer, nextTrack) {
+  const before = layer.motionTrack || [];
+  layer.motionTrack = nextTrack;
+  pushMotionHistory(layer, before, nextTrack);
+  render();
+}
+
+function restoreMotion(from, to) {
+  const entry = from.pop();
+  if (!entry || !layers.includes(entry.layer)) { render(); return; }
+  entry.layer.motionTrack = entry.before;
+  to.push({ layer: entry.layer, before: entry.after, after: entry.before });
+  showToast('움직임 ' + (from === motionUndo ? '실행 취소' : '다시 실행'));
+  render();
+}
+
+function setMotionEditing(enabled) {
+  motionEditing = enabled;
+  if (enabled && playbackActive) setPlaybackEnabled(false);
+  const toggle = document.getElementById('motionEditToggle');
+  toggle.classList.toggle('active', enabled);
+  toggle.textContent = enabled ? '캔버스 끌기로 움직이는 중 · 끄기' : '캔버스에서 끌어 움직이기';
+  document.getElementById('motionButton').classList.toggle('active', enabled);
+  document.querySelector('.stage')?.classList.toggle('motion-editing', enabled);
+  render();
+}
+
+function syncMotionUi() {
+  const layer = layers[active];
+  const popover = document.getElementById('motionPopover');
+  if (!layer || !popover) return;
+  document.getElementById('motionLayerName').textContent = layer.name;
+  const motion = layer.renderMotion || currentLayerMotion(layer);
+  for (const field of MOTION_FIELDS) {
+    if (motionSliderEdit?.id === field.id) continue;
+    document.getElementById(field.id).value = String(field.toInput(motion[field.key]));
+    document.getElementById(field.id + 'Out').textContent = field.format(motion[field.key]);
+  }
+  const keyframe = keyframeAt(layer.motionTrack, timeline.activeFrameId);
+  const keyCount = timeline.frames.filter(frame => keyframeAt(layer.motionTrack, frame.id)).length;
+  document.getElementById('motionEasing').value = keyframe?.easing || 'easeInOut';
+  document.getElementById('motionEasing').disabled = !keyframe;
+  document.getElementById('motionKeyDelete').disabled = !keyframe;
+  document.getElementById('motionClear').disabled = !keyCount;
+  document.getElementById('motionKeyInfo').textContent = keyframe
+    ? `지금 프레임에 키프레임이 있어요 · 전체 ${keyCount}개`
+    : keyCount
+      ? '지금 프레임은 키프레임 사이라 자동으로 이어져요 · 값을 바꾸면 키프레임이 생겨요'
+      : '값을 바꾸거나 캔버스를 끌면 현재 프레임에 키프레임이 생겨요';
+}
+
+function bindMotionControls() {
+  document.getElementById('motionEditToggle').onclick = () => setMotionEditing(!motionEditing);
+  for (const field of MOTION_FIELDS) {
+    const input = document.getElementById(field.id);
+    input.addEventListener('input', () => {
+      const layer = layers[active];
+      if (!motionSliderEdit) motionSliderEdit = { id: field.id, layer, before: layer.motionTrack || [] };
+      const value = field.fromInput(Number(input.value));
+      layer.motionTrack = setKeyframe(motionSliderEdit.before, timeline.activeFrameId, { ...currentLayerMotionFrom(motionSliderEdit.before), [field.key]: value });
+      document.getElementById(field.id + 'Out').textContent = field.format(value);
+      render();
+    });
+    input.addEventListener('change', () => {
+      if (!motionSliderEdit) return;
+      pushMotionHistory(motionSliderEdit.layer, motionSliderEdit.before, motionSliderEdit.layer.motionTrack);
+      motionSliderEdit = null;
+      render();
+    });
+  }
+  document.getElementById('motionEasing').onchange = event => {
+    const layer = layers[active];
+    if (!keyframeAt(layer.motionTrack, timeline.activeFrameId)) return;
+    commitMotionTrack(layer, setKeyframe(layer.motionTrack, timeline.activeFrameId, {}, event.target.value));
+  };
+  document.getElementById('motionKeyAdd').onclick = () => {
+    const layer = layers[active];
+    commitMotionTrack(layer, setKeyframe(layer.motionTrack, timeline.activeFrameId, currentLayerMotion(layer)));
+  };
+  document.getElementById('motionKeyDelete').onclick = () => {
+    const layer = layers[active];
+    commitMotionTrack(layer, removeKeyframe(layer.motionTrack, timeline.activeFrameId));
+  };
+  document.getElementById('motionClear').onclick = () => {
+    commitMotionTrack(layers[active], []);
+  };
+}
+
+function currentLayerMotionFrom(track) {
+  return evaluateMotionTrack(track, timeline.frames.map(frame => frame.id), activeFrameIndex());
 }
 
 function createShapePoints(kind, start, end) {
@@ -2087,6 +2249,19 @@ function bindCanvasEvents() {
   // swallow events (stopImmediatePropagation) once a gesture takes over.
   const touches = new Map();
   let gesture = null;
+  let motionDrag = null;
+  const startMotionDrag = event => {
+    if (playbackActive) setPlaybackEnabled(false);
+    const layer = layers[active];
+    motionDrag = { pointerId: event.pointerId, layer, before: layer.motionTrack || [], start: stagePosition(event), motion: currentLayerMotion(layer), moved: false };
+    try { inputSurface.setPointerCapture(event.pointerId); } catch { /* pointer already released */ }
+  };
+  const revertMotionDrag = () => {
+    if (!motionDrag) return;
+    motionDrag.layer.motionTrack = motionDrag.before;
+    motionDrag = null;
+    render();
+  };
   let pendingTouchFill = null;
   const firstTwoTouches = () => [...touches.values()].slice(0, 2).map(touch => ({ x: touch.x, y: touch.y }));
   const cancelActiveInput = event => {
@@ -2096,12 +2271,22 @@ function bindCanvasEvents() {
   inputSurface.addEventListener('pointerdown', event => {
     if (eyedropperArmed && event.button === 0) {
       event.stopImmediatePropagation();
-      pickColorAt(position(event));
+      pickColorAt(stagePosition(event));
       setEyedropperArmed(false);
+      return;
+    }
+    if (motionEditing && event.button === 0 && event.pointerType !== 'touch' && !loadingFrame) {
+      event.stopImmediatePropagation();
+      startMotionDrag(event);
       return;
     }
     if (event.pointerType !== 'touch') return;
     touches.set(event.pointerId, { x: event.clientX, y: event.clientY, startX: event.clientX, startY: event.clientY });
+    if (motionEditing && touches.size === 1 && !loadingFrame) {
+      event.stopImmediatePropagation();
+      startMotionDrag(event);
+      return;
+    }
     if (touches.size === 1 && tool === 'fill') {
       // Defer touch fills until release so the first finger of a two-finger
       // undo tap does not fill a region first.
@@ -2114,6 +2299,7 @@ function bindCanvasEvents() {
     pendingTouchFill = null;
     try { inputSurface.setPointerCapture(event.pointerId); } catch { /* pointer already released */ }
     if (!gesture) {
+      revertMotionDrag();
       cancelActiveInput(event);
       gesture = { fingers: touches.size, startedAt: performance.now(), maxTravel: 0, last: firstTwoTouches() };
     } else {
@@ -2122,6 +2308,18 @@ function bindCanvasEvents() {
     }
   });
   inputSurface.addEventListener('pointermove', event => {
+    if (motionDrag?.pointerId === event.pointerId && !gesture) {
+      event.stopImmediatePropagation();
+      const point = stagePosition(event);
+      const dx = point.x - motionDrag.start.x;
+      const dy = point.y - motionDrag.start.y;
+      if (!motionDrag.moved && Math.hypot(dx, dy) < 1) return;
+      motionDrag.moved = true;
+      motionDrag.layer.motionTrack = setKeyframe(motionDrag.before, timeline.activeFrameId, {
+        ...motionDrag.motion, x: motionDrag.motion.x + dx, y: motionDrag.motion.y + dy,
+      });
+      render();
+    }
     const touch = touches.get(event.pointerId);
     if (!touch) return;
     touch.x = event.clientX;
@@ -2139,6 +2337,15 @@ function bindCanvasEvents() {
     gesture.last = current;
   });
   const releaseTouch = event => {
+    if (motionDrag?.pointerId === event.pointerId) {
+      event.stopImmediatePropagation();
+      if (event.type === 'pointercancel') revertMotionDrag();
+      else {
+        if (motionDrag.moved) pushMotionHistory(motionDrag.layer, motionDrag.before, motionDrag.layer.motionTrack);
+        motionDrag = null;
+        render();
+      }
+    }
     if (!touches.has(event.pointerId)) return;
     touches.delete(event.pointerId);
     if (pendingTouchFill?.pointerId === event.pointerId) {
@@ -2952,6 +3159,14 @@ function bindKeyboardShortcuts() {
     }
     if (event.key === 'Escape' && openPopoverId) {
       closePopovers();
+      return;
+    }
+    if (event.key === 'Escape' && motionEditing) {
+      setMotionEditing(false);
+      return;
+    }
+    if (key === 'm' && !down) {
+      setMotionEditing(!motionEditing);
       return;
     }
 
