@@ -132,6 +132,6 @@ test('projects insertions onto the visible curve while retaining the editable se
   assert.equal(projection.segmentIndex, 0);
   assert.ok(projection.renderedSegmentIndex >= 0);
   assert.ok(projection.distance < 0.01);
-  const inserted = insertLineStrokePoint(stroke, { x: 43.75, y: 50 });
-  assert.deepEqual(inserted.points[1], { x: 43.75, y: 50 });
+  const inserted = insertLineStrokePoint(stroke, { x: 43.75, y: 62.5 });
+  assert.deepEqual(inserted.points[1], projection.point);
 });
