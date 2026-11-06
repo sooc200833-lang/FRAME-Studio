@@ -1,0 +1,104 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {
+  createBezierPath,
+  createBezierPathFromAnchors,
+  cloneBezierPath,
+  sampleBezierPath,
+  moveBezierHandle,
+  moveBezierAnchor,
+  transformBezierPath,
+} from '../apps/web/src/line/bezier-path.js';
+
+const curvedPath = () => createBezierPath({
+  id: 'curve-1',
+  anchors: [{ x: 0, y: 0 }, { x: 120, y: 0 }],
+  segments: [{ control1: { x: 30, y: 90 }, control2: { x: 90, y: 90 } }],
+});
+
+test('creates an explicit cubic path with copied anchors and handles', () => {
+  const anchors = [{ x: 0, y: 0 }, { x: 90, y: 0 }];
+  const segments = [{ control1: { x: 30, y: 40 }, control2: { x: 60, y: 40 } }];
+  const path = createBezierPath({ id: 'a', anchors, segments });
+  anchors[0].x = 500;
+  segments[0].control1.x = 500;
+  assert.deepEqual(path.anchors[0], { x: 0, y: 0 });
+  assert.deepEqual(path.segments[0].control1, { x: 30, y: 40 });
+});
+
+test('rejects malformed anchor and segment counts', () => {
+  assert.throws(() => createBezierPath({ anchors: [{ x: 0, y: 0 }], segments: [] }), RangeError);
+  assert.throws(() => createBezierPath({
+    anchors: [{ x: 0, y: 0 }, { x: 1, y: 1 }],
+    segments: [],
+  }), RangeError);
+  assert.throws(() => createBezierPathFromAnchors([{ x: 0, y: NaN }, { x: 1, y: 1 }]), TypeError);
+});
+
+test('creates straight-line handles at one-third and two-thirds', () => {
+  const path = createBezierPathFromAnchors([{ x: 0, y: 3 }, { x: 90, y: 30 }], 'straight');
+  assert.deepEqual(path.segments[0], {
+    control1: { x: 30, y: 12 },
+    control2: { x: 60, y: 21 },
+  });
+});
+
+test('adaptive sampling follows cubic curvature and preserves endpoints', () => {
+  const path = curvedPath();
+  const sampled = sampleBezierPath(path, { tolerance: 0.5 });
+  assert.ok(sampled.points.length > 3);
+  assert.deepEqual(sampled.points[0], path.anchors[0]);
+  assert.deepEqual(sampled.points.at(-1), path.anchors[1]);
+  assert.equal(sampled.segmentIndices.length, sampled.points.length - 1);
+  assert.ok(Math.max(...sampled.points.map(point => point.y)) > 60);
+});
+
+test('moving an outgoing handle changes only its control geometry', () => {
+  const path = curvedPath();
+  const moved = moveBezierHandle(path, 0, 'out', { x: 30, y: 150 });
+  assert.deepEqual(moved.anchors, path.anchors);
+  assert.deepEqual(moved.segments[0].control1, { x: 30, y: 150 });
+  assert.deepEqual(path.segments[0].control1, { x: 30, y: 90 });
+});
+
+test('linked handle movement mirrors direction and preserves opposite handle length', () => {
+  const path = createBezierPath({
+    anchors: [{ x: 0, y: 0 }, { x: 60, y: 0 }, { x: 120, y: 0 }],
+    segments: [
+      { control1: { x: 20, y: 0 }, control2: { x: 40, y: 0 } },
+      { control1: { x: 80, y: 0 }, control2: { x: 100, y: 0 } },
+    ],
+  });
+  const moved = moveBezierHandle(path, 1, 'out', { x: 60, y: 20 }, { mirrorOpposite: true });
+  assert.deepEqual(moved.segments[0].control2, { x: 60, y: -20 });
+  assert.deepEqual(moved.segments[1].control1, { x: 60, y: 20 });
+});
+
+test('moving an anchor carries its adjacent handles without changing tangent offsets', () => {
+  const path = createBezierPath({
+    anchors: [{ x: 0, y: 0 }, { x: 50, y: 0 }, { x: 100, y: 0 }],
+    segments: [
+      { control1: { x: 10, y: 0 }, control2: { x: 40, y: 0 } },
+      { control1: { x: 60, y: 0 }, control2: { x: 90, y: 0 } },
+    ],
+  });
+  const moved = moveBezierAnchor(path, 1, { x: 50, y: 20 });
+  assert.deepEqual(moved.segments[0].control2, { x: 40, y: 20 });
+  assert.deepEqual(moved.segments[1].control1, { x: 60, y: 20 });
+  assert.deepEqual(path.anchors[1], { x: 50, y: 0 });
+});
+
+test('affine transforms move anchors and both control handles', () => {
+  const path = curvedPath();
+  const moved = transformBezierPath(path, [2, 0, 0, 3, 5, -4]);
+  assert.deepEqual(moved.anchors[1], { x: 245, y: -4 });
+  assert.deepEqual(moved.segments[0].control1, { x: 65, y: 266 });
+  assert.deepEqual(moved.segments[0].control2, { x: 185, y: 266 });
+});
+
+test('clone returns independent geometry', () => {
+  const original = curvedPath();
+  const copy = cloneBezierPath(original);
+  copy.segments[0].control1.x = 999;
+  assert.equal(original.segments[0].control1.x, 30);
+});
