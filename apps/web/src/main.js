@@ -1668,6 +1668,20 @@ function bindCanvasEvents() {
   inputSurface.addEventListener('pointermove', event => {
     const point = position(event);
 
+    if (tool === 'select' && bezierHandleDrag) {
+      const stroke = selectedStroke();
+      if (stroke?.bezierPath) {
+        const index = vectorStrokes.findIndex(item => item.id === selectedStrokeId);
+        vectorStrokes[index] = {
+          ...stroke,
+          bezierPath: moveBezierHandle(stroke.bezierPath, bezierHandleDrag.segmentIndex, bezierHandleDrag.handle, point, { mirrorOpposite: Boolean(event.shiftKey) }),
+        };
+        nodeDragChanged = true;
+        render();
+      }
+      return;
+    }
+
     if (tool === 'select' && nodeDragging && selectedNodeIndex !== null) {
       const stroke = selectedStroke();
       if (stroke?.points[selectedNodeIndex]) {
