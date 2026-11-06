@@ -1,4 +1,5 @@
 import { sampleLineStrokePath } from './line/line-engine.js';
+import { sampleBezierPath } from './line/bezier-path.js';
 import { Application, Graphics, Sprite, Texture } from 'pixi.js';
 import { applyBrushTexture } from './brush/brush-engine.js';
 import { getVectorGraphicsCacheEntry, pruneVectorGraphicsCache } from './renderer/vector-graphics-cache.js';
@@ -75,7 +76,7 @@ export class PixiStageRenderer {
     else graphics.destroy();
   }
 
-  sync(layers, dirtyIndices = [], strokes = [], selectedStrokeId = null, onionSkin = [], selectionRect = null, selectionPolygon = null, selectedNodeIndex = null, showNodeHandles = false) {
+  sync(layers, dirtyIndices = [], strokes = [], selectedStrokeId = null, onionSkin = [], selectionRect = null, selectionPolygon = null, selectedNodeIndex = null, showNodeHandles = false, selectedBezierHandle = null) {
     if (!this.app) return;
 
     // Rebuild transient overlays, but keep committed vector paths attached to their cache entries.
@@ -138,7 +139,7 @@ export class PixiStageRenderer {
         this.vectorGraphicsCache,
         stroke,
         () => this.acquireGraphics(),
-        (graphics, item) => this.drawPath(graphics, item.points, Number.parseInt(item.color.slice(1), 16), item.width),
+        (graphics, item) => this.drawPath(graphics, item.bezierPath ? sampleBezierPath(item.bezierPath).points : item.points, Number.parseInt(item.color.slice(1), 16), item.width),
       );
       if (stroke.id === selectedStrokeId) {
         const highlight = this.acquireGraphics();
@@ -147,7 +148,27 @@ export class PixiStageRenderer {
         this.strokeGraphics.push(highlight);
       }
       this.app.stage.addChildAt(cached.graphics, this.app.stage.children.length - 1);
-      if (stroke.id === selectedStrokeId && showNodeHandles) {
+      if (stroke.id === selectedStrokeId && showNodeHandles && stroke.bezierPath) {
+        const handles = this.acquireGraphics();
+        stroke.bezierPath.segments.forEach((segment, index) => {
+          const start = stroke.bezierPath.anchors[index];
+          const end = stroke.bezierPath.anchors[index + 1];
+          const outSelected = selectedBezierHandle?.segmentIndex === index && selectedBezierHandle?.handle === 'out';
+          const inSelected = selectedBezierHandle?.segmentIndex === index && selectedBezierHandle?.handle === 'in';
+          handles.moveTo(start.x, start.y).lineTo(segment.control1.x, segment.control1.y);
+          handles.moveTo(end.x, end.y).lineTo(segment.control2.x, segment.control2.y);
+          handles.stroke({ color: 0x8b929e, width: 1.2, alpha: 0.9 });
+          handles.circle(segment.control1.x, segment.control1.y, outSelected ? 7 : 5)
+            .fill(outSelected ? 0xe5b85c : 0x8ec5ff).stroke({ color: 0x24242a, width: 1.3 });
+          handles.circle(segment.control2.x, segment.control2.y, inSelected ? 7 : 5)
+            .fill(inSelected ? 0xe5b85c : 0x8ec5ff).stroke({ color: 0x24242a, width: 1.3 });
+        });
+        stroke.bezierPath.anchors.forEach(point => {
+          handles.circle(point.x, point.y, 3.5).fill(0xf8f6f0).stroke({ color: 0x24242a, width: 1.1 });
+        });
+        this.app.stage.addChildAt(handles, this.app.stage.children.length - 1);
+        this.strokeGraphics.push(handles);
+      } else if (stroke.id === selectedStrokeId && showNodeHandles) {
         const nodes = this.acquireGraphics();
         stroke.points.forEach((point, index) => {
           const selected = index === selectedNodeIndex;
