@@ -98,3 +98,20 @@ test('transform stacks are stored per frame and duplicated independently', () =>
   const blank = addFrame(timeline);
   assert.deepEqual(blank.transformCels, []);
 });
+
+
+test('frame snapshots deep-clone editable Bézier geometry', () => {
+  const timeline = createTimeline();
+  const stroke = {
+    ...line,
+    bezierPath: {
+      id: 'curve',
+      anchors: [{ x: 0, y: 0 }, { x: 20, y: 0 }],
+      segments: [{ control1: { x: 5, y: 10 }, control2: { x: 15, y: 10 } }],
+    },
+  };
+  updateFrameStrokes(timeline, 'frame-1', [stroke]);
+  const duplicate = addFrame(timeline, { duplicate: true });
+  duplicate.strokes[0].bezierPath.segments[0].control1.x = 999;
+  assert.equal(timeline.frames[0].strokes[0].bezierPath.segments[0].control1.x, 5);
+});
