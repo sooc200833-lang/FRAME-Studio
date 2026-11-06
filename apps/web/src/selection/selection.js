@@ -1,4 +1,5 @@
-import { sampleLineStrokePath } from '../line/line-engine.js';
+import { sampleStrokePath } from '../line/line-engine.js';
+import { transformBezierPath } from '../line/bezier-path.js';
 export function normalizeSelectionRect(start, end) {
   const left = Math.min(start.x, end.x);
   const top = Math.min(start.y, end.y);
@@ -105,7 +106,7 @@ function pointToSegmentDistance(point, start, end) {
 export function lineStrokeIntersectsPolygon(stroke, polygon) {
   const controlPoints = stroke?.points || [];
   if (!Array.isArray(polygon) || polygon.length < 3 || controlPoints.length < 2) return false;
-  const points = sampleLineStrokePath(controlPoints).points;
+  const points = sampleStrokePath(stroke).points;
   if (points.some(point => pointInPolygon(point, polygon))) return true;
 
   // A vector stroke is a visible area, not an infinitely thin centerline.
@@ -263,6 +264,9 @@ export function transformLineStrokesByMatrix(strokes, polygon, matrix) {
     const points = stroke.points.map(point => selectedIds.has(stroke.id)
       ? { x: a * point.x + c * point.y + e, y: b * point.x + d * point.y + f }
       : { x: point.x, y: point.y });
+    const bezierPath = stroke.bezierPath
+      ? transformBezierPath(stroke.bezierPath, selectedIds.has(stroke.id) ? matrix : [1, 0, 0, 1, 0, 0])
+      : null;
     let widthScale = determinantScale;
     if (selectedIds.has(stroke.id) && stroke.points.length > 1) {
       // Stroke width is perpendicular to the path tangent. Under anisotropic
@@ -285,6 +289,6 @@ export function transformLineStrokesByMatrix(strokes, polygon, matrix) {
       ...stroke,
       width: selectedIds.has(stroke.id) ? Math.max(0.5, stroke.width * widthScale) : stroke.width,
       points,
-    };
+      ...(bezierPath ? { bezierPath } : {}),
   });
 }
