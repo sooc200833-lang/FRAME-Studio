@@ -10,7 +10,8 @@ import { normalizeRasterCels, normalizeRasterTransformCels } from './animation/f
 import { cloneRasterTransformRecords, composeRasterTransformStack, createTranslationMatrix, createRotationMatrix, rasterizeRasterTransformStack } from './selection/raster-transform.js';
 import { containsSelectionPoint, hitTestSelectionHandle, moveSelectionRect, normalizeSelectionRect, lineStrokeIntersectsPolygon, pointInPolygon, resizeSelectionRectFromHandle, resolveSelectionTargets, transformLineStrokes, transformLineStrokesByMatrix, transformPolygon, translatePolygon, getSelectionPreviewTransform, getPolygonBounds, getPolygonCentroid, hitTestPolygonTransformHandle, resizePolygonFromHandle } from './selection/selection.js';
 import { convertLegacyPointsToBezierPath } from './line/legacy-bezier-bridge.js';
-import { getVectorPointWidth, getVectorBrushPreset, normalizeStrokeWidthProfile } from './line/vector-brush.js';
+import { getVectorBrushPreset, normalizeStrokeWidthProfile } from './line/vector-brush.js';
+import { buildVectorStrokeSegments } from './line/vector-rendering.js';
 import { insertBezierAnchor, moveBezierAnchor, moveBezierHandle, projectPointToBezierPath, removeBezierAnchor, sampleBezierPath, setBezierAnchorMode } from './line/bezier-path.js';
 
 import {
@@ -403,38 +404,21 @@ function drawVectorStrokes(context, strokes = vectorStrokes) {
   context.lineCap = 'round';
   context.lineJoin = 'round';
   for (const stroke of strokes) {
-    if (!stroke.points?.length) continue;
-    const preset = getVectorBrushPreset(stroke.brushPreset);
-    const path = sampleStrokePath(stroke);
-    const points = path.points || [];
-    if (points.length < 2) continue;
-    const source = stroke.points;
-    const pressureAt = index => {
-      const ratio = index / Math.max(1, points.length - 1);
-      const sourcePosition = ratio * (source.length - 1);
-      const left = Math.floor(sourcePosition);
-      const right = Math.min(source.length - 1, left + 1);
-      const mix = sourcePosition - left;
-      return (source[left].pressure ?? 0.5) * (1 - mix) + (source[right].pressure ?? 0.5) * mix;
-    };
     context.save();
-    context.globalAlpha *= (stroke.opacity ?? preset.opacity) * (preset.texture === 'marker' ? 0.72 : 1);
-    context.strokeStyle = stroke.color;
-    for (let index = 1; index < points.length; index++) {
-      if (preset.texture === 'dry' && index % 7 === 0) continue;
-      const widthA = getVectorPointWidth(stroke, { pressure: pressureAt(index - 1) }, index - 1, points.length);
-      const widthB = getVectorPointWidth(stroke, { pressure: pressureAt(index) }, index, points.length);
-      context.lineWidth = Math.max(0.35, (widthA + widthB) / 2);
+    for (const segment of buildVectorStrokeSegments(stroke)) {
+      if (segment.skip) continue;
+      context.globalAlpha *= segment.alpha;
+      context.strokeStyle = stroke.color;
+      context.lineWidth = segment.width;
       context.beginPath();
-      context.moveTo(points[index - 1].x, points[index - 1].y);
-      context.lineTo(points[index].x, points[index].y);
+      context.moveTo(segment.from.x, segment.from.y);
+      context.lineTo(segment.to.x, segment.to.y);
       context.stroke();
     }
     context.restore();
   }
   context.restore();
 }
-
 function refreshLayerPresentation(layer) {
   if (!layer?.canvas || !layer?.presentationCanvas) return;
   composeRasterTransformStack(layer.canvas, layer.transformRecords || [], layer.presentationCanvas);
@@ -953,11 +937,23 @@ function updateLineInspector() {
   document.getElementById('vectorMotionStrengthOut').value = (stroke.motionStrength ?? 3) + 'px';
   if (document.activeElement !== lineWidth) lineWidth.value = stroke.width;
   document.getElementById('lineWidthOut').value = stroke.width + 'px';
-  if (selectedCount > 1 && nodeStatus) nodeStatus.textContent += ` · ${selectedCount}개 선택, 스타일 일괄 적용`;
   const nodeStatus = document.getElementById('lineNodeStatus');
-  if (nodeStatus) nodeStatus.textContent = stroke.bezierPath
-    ? `${stroke.bezierPath.anchors.length}개 앵커 · ${stroke.bezierPath.segments.length * 2}개 핸들`
-    : `${stroke.points.length}개 노드${selectedNodeIndex === null ? '' : ` · ${selectedNodeIndex + 1}번 선택`}`;
+  if (nodeStatus) {
+    nodeStatus.textContent = stroke.bezierPath
+      ? `${stroke.bezierPath.anchors.length}개 앵커 · ${stroke.bezierPath.segments.length * 2}개 핸들`
+      : `${stroke.points.length}개 노드${selectedNodeIndex === null ? '' : ` · ${selectedNodeIndex + 1}번 선택`}`;
+    if (selectedCount > 1) nodeStatus.textContent += ` · ${selectedCount}개 선택, 스타일 일괄 적용`;
+  }
+  const nodeEditToggle = document.getElementById('nodeEditToggle');
+  const smoothButton = document.getElementById('smoothLine');
+  if (nodeEditToggle) {
+    nodeEditToggle.disabled = selectedCount > 1;
+    if (selectedCount > 1) {
+      nodeEditToggle.checked = false;
+      nodeEditEnabled = false;
+    }
+  }
+  if (smoothButton) smoothButton.disabled = selectedCount > 1;
   const hasAnchor = Boolean(stroke.bezierPath && Number.isInteger(selectedBezierAnchor) && selectedBezierAnchor > 0 && selectedBezierAnchor < stroke.bezierPath.anchors.length - 1);
   const anchorModeButton = document.getElementById('toggleBezierAnchorMode');
   if (anchorModeButton) {
