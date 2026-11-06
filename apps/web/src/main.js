@@ -31,7 +31,7 @@ const host = document.getElementById('pixiHost');
 const renderer = new PixiStageRenderer(W, H);
 
 let inputSurface;
-let tool = 'pen';
+let tool = 'vector';
 let color = '#24242a';
 let size = 7;
 let brushPreset = 'ink';
@@ -141,6 +141,11 @@ function applyGroupState() {
   }
 }
 let selectedStrokeId = null;
+let showSelectedVectorHighlight = true;
+let vectorBrushPreset = 'ink';
+let vectorPressureCurve = 1;
+let vectorMotionStyle = 'none';
+let vectorMotionStrength = 3;
 let selectedNodeIndex = null;
 let nodeDragging = false;
 let nodeMoveSnapshot = null;
@@ -447,7 +452,7 @@ function render(dirtyIndices = [], displayStrokes = vectorStrokes) {
   }
   applyGroupState();
   if (!loadingFrame) updateFrameStrokes(timeline, timeline.activeFrameId, vectorStrokes);
-  renderer.sync(layers, dirtyIndices, displayStrokes, selectedStrokeId, onionEnabled ? getOnionSkin(timeline) : [], selectionRect, selectionPolygon, selectedNodeIndex, nodeEditEnabled, selectedBezierHandle, selectedBezierAnchor);
+  renderer.sync(layers, dirtyIndices, displayStrokes, selectedStrokeId, onionEnabled ? getOnionSkin(timeline) : [], selectionRect, selectionPolygon, selectedNodeIndex, nodeEditEnabled, selectedBezierHandle, selectedBezierAnchor, showSelectedVectorHighlight);
   document.getElementById('status').textContent = tool.toUpperCase();
   drawLayers();
   updateLayerInspector();
@@ -839,7 +844,7 @@ function animationTick(timestamp) {
       amplitude: Number(document.getElementById('boilAmplitude').value),
       frequency: Number(document.getElementById('boilFrequency').value),
     });
-    renderer.sync(layers, [], displayStrokes, selectedStrokeId, onionEnabled ? getOnionSkin(timeline) : [], selectionRect, selectionPolygon, selectedNodeIndex, nodeEditEnabled);
+    renderer.sync(layers, [], displayStrokes, selectedStrokeId, onionEnabled ? getOnionSkin(timeline) : [], selectionRect, selectionPolygon, selectedNodeIndex, nodeEditEnabled, null, null, showSelectedVectorHighlight);
     lastAnimationPaint = timestamp;
   }
   animationFrame = requestAnimationFrame(animationTick);
@@ -1141,6 +1146,11 @@ function bindViewportControls() {
 
 function bindControls() {
   document.getElementById('applyTone').onclick = applyMangaTone;
+  document.getElementById('vectorBrushPreset').onchange = event => { vectorBrushPreset = event.target.value; };
+  document.getElementById('vectorPressureCurve').oninput = event => { vectorPressureCurve = Number(event.target.value) / 100; document.getElementById('vectorPressureCurveOut').value = vectorPressureCurve.toFixed(2); };
+  document.getElementById('vectorMotionStyle').onchange = event => { vectorMotionStyle = event.target.value; };
+  document.getElementById('vectorMotionStrength').oninput = event => { vectorMotionStrength = Number(event.target.value); document.getElementById('vectorMotionStrengthOut').value = vectorMotionStrength + 'px'; };
+  document.getElementById('selectedOutlineToggle').onchange = event => { showSelectedVectorHighlight = event.target.checked; render(); };
   ['toneSpacing', 'toneDotSize', 'toneAngle', 'toneOpacity'].forEach(id => {
     document.getElementById(id).oninput = updateToneControls;
   });
@@ -1744,7 +1754,7 @@ function bindCanvasEvents() {
 
     if (tool === 'vector') {
       down = true;
-      drawingPoints = [point];
+      drawingPoints = [{ ...point, pressure: event.pointerType === 'pen' ? normalizePointerPressure(event, true) : 0.5 }];
       renderer.previewStroke(drawingPoints, Number.parseInt(color.slice(1), 16), size);
       return;
     }
@@ -2083,7 +2093,7 @@ function bindCanvasEvents() {
 
     if (tool === 'vector') {
       const previous = drawingPoints[drawingPoints.length - 1];
-      if (Math.hypot(point.x - previous.x, point.y - previous.y) > 0.1) drawingPoints.push(point);
+      if (Math.hypot(point.x - previous.x, point.y - previous.y) > 0.1) drawingPoints.push({ ...point, pressure: event.pointerType === 'pen' ? normalizePointerPressure(event, true) : 0.5 });
       if (drawingPoints.length === 1) drawingPoints.push({ x: point.x + 0.1, y: point.y + 0.1 });
       commitLineHistory(lineSnapshot());
       const created = createLineStroke({
@@ -2091,6 +2101,10 @@ function bindCanvasEvents() {
         points: drawingPoints,
         color,
         width: size,
+        brushPreset: vectorBrushPreset,
+        pressureCurve: vectorPressureCurve,
+        motionStyle: vectorMotionStyle,
+        motionStrength: vectorMotionStrength,
       });
       vectorStrokes.push(created);
       selectedStrokeId = created.id;
@@ -2102,9 +2116,13 @@ function bindCanvasEvents() {
     }
 
     if (tool === 'line') {
-      stroke(lineStartPoint, point);
+      commitLineHistory(lineSnapshot());
+      const created = createLineStroke({ id: 'line-' + nextLineId++, points: [{ ...lineStartPoint, pressure: 0.5 }, { ...point, pressure: 0.5 }], color, width: size, brushPreset: vectorBrushPreset, pressureCurve: vectorPressureCurve, motionStyle: vectorMotionStyle, motionStrength: vectorMotionStrength });
+      vectorStrokes.push(created);
+      selectedStrokeId = created.id;
       renderer.clearPreview();
-      render([active]);
+      down = false;
+      render();
     } else if (tool === 'pen' || tool === 'eraser') {
       const finalPressure = strokeIsStylus && Number(event.pressure) > 0
         ? normalizePointerPressure(event, pressureEnabled)
