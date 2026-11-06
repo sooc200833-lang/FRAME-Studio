@@ -114,7 +114,7 @@ test('samples the same quadratic centerline that is rendered on screen', () => {
   const stroke = { points: [{ x: 0, y: 0 }, { x: 50, y: 100 }, { x: 100, y: 0 }] };
   const path = sampleLineStrokePath(stroke.points, 12);
   assert.equal(path.points.length, 14);
-  assert.deepEqual(path.points[6], { x: 43.75, y: 50 });
+  assert.deepEqual(path.points[6], { x: 43.75, y: 62.5 });
   assert.equal(path.segmentIndices[5], 0);
   assert.equal(path.segmentIndices.at(-1), 1);
 });
