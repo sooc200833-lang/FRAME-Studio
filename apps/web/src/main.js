@@ -571,21 +571,21 @@ function position(event) {
 }
 
 // Keep vector-node controls a consistent physical size while the canvas zooms.
-function canvasUnitsPerCssPixel() {
+function canvasScaleFactor() {
   const width = inputSurface?.clientWidth || W;
   return canvasUnitsPerCssPixel(width, W, viewport.scale);
 }
 
 function nodeHandleRadius() {
-  return 5.5 / canvasUnitsPerCssPixel();
+  return 5.5 / canvasScaleFactor();
 }
 
 function nodeHitRadius() {
-  return 12 / canvasUnitsPerCssPixel();
+  return 12 / canvasScaleFactor();
 }
 
 function nodeInsertTolerance() {
-  return 16 / canvasUnitsPerCssPixel();
+  return 16 / canvasScaleFactor();
 }
 
 function withBrushContext(draw, lineWidth = size) {
