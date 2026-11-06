@@ -33,6 +33,17 @@ Always distinguish code-level tests from visual browser checks and physical iPad
 
 ## 3. Existing implementation
 
+### Workspace UI (v1.1)
+- Full-bleed canvas with a top tool bar: left group = 작업 (export/view/gestures), 효과 (line boil, screentone), 선택 (marquee/lasso), 변형 (vector select), 채우기, 도형 (line/shape), 손; right group = 그리기 (vector or raster), 스머지, 지우개, 레이어, 색상.
+- Tapping the already-active paint/smudge/eraser/selection tool opens its popover (brush library, settings). Tapping outside closes it; a canvas tap that closes a popover does not draw.
+- Floating left sidebar: vertical brush size, eyedropper, vertical opacity (drives vector or raster opacity depending on the active tool), undo/redo.
+- Popovers live in `index.html` (`.popover` sections); `bindWorkspaceUi`, `setTool`, `togglePopover`, `syncBrushUi` in `main.js` own the wiring. All previous control ids were kept.
+- Gestures (`viewport/gestures.js`, pure): two-finger pinch zoom/rotate/pan anchored at the finger midpoint, two-finger tap undo, three-finger tap redo. A second finger cancels the in-progress stroke via the `pointercancel` path, which now discards partial pen/eraser/vector/line/shape strokes. Touch fills are deferred to release.
+- Color (`color/color-utils.js`, pure): hex/HSV conversion for the HSV picker and neighborhood sampling for the eyedropper.
+- Keyboard: B/S/E/V/H/G tools, I eyedropper, [ ] size, Space play, ⌘Z/⇧⌘Z.
+- Freehand vector strokes are no longer left selected after drawing, so brush/color changes apply to the next stroke rather than restyling the previous one.
+- Verified in headless Chrome (layout at 1180×820 and 390×844, synthetic touch pinch/undo, eyedropper). Not yet verified on a physical iPad.
+
 ### Drawing and input
 - Raster pen and eraser on Canvas-backed layers.
 - Brush profiles: pencil, ink, marker, and brush.
@@ -106,6 +117,8 @@ Always distinguish code-level tests from visual browser checks and physical iPad
 | `apps/web/src/animation/timeline.js` | Frame/timeline data operations |
 | `apps/web/src/animation/frame-cels.js` | Raster cel normalization |
 | `apps/web/src/viewport/coordinates.js` | Pointer-to-canvas coordinate conversion |
+| `apps/web/src/viewport/gestures.js` | Pinch viewport math and multi-touch tap shortcuts |
+| `apps/web/src/color/color-utils.js` | Hex/HSV conversion and eyedropper sampling |
 | `apps/web/src/styles.css` | Dark UI styling and responsive layout |
 | `tests/` | Node built-in test runner unit tests |
 | `docs/architecture.md` | Architecture notes |
@@ -249,7 +262,7 @@ When prioritizing work, favor foundations that make the app reliable as a drawin
 
 - Product name: FRAME Studio.
 - Primary target: iPad-first drawing/animation workflow.
-- Visual direction: dark interface, compact tool strip, large central canvas, contextual inspector, bottom timeline.
+- Visual direction: dark interface, top tool bar, floating size/opacity sidebar, large central canvas, contextual popovers, bottom timeline.
 - The user values polished, practical drawing tools and asks for actual implementation plus validation—not just mockups or feature promises.
 - Treat requested features as product requirements, but verify technical feasibility and current code before claiming completion.
 

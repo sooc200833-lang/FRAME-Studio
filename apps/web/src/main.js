@@ -2,6 +2,8 @@ import './styles.css';
 import { PixiStageRenderer } from './renderer.js';
 import { applyScreentoneToCanvas } from './tone/screentone.js';
 import { clientToCanvasPoint, parseCssTransformMatrix } from './viewport/coordinates.js';
+import { classifyMultiTouchTap, pinchViewport, snapViewportRotation } from './viewport/gestures.js';
+import { hexToHsv, hsvToHex, sampleImageDataColor } from './color/color-utils.js';
 import { applyBrushTexture, coalescedPointerEvents, createBrushOutline, createFrameScheduler, getBrushPreset, normalizePointerPressure, resolveBrushStrokeOptions, stabilizePoint } from './brush/brush-engine.js';
 import { createSmudgeSession } from './brush/smudge-engine.js';
 import { normalizeBrushBlendMode } from './brush/blend-modes.js';
@@ -231,6 +233,9 @@ function setCurrentColor(value, { applyToSelectedLine = true, remember = true } 
   if (preview) preview.style.background = color;
   const hex = document.getElementById('activeColorHex');
   if (hex) hex.textContent = color.toUpperCase();
+  const swatch = document.getElementById('colorButtonSwatch');
+  if (swatch) swatch.style.background = color;
+  syncHsvPicker();
   if (remember) {
     const index = recentColors.indexOf(color);
     if (index >= 0) recentColors.splice(index, 1);
@@ -297,14 +302,6 @@ function addCurrentColorToPalette() {
   renderPaletteSwatches();
 }
 
-function selectInspectorPanel(panelId) {
-  document.querySelectorAll('.panel-tab').forEach(button => {
-    button.classList.toggle('active', button.dataset.panel === panelId);
-  });
-  document.querySelectorAll('.panel-content').forEach(panel => {
-    panel.classList.toggle('active', panel.id === panelId);
-  });
-}
 
 function selectedStroke() {
   return vectorStrokes.find(stroke => stroke.id === selectedStrokeId) || null;
@@ -471,11 +468,12 @@ function render(dirtyIndices = [], displayStrokes = vectorStrokes) {
   applyGroupState();
   if (!loadingFrame) updateFrameStrokes(timeline, timeline.activeFrameId, vectorStrokes);
   renderer.sync(layers, dirtyIndices, displayStrokes, selectedStrokeId, onionEnabled ? getOnionSkin(timeline) : [], selectionRect, selectionPolygon, selectedNodeIndex, nodeEditEnabled, selectedBezierHandle, selectedBezierAnchor, showSelectedVectorHighlight, selectedStrokeIds);
-  document.getElementById('status').textContent = tool.toUpperCase();
+  document.getElementById('status').textContent = TOOL_LABELS[tool] || tool.toUpperCase();
   drawLayers();
   updateLayerInspector();
   updateLineInspector();
   drawTimeline();
+  scheduleFrameThumbnail();
 }
 
 function saveActiveFrame() {
@@ -542,14 +540,25 @@ function drawTimeline() {
   const strip = document.getElementById('frameStrip');
   if (!strip) return;
   strip.replaceChildren();
+  let activeCell = null;
   timeline.frames.forEach((frame, index) => {
     const button = document.createElement('button');
     button.className = 'frame-cell' + (frame.id === timeline.activeFrameId ? ' active' : '');
-    button.textContent = String(index + 1).padStart(2, '0');
+    button.dataset.frameId = frame.id;
+    const label = document.createElement('span');
+    label.textContent = String(index + 1);
+    button.append(label);
     button.title = `프레임 ${index + 1} · ${frame.strokes.length}개 선`;
-    button.onclick = () => loadTimelineFrame(frame.id);
+    button.setAttribute('aria-label', `프레임 ${index + 1}`);
+    applyFrameThumbnail(button, frame.id);
+    button.onclick = () => { if (frame.id !== timeline.activeFrameId) loadTimelineFrame(frame.id); };
+    if (frame.id === timeline.activeFrameId) activeCell = button;
     strip.append(button);
   });
+  if (activeCell && strip.dataset.activeFrameId !== timeline.activeFrameId) {
+    strip.dataset.activeFrameId = timeline.activeFrameId;
+    activeCell.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+  }
   const label = document.getElementById('frameCounter');
   if (label) label.textContent = `${timeline.frames.findIndex(frame => frame.id === timeline.activeFrameId) + 1} / ${timeline.frames.length}`;
 }
@@ -558,7 +567,9 @@ function setPlaybackEnabled(enabled) {
   if (enabled && loadingFrame) return;
   playbackActive = enabled;
   const button = document.getElementById('playToggle');
-  button.textContent = enabled ? 'Ⅱ 일시정지' : '▶ 재생';
+  button.querySelector('use')?.setAttribute('href', enabled ? '#i-pause' : '#i-play');
+  button.setAttribute('aria-label', enabled ? '일시정지' : '재생');
+  button.title = enabled ? '일시정지' : '재생';
   button.classList.toggle('active', enabled);
 
   if (enabled) {
@@ -602,7 +613,7 @@ let shapeKind = 'rectangle';
 function applyViewport() {
   if (!inputSurface) return;
   inputSurface.style.transform = `translate(${viewport.x}px, ${viewport.y}px) rotate(${viewport.rotation}deg) scale(${viewport.scale})`;
-  document.getElementById('zoomLevel').value = Math.round(viewport.scale * 100) + '%';
+  document.getElementById('zoomLevel').textContent = Math.round(viewport.scale * 100) + '%';
 }
 
 function position(event) {
@@ -763,15 +774,14 @@ function drawLayers() {
     item.append(visibility, name, count);
     item.onclick = () => { activeGroupId = group.id; updateLayerInspector(); drawLayers(); };
     list.append(item);
-    layers.forEach((layer, index) => {
-      if (layer.groupId !== group.id) return;
-      appendLayerRow(list, layer, index, true);
-    });
+    // Topmost layer first, like a stack seen from above.
+    for (let index = layers.length - 1; index >= 0; index--) {
+      if (layers[index].groupId === group.id) appendLayerRow(list, layers[index], index, true);
+    }
   });
-  layers.forEach((layer, index) => {
-    if (layer.groupId) return;
-    appendLayerRow(list, layer, index, false);
-  });
+  for (let index = layers.length - 1; index >= 0; index--) {
+    if (!layers[index].groupId) appendLayerRow(list, layers[index], index, false);
+  }
 }
 
 function appendLayerRow(list, layer, index, nested) {
@@ -1285,20 +1295,11 @@ function bindControls() {
   document.getElementById('tonePattern').onchange = updateToneControls;
 
   document.querySelectorAll('[data-tool]').forEach(button => {
-    button.onclick = () => {
-      if (boilEnabled) setBoilEnabled(false);
-      tool = button.dataset.tool;
-      if (maskEditing && tool !== 'pen' && tool !== 'eraser' && tool !== 'smudge') {
-        maskEditing = false;
-        document.getElementById('maskEdit').classList.remove('active');
-        document.getElementById('maskState').textContent = '일반 그림 편집 중';
-      }
-      document.querySelectorAll('[data-tool]').forEach(item => {
-        item.classList.toggle('active', item === button);
-      });
-      renderer.clearPreview();
-      render();
-    };
+    button.addEventListener('click', () => {
+      const wasActive = button.classList.contains('active');
+      if (!wasActive || button.dataset.tool !== tool) setTool(button.dataset.tool);
+      else if (button.dataset.popover) togglePopover(button.dataset.popover, button);
+    });
   });
 
   document.getElementById('selectionDeselect').onclick = () => {
@@ -1501,17 +1502,6 @@ function bindControls() {
     else restore(layers[active], layers[active].redo, layers[active].undo);
   };
 
-  document.getElementById('toggle').onclick = () => {
-    const hidden = document.getElementById('inspector').classList.toggle('hidden');
-    document.querySelector('.workspace').classList.toggle('inspector-collapsed', hidden);
-  };
-  document.getElementById('inspectorClose').onclick = () => {
-    document.getElementById('inspector').classList.add('hidden');
-    document.querySelector('.workspace').classList.add('inspector-collapsed');
-  };
-  document.querySelectorAll('.panel-tab').forEach(button => {
-    button.onclick = () => selectInspectorPanel(button.dataset.panel);
-  });
   document.getElementById('export').onclick = () => {
     const output = composite().canvas;
     output.toBlob(blob => {
@@ -1606,7 +1596,9 @@ function bindControls() {
   document.getElementById('frameDuplicate').onclick = () => {
     if (playbackActive) setPlaybackEnabled(false);
     saveActiveFrame();
+    const sourceThumbnail = frameThumbnails.get(timeline.activeFrameId);
     const frame = addFrame(timeline, { duplicate: true });
+    if (sourceThumbnail) frameThumbnails.set(frame.id, sourceThumbnail);
     loadTimelineFrame(frame.id, false);
   };
   document.getElementById('frameDelete').onclick = () => {
@@ -1618,7 +1610,7 @@ function bindControls() {
   document.getElementById('onionToggle').onclick = event => {
     onionEnabled = !onionEnabled;
     event.currentTarget.classList.toggle('active', onionEnabled);
-    event.currentTarget.textContent = onionEnabled ? '어니언 ON' : '어니언 OFF';
+    event.currentTarget.querySelector('span').textContent = onionEnabled ? '어니언 ON' : '어니언 OFF';
     render();
   };
 
@@ -1722,6 +1714,329 @@ function bindControls() {
   setCurrentColor(color, { remember: true });
 }
 
+// ───────────────────────── Workspace UI (top bar, popovers, sidebar) ─────────────────────────
+
+const TOOL_HOST_BUTTONS = { pen: 'paintTool', vector: 'paintTool', marquee: 'selectTool', lasso: 'selectTool', line: 'shapeTool', shape: 'shapeTool' };
+const TOOL_LABELS = { vector: '벡터 브러시', pen: '래스터 브러시', smudge: '스머지', eraser: '지우개', marquee: '사각형 선택', lasso: '올가미 선택', select: '벡터 변형', fill: '채우기', line: '직선', shape: '도형', hand: '손 도구' };
+let openPopoverId = null;
+let eyedropperArmed = false;
+let toastTimer = 0;
+
+function showToast(message) {
+  const toast = document.getElementById('toast');
+  if (!toast) return;
+  toast.hidden = true;
+  toast.textContent = message;
+  // Restart the CSS animation on every toast.
+  void toast.offsetWidth;
+  toast.hidden = false;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { toast.hidden = true; }, 950);
+}
+
+function closePopovers() {
+  document.querySelectorAll('.popover').forEach(popover => { popover.hidden = true; });
+  document.querySelectorAll('[data-popover]').forEach(button => button.classList.remove('open'));
+  openPopoverId = null;
+}
+
+function togglePopover(id, anchor) {
+  const wasOpen = openPopoverId === id;
+  closePopovers();
+  if (wasOpen) return;
+  const popover = document.getElementById(id);
+  if (!popover) return;
+  popover.hidden = false;
+  anchor?.classList.add('open');
+  openPopoverId = id;
+  if (id === 'colorPopover') drawSvPicker();
+  if (id === 'brushPopover') syncBrushUi();
+}
+
+function setTool(name) {
+  if (boilEnabled) setBoilEnabled(false);
+  tool = name;
+  if (maskEditing && tool !== 'pen' && tool !== 'eraser' && tool !== 'smudge') {
+    maskEditing = false;
+    document.getElementById('maskEdit').classList.remove('active');
+    document.getElementById('maskState').textContent = '일반 그림 편집 중';
+  }
+  if (tool === 'vector' || tool === 'pen') {
+    // Leaving the transform tool: drop the vector selection so brush and color
+    // changes apply to the next stroke instead of an old line.
+    selectedStrokeId = null;
+    selectedStrokeIds.clear();
+  }
+  setEyedropperArmed(false);
+  const hostId = TOOL_HOST_BUTTONS[name];
+  if (hostId) document.getElementById(hostId).dataset.tool = name;
+  document.querySelectorAll('.topbar [data-tool]').forEach(item => {
+    item.classList.toggle('active', item.dataset.tool === name);
+  });
+  document.querySelectorAll('[data-set-tool]').forEach(item => {
+    item.classList.toggle('active', item.dataset.setTool === name);
+  });
+  syncBrushUi();
+  renderer.clearPreview();
+  render();
+}
+
+function paintMode() {
+  return document.getElementById('paintTool')?.dataset.tool === 'pen' ? 'raster' : 'vector';
+}
+
+function syncBrushUi() {
+  const mode = paintMode();
+  const brushPopover = document.getElementById('brushPopover');
+  if (brushPopover) brushPopover.dataset.mode = mode;
+  document.querySelectorAll('#brushPopover .brush-card').forEach(card => {
+    const current = card.dataset.brushKind === 'vector' ? vectorBrushPreset : brushPreset;
+    card.classList.toggle('active', card.dataset.brushKind === mode && card.dataset.brush === current);
+  });
+  document.querySelectorAll('#eraserPopover .brush-card').forEach(card => {
+    card.classList.toggle('active', card.dataset.brush === brushPreset);
+  });
+  const sideOpacity = document.getElementById('sideOpacity');
+  if (sideOpacity) {
+    const value = Math.round((sidebarOpacityTarget() === 'vector' ? vectorBrushOpacity : brushOpacity) * 100);
+    sideOpacity.value = String(value);
+    document.getElementById('sideOpacityOut').textContent = value + '%';
+  }
+}
+
+function sidebarOpacityTarget() {
+  if (tool === 'vector' || tool === 'line' || tool === 'shape' || tool === 'select') return 'vector';
+  if (tool === 'pen') return 'raster';
+  return paintMode();
+}
+
+function setEyedropperArmed(armed) {
+  eyedropperArmed = armed;
+  document.getElementById('eyedropper')?.classList.toggle('active', armed);
+  document.querySelector('.stage')?.classList.toggle('picking', armed);
+}
+
+function pickColorAt(point) {
+  const radius = 2;
+  const x0 = Math.max(0, Math.round(point.x) - radius);
+  const y0 = Math.max(0, Math.round(point.y) - radius);
+  const width = Math.min(W, Math.round(point.x) + radius + 1) - x0;
+  const height = Math.min(H, Math.round(point.y) + radius + 1) - y0;
+  if (width <= 0 || height <= 0) return false;
+  const image = composite().getImageData(x0, y0, width, height);
+  const picked = sampleImageDataColor(image.data, width, height, Math.round(point.x) - x0, Math.round(point.y) - y0, { radius });
+  if (!picked) return false;
+  setCurrentColor(picked, { applyToSelectedLine: false });
+  showToast('색상 ' + picked.toUpperCase());
+  return true;
+}
+
+// HSV picker state is kept separately from the hex color so hue survives when
+// saturation or value reaches zero.
+const hsvState = { h: 0, s: 0, v: 0 };
+
+function syncHsvPicker() {
+  if (hsvToHex(hsvState.h, hsvState.s, hsvState.v) !== color) {
+    const next = hexToHsv(color);
+    if (next.s > 0 && next.v > 0) hsvState.h = next.h;
+    hsvState.s = next.s;
+    hsvState.v = next.v;
+  }
+  const hue = document.getElementById('colorHue');
+  if (hue) hue.value = String(Math.round(hsvState.h) % 360);
+  drawSvPicker();
+}
+
+function drawSvPicker() {
+  const canvas = document.getElementById('colorSV');
+  if (!canvas || !canvas.clientWidth) return;
+  const ratio = window.devicePixelRatio || 1;
+  const width = Math.round(canvas.clientWidth * ratio);
+  const height = Math.round(canvas.clientHeight * ratio);
+  if (canvas.width !== width || canvas.height !== height) {
+    canvas.width = width;
+    canvas.height = height;
+  }
+  const context = canvas.getContext('2d');
+  context.fillStyle = hsvToHex(hsvState.h, 1, 1);
+  context.fillRect(0, 0, width, height);
+  const white = context.createLinearGradient(0, 0, width, 0);
+  white.addColorStop(0, '#fff');
+  white.addColorStop(1, 'rgba(255,255,255,0)');
+  context.fillStyle = white;
+  context.fillRect(0, 0, width, height);
+  const black = context.createLinearGradient(0, 0, 0, height);
+  black.addColorStop(0, 'rgba(0,0,0,0)');
+  black.addColorStop(1, '#000');
+  context.fillStyle = black;
+  context.fillRect(0, 0, width, height);
+  const x = hsvState.s * width;
+  const y = (1 - hsvState.v) * height;
+  context.lineWidth = 3 * ratio;
+  context.strokeStyle = '#fff';
+  context.beginPath();
+  context.arc(x, y, 9 * ratio, 0, Math.PI * 2);
+  context.stroke();
+  context.lineWidth = 1 * ratio;
+  context.strokeStyle = 'rgba(0,0,0,.55)';
+  context.beginPath();
+  context.arc(x, y, 11 * ratio, 0, Math.PI * 2);
+  context.stroke();
+}
+
+function bindHsvPicker() {
+  const canvas = document.getElementById('colorSV');
+  const hue = document.getElementById('colorHue');
+  let dragging = false;
+  const update = (event, remember) => {
+    const rect = canvas.getBoundingClientRect();
+    hsvState.s = Math.min(1, Math.max(0, (event.clientX - rect.left) / rect.width));
+    hsvState.v = 1 - Math.min(1, Math.max(0, (event.clientY - rect.top) / rect.height));
+    setCurrentColor(hsvToHex(hsvState.h, hsvState.s, hsvState.v), { remember });
+  };
+  canvas.addEventListener('pointerdown', event => {
+    dragging = true;
+    canvas.setPointerCapture(event.pointerId);
+    update(event, false);
+  });
+  canvas.addEventListener('pointermove', event => { if (dragging) update(event, false); });
+  const finish = event => {
+    if (!dragging) return;
+    dragging = false;
+    update(event, true);
+  };
+  canvas.addEventListener('pointerup', finish);
+  canvas.addEventListener('pointercancel', () => { dragging = false; });
+  hue.addEventListener('input', () => {
+    hsvState.h = Number(hue.value) || 0;
+    setCurrentColor(hsvToHex(hsvState.h, hsvState.s, hsvState.v), { remember: false });
+  });
+  hue.addEventListener('change', () => setCurrentColor(color, { remember: true }));
+}
+
+// Frame thumbnails are generated from the composited active frame after edits
+// settle, so they include vector lines (which are not stored in raster cels).
+const frameThumbnails = new Map();
+let thumbnailTimer = 0;
+
+function scheduleFrameThumbnail() {
+  clearTimeout(thumbnailTimer);
+  thumbnailTimer = setTimeout(() => {
+    if (loadingFrame || playbackActive || down) return;
+    const frameId = timeline.activeFrameId;
+    const thumbnail = document.createElement('canvas');
+    thumbnail.width = 160;
+    thumbnail.height = 120;
+    thumbnail.getContext('2d').drawImage(composite().canvas, 0, 0, 160, 120);
+    frameThumbnails.set(frameId, thumbnail.toDataURL('image/jpeg', 0.72));
+    const cell = document.querySelector(`.frame-cell[data-frame-id="${CSS.escape(frameId)}"]`);
+    if (cell) applyFrameThumbnail(cell, frameId);
+  }, 380);
+}
+
+function applyFrameThumbnail(cell, frameId) {
+  const source = frameThumbnails.get(frameId);
+  cell.classList.toggle('has-thumb', Boolean(source));
+  cell.style.backgroundImage = source ? `url("${source}")` : '';
+}
+
+function stepFrame(offset) {
+  if (playbackActive) setPlaybackEnabled(false);
+  const index = timeline.frames.findIndex(frame => frame.id === timeline.activeFrameId);
+  const next = timeline.frames[Math.max(0, Math.min(timeline.frames.length - 1, index + offset))];
+  if (next && next.id !== timeline.activeFrameId) loadTimelineFrame(next.id);
+}
+
+function bindTimelineScrub() {
+  const strip = document.getElementById('frameStrip');
+  let scrubbing = false;
+  const frameUnder = event => {
+    const rect = strip.getBoundingClientRect();
+    return document.elementFromPoint(event.clientX, rect.top + rect.height / 2)?.closest('.frame-cell');
+  };
+  strip.addEventListener('pointerdown', event => {
+    // Fingers scroll the strip natively; pen and mouse drags scrub frames.
+    if (event.pointerType === 'touch' || !event.target.closest('.frame-cell')) return;
+    scrubbing = true;
+    strip.setPointerCapture(event.pointerId);
+    if (playbackActive) setPlaybackEnabled(false);
+  });
+  strip.addEventListener('pointermove', event => {
+    if (!scrubbing || loadingFrame) return;
+    const cell = frameUnder(event);
+    if (cell && cell.dataset.frameId !== timeline.activeFrameId) loadTimelineFrame(cell.dataset.frameId);
+  });
+  const stop = () => { scrubbing = false; };
+  strip.addEventListener('pointerup', stop);
+  strip.addEventListener('pointercancel', stop);
+}
+
+function bindWorkspaceUi() {
+  document.querySelectorAll('[data-popover]:not([data-tool])').forEach(button => {
+    button.addEventListener('click', () => togglePopover(button.dataset.popover, button));
+  });
+  document.querySelectorAll('.topbar [data-tool]').forEach(button => {
+    // Runs before the shared tool handler: switching tools closes any popover.
+    button.addEventListener('pointerdown', () => {
+      if (!button.classList.contains('active') && openPopoverId) closePopovers();
+    });
+  });
+  document.querySelectorAll('[data-set-tool]').forEach(button => {
+    button.addEventListener('click', () => setTool(button.dataset.setTool));
+  });
+  // Tapping outside an open popover closes it. A tap on the canvas only closes
+  // the popover and does not also start a stroke.
+  document.addEventListener('pointerdown', event => {
+    if (!openPopoverId) return;
+    const target = event.target;
+    if (target.closest('.popover') || target.closest('[data-popover]')) return;
+    closePopovers();
+    if (target.closest('#canvasWrap')) {
+      event.stopPropagation();
+      event.preventDefault();
+    }
+  }, true);
+
+  document.querySelectorAll('.brush-card').forEach(card => {
+    card.addEventListener('click', () => {
+      const name = card.dataset.brush;
+      if (card.dataset.brushKind === 'vector') {
+        vectorBrushPreset = name;
+        document.getElementById('vectorBrushPreset').value = name;
+        if (!card.closest('#eraserPopover')) setTool('vector');
+      } else {
+        const select = document.getElementById('brushPreset');
+        select.value = name;
+        select.dispatchEvent(new Event('change'));
+        if (!card.closest('#eraserPopover')) setTool('pen');
+      }
+      syncBrushUi();
+    });
+  });
+
+  const sideOpacity = document.getElementById('sideOpacity');
+  sideOpacity.addEventListener('input', () => {
+    const target = document.getElementById(sidebarOpacityTarget() === 'vector' ? 'vectorBrushOpacity' : 'brushOpacity');
+    target.value = sideOpacity.value;
+    target.dispatchEvent(new Event('input'));
+    document.getElementById('sideOpacityOut').textContent = sideOpacity.value + '%';
+  });
+  ['vectorBrushOpacity', 'brushOpacity'].forEach(id => {
+    document.getElementById(id).addEventListener('input', () => syncBrushUi());
+  });
+  document.getElementById('brushPreset').addEventListener('change', () => syncBrushUi());
+  document.getElementById('vectorBrushPreset').addEventListener('change', () => syncBrushUi());
+
+  document.getElementById('eyedropper').onclick = () => setEyedropperArmed(!eyedropperArmed);
+  document.getElementById('zoomLevel').onclick = () => document.getElementById('resetViewport').click();
+  document.getElementById('framePrev').onclick = () => stepFrame(-1);
+  document.getElementById('frameNext').onclick = () => stepFrame(1);
+  bindTimelineScrub();
+  bindHsvPicker();
+  syncBrushUi();
+  syncHsvPicker();
+}
+
 function createShapePoints(kind, start, end) {
   const left = Math.min(start.x, end.x), right = Math.max(start.x, end.x);
   const top = Math.min(start.y, end.y), bottom = Math.max(start.y, end.y);
@@ -1763,11 +2078,106 @@ function bindCanvasEvents() {
     render([active]);
   });
 
+  // ── Multi-touch gestures and eyedropper ──
+  // These listeners are registered before the drawing listeners so they can
+  // swallow events (stopImmediatePropagation) once a gesture takes over.
+  const touches = new Map();
+  let gesture = null;
+  let pendingTouchFill = null;
+  const firstTwoTouches = () => [...touches.values()].slice(0, 2).map(touch => ({ x: touch.x, y: touch.y }));
+  const cancelActiveInput = event => {
+    if (!down && !panDrag) return;
+    end({ type: 'pointercancel', pointerId: event.pointerId, clientX: event.clientX, clientY: event.clientY, pressure: 0, button: 0 });
+  };
+  inputSurface.addEventListener('pointerdown', event => {
+    if (eyedropperArmed && event.button === 0) {
+      event.stopImmediatePropagation();
+      pickColorAt(position(event));
+      setEyedropperArmed(false);
+      return;
+    }
+    if (event.pointerType !== 'touch') return;
+    touches.set(event.pointerId, { x: event.clientX, y: event.clientY, startX: event.clientX, startY: event.clientY });
+    if (touches.size === 1 && tool === 'fill') {
+      // Defer touch fills until release so the first finger of a two-finger
+      // undo tap does not fill a region first.
+      pendingTouchFill = { pointerId: event.pointerId, point: position(event) };
+      event.stopImmediatePropagation();
+      return;
+    }
+    if (touches.size < 2) return;
+    event.stopImmediatePropagation();
+    pendingTouchFill = null;
+    try { inputSurface.setPointerCapture(event.pointerId); } catch { /* pointer already released */ }
+    if (!gesture) {
+      cancelActiveInput(event);
+      gesture = { fingers: touches.size, startedAt: performance.now(), maxTravel: 0, last: firstTwoTouches() };
+    } else {
+      gesture.fingers = Math.max(gesture.fingers, touches.size);
+      gesture.last = firstTwoTouches();
+    }
+  });
+  inputSurface.addEventListener('pointermove', event => {
+    const touch = touches.get(event.pointerId);
+    if (!touch) return;
+    touch.x = event.clientX;
+    touch.y = event.clientY;
+    if (pendingTouchFill?.pointerId === event.pointerId && Math.hypot(touch.x - touch.startX, touch.y - touch.startY) > 14) pendingTouchFill = null;
+    if (!gesture) return;
+    event.stopImmediatePropagation();
+    gesture.maxTravel = Math.max(gesture.maxTravel, Math.hypot(touch.x - touch.startX, touch.y - touch.startY));
+    if (touches.size < 2) return;
+    const current = firstTwoTouches();
+    const rect = inputSurface.getBoundingClientRect();
+    const next = pinchViewport(viewport, gesture.last, current, { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 });
+    Object.assign(viewport, next);
+    applyViewport();
+    gesture.last = current;
+  });
+  const releaseTouch = event => {
+    if (!touches.has(event.pointerId)) return;
+    touches.delete(event.pointerId);
+    if (pendingTouchFill?.pointerId === event.pointerId) {
+      const fill = pendingTouchFill;
+      pendingTouchFill = null;
+      event.stopImmediatePropagation();
+      if (event.type === 'pointerup' && !gesture && !loadingFrame) {
+        if (playbackActive) setPlaybackEnabled(false);
+        ensureEditableLayerAfterTransform();
+        floodFill(fill.point.x, fill.point.y);
+        render([active]);
+      }
+      return;
+    }
+    if (!gesture) return;
+    event.stopImmediatePropagation();
+    if (touches.size >= 2) {
+      gesture.last = firstTwoTouches();
+      return;
+    }
+    if (touches.size === 1) return;
+    const shortcut = classifyMultiTouchTap({
+      fingers: gesture.fingers,
+      durationMs: performance.now() - gesture.startedAt,
+      maxTravel: gesture.maxTravel,
+    });
+    gesture = null;
+    if (shortcut) {
+      document.getElementById(shortcut).click();
+      showToast(shortcut === 'undo' ? '실행 취소' : '다시 실행');
+    } else {
+      viewport.rotation = snapViewportRotation(viewport.rotation);
+      applyViewport();
+    }
+  };
+  inputSurface.addEventListener('pointerup', releaseTouch);
+  inputSurface.addEventListener('pointercancel', releaseTouch);
+
   inputSurface.addEventListener('pointerdown', event => {
     if (event.button !== 0 || loadingFrame) return;
     if (playbackActive) setPlaybackEnabled(false);
     if (boilEnabled) setBoilEnabled(false);
-    inputSurface.setPointerCapture(event.pointerId);
+    try { inputSurface.setPointerCapture(event.pointerId); } catch { /* pointer already released */ }
     if (['pen', 'eraser', 'smudge', 'line', 'fill'].includes(tool)) ensureEditableLayerAfterTransform();
     const point = position(event);
 
@@ -2386,6 +2796,21 @@ function bindCanvasEvents() {
       return;
     }
 
+    if (event.type === 'pointercancel' && ['shape', 'line', 'vector', 'pen', 'eraser'].includes(tool)) {
+      // The system (palm rejection) or a multi-finger gesture cancelled the
+      // stroke: discard it instead of committing a partial line, and drop the
+      // undo snapshot that pointerdown recorded for raster tools.
+      if (tool !== 'vector' && !maskEditing) layers[active].undo.pop();
+      strokeSamples = [];
+      strokeIsStylus = false;
+      drawingPoints = null;
+      lineStartPoint = null;
+      renderer.clearPreview();
+      down = false;
+      render([active]);
+      return;
+    }
+
     if (tool === 'shape') {
       const points = createShapePoints(shapeKind, lineStartPoint, point);
       commitLineHistory(lineSnapshot());
@@ -2414,8 +2839,10 @@ function bindCanvasEvents() {
         motionStrength: vectorMotionStrength,
       });
       vectorStrokes.push(created);
-      selectedStrokeId = created.id;
-      selectedStrokeIds.clear(); selectedStrokeIds.add(created.id);
+      // Freehand drawing should not leave the new line selected; otherwise the
+      // next brush/color change would silently restyle the line just drawn.
+      selectedStrokeId = null;
+      selectedStrokeIds.clear();
       drawingPoints = null;
       renderer.clearPreview();
       down = false;
@@ -2487,7 +2914,42 @@ function bindKeyboardShortcuts() {
       target.isContentEditable
       || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName)
     );
-    if (isTextEntry || event.altKey || event.ctrlKey || event.metaKey) return;
+    if (isTextEntry) return;
+    if ((event.ctrlKey || event.metaKey) && !event.altKey && event.key.toLowerCase() === 'z') {
+      event.preventDefault();
+      document.getElementById(event.shiftKey ? 'redo' : 'undo').click();
+      return;
+    }
+    if (event.altKey || event.ctrlKey || event.metaKey) return;
+
+    const shortcutTools = { b: paintMode() === 'raster' ? 'pen' : 'vector', s: 'smudge', e: 'eraser', v: 'select', h: 'hand', g: 'fill' };
+    const key = event.key.toLowerCase();
+    if (shortcutTools[key] && !down) {
+      event.preventDefault();
+      closePopovers();
+      setTool(shortcutTools[key]);
+      return;
+    }
+    if (key === 'i' && !down) {
+      setEyedropperArmed(!eyedropperArmed);
+      return;
+    }
+    if ((event.key === '[' || event.key === ']') && !down) {
+      const sizeInput = document.getElementById('size');
+      const step = Math.max(1, Math.round(size * 0.12));
+      sizeInput.value = String(size + (event.key === ']' ? step : -step));
+      sizeInput.dispatchEvent(new Event('input'));
+      return;
+    }
+    if (event.key === ' ' && !down) {
+      event.preventDefault();
+      setPlaybackEnabled(!playbackActive);
+      return;
+    }
+    if (event.key === 'Escape' && openPopoverId) {
+      closePopovers();
+      return;
+    }
 
     if ((event.key === 'Delete' || event.key === 'Backspace')
       && nodeEditEnabled
@@ -2511,6 +2973,7 @@ function bindKeyboardShortcuts() {
 async function start() {
   inputSurface = await renderer.init(host);
   bindControls();
+  bindWorkspaceUi();
   bindViewportControls();
   bindCanvasEvents();
   bindKeyboardShortcuts();

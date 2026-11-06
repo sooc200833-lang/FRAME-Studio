@@ -36,7 +36,7 @@
 - [x] Apply layer masks in PixiJS display compositing and PNG export.
 - [x] Add layer folder groups with membership controls, visibility, opacity, and blend settings.
 - [ ] Add isolated group compositing, nested folders, and per-frame group metadata.
-- [x] Add frame-based vector-line snapshots with stable frame IDs.\n- [x] Add frame insertion, duplication, deletion, and selection.\n- [x] Add previous/next onion-skin ghost rendering.\n- [x] Add frame-based vector-line snapshots with stable frame IDs.
+- [x] Add frame-based vector-line snapshots with stable frame IDs.
 - [x] Add frame insertion, duplication, deletion, and selection.
 - [x] Add previous/next onion-skin ghost rendering.
 - [ ] Add per-line animation settings, frame caching, and timeline keyframes.
@@ -77,6 +77,14 @@
 ## Current status — v1.0
 
 The browser drawing engine uses perfect-freehand 1.2.3 to generate pressure-aware variable-width raster pen and eraser polygons, with pencil, ink, marker, and brush profiles. It applies adjustable speed-responsive stabilization and consumes coalesced stylus samples where available. PixiJS displays the live brush outline. Line Boil uses arc-length sampling and local centerline normals. The stage supports smooth vector paths, custom colors, layer opacity/blend modes, independent raster cels, playback, and onion skin. Native PencilKit, tilt, advanced brush textures, isolated/nested layer groups, per-frame group and mask metadata, keyframes, and interpolation remain future work.
+
+## Workspace UI — v1.1
+- [x] Full-bleed canvas workspace: top tool bar, floating size/opacity sidebar, contextual popovers, bottom timeline track.
+- [x] Brush library popover (vector and raster presets) opened by tapping the active paint tool again.
+- [x] HSV color picker, eyedropper, layers listed top-first.
+- [x] Multi-touch: two-finger pinch zoom/rotate/pan, two-finger tap undo, three-finger tap redo; cancelled strokes are discarded.
+- [x] Timeline thumbnails, playhead marker, previous/next frame, pen/mouse scrubbing.
+- [ ] Physical iPad/Apple Pencil validation of gestures and palm handling.
 
 ## Current next action
 
