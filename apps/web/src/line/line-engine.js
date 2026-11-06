@@ -192,7 +192,7 @@ export function smoothLineStroke(stroke, subdivisions = 5, tension = 0.5) {
     }
   }
   points[points.length - 1] = { x: source.at(-1).x, y: source.at(-1).y };
-  return { ...stroke, points };
+  return { ...stroke, bezierPath: undefined, points };
 }
 
 
