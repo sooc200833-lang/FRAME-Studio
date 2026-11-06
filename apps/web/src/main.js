@@ -1756,6 +1756,12 @@ function bindCanvasEvents() {
     }
   };
   const brushPreviewScheduler = createFrameScheduler(drawBrushPreview);
+  const smudgeRenderScheduler = createFrameScheduler(() => {
+    if (!smudgeSession) return;
+    const context = layers[active].canvas.getContext('2d');
+    context.putImageData(smudgeSession.imageData, 0, 0);
+    render([active]);
+  });
 
   inputSurface.addEventListener('pointerdown', event => {
     if (event.button !== 0 || loadingFrame) return;
@@ -2148,11 +2154,7 @@ function bindCanvasEvents() {
         });
         last = smoothPoint;
       }
-      if (touched > 0) {
-        const context = layers[active].canvas.getContext('2d');
-        context.putImageData(smudgeSession.imageData, 0, 0);
-        render([active]);
-      }
+      if (touched > 0) smudgeRenderScheduler.schedule();
       return;
     }
 
@@ -2354,6 +2356,7 @@ function bindCanvasEvents() {
     const point = position(event);
 
     if (tool === 'smudge' && smudgeSession) {
+      smudgeRenderScheduler.cancel();
       const targetLayer = layers[active];
       const context = targetLayer.canvas.getContext('2d');
       if (event.type === 'pointercancel') {
