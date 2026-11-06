@@ -390,6 +390,9 @@ export class PixiStageRenderer {
     applyBrushTexture(context, outline, samples, options);
     context.restore();
 
+    this.previewTextureSprite.blendMode = options.blendMode === 'source-over'
+      ? 'normal'
+      : (options.blendMode || 'normal');
     this.previewTextureSprite.x = left;
     this.previewTextureSprite.y = top;
     this.previewTextureSprite.width = canvasWidth;
@@ -404,6 +407,7 @@ export class PixiStageRenderer {
       this.previewTextureContext.clearRect(0, 0, this.previewTextureCanvas.width, this.previewTextureCanvas.height);
       this.previewTexture.source.update();
       this.previewTextureSprite.visible = false;
+      this.previewTextureSprite.blendMode = 'normal';
     }
   }
 
