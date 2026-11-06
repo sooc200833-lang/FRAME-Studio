@@ -33,3 +33,11 @@ test('raster brush preview uses the same blend-mode adapter as commit', async ()
   assert.match(main, /normalizeBrushBlendMode\(brushBlendMode\)/);
   assert.match(renderer, /toPixiBrushBlendMode\(options\.blendMode\)/);
 });
+
+test('vector pressure profile canvas exists for its pointer event bindings', async () => {
+  const html = await read('apps/web/index.html');
+  const main = await read('apps/web/src/main.js');
+  assert.match(html, /<canvas[^>]*id="vectorPressureProfile"/);
+  assert.match(main, /const profileCanvas = document\.getElementById\('vectorPressureProfile'\)/);
+  assert.match(main, /profileCanvas\.addEventListener\('pointerdown'/);
+});
