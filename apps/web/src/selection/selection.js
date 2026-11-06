@@ -279,8 +279,9 @@ export function transformLineStrokesByMatrix(strokes, polygon, matrix) {
       // scaling, use the transformed normal instead of a global area scale.
       let weightedScale = 0;
       let totalLength = 0;
-      for (let index = 0; index < stroke.points.length - 1; index++) {
-        const start = stroke.points[index], end = stroke.points[index + 1];
+      const widthPath = sampleStrokePath(stroke).points;
+      for (let index = 0; index < widthPath.length - 1; index++) {
+        const start = widthPath[index], end = widthPath[index + 1];
         const dx = end.x - start.x, dy = end.y - start.y;
         const length = Math.hypot(dx, dy);
         if (length <= Number.EPSILON) continue;
