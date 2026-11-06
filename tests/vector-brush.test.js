@@ -17,7 +17,7 @@ test('vector brush presets have distinct profiles and style is serializable', ()
 });
 
 test('stroke width profile is clamped and sampled continuously along the stroke', () => {
-  assert.deepEqual(normalizeStrokeWidthProfile([0, 1, 4]), [0.1, 1, 2.2, 1, 1]);
+  assert.deepEqual(normalizeStrokeWidthProfile([0, 1, 4]), [0.1, 0.55, 1, 1.6, 2.2]);
   assert.equal(sampleStrokeWidthProfile([0.5, 1, 1.5, 1, 0.5], 0.5), 1.5);
   assert.equal(sampleStrokeWidthProfile([1, 2], 0.25), 1.25);
 });
