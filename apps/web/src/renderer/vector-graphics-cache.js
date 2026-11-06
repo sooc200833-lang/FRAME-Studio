@@ -14,7 +14,7 @@ export function getVectorGraphicsCacheEntry(cache, stroke, createGraphics, drawS
     cache.set(stroke.id, entry);
   }
   const bezierKey = stroke.bezierPath ? JSON.stringify(stroke.bezierPath) : '';
-  if (entry.stroke !== stroke || entry.points !== stroke.points || !hasSameGeometry(entry.geometry, stroke.points) || entry.bezierKey !== bezierKey || entry.color !== stroke.color || entry.width !== stroke.width) {
+  if (entry.stroke !== stroke || entry.points !== stroke.points || !hasSameGeometry(entry.geometry, stroke.points) || entry.bezierKey !== bezierKey || entry.color !== stroke.color || entry.width !== stroke.width || entry.styleKey !== JSON.stringify([stroke.brushPreset, stroke.pressureCurve, stroke.opacity, stroke.motionStyle, stroke.motionStrength, stroke.points.map(point => point.pressure)])) {
     entry.graphics.clear();
     drawStroke(entry.graphics, stroke);
     entry.stroke = stroke;
@@ -22,6 +22,7 @@ export function getVectorGraphicsCacheEntry(cache, stroke, createGraphics, drawS
     entry.geometry = stroke.points.map(point => ({ x: point.x, y: point.y }));
     entry.color = stroke.color;
     entry.width = stroke.width;
+    entry.styleKey = JSON.stringify([stroke.brushPreset, stroke.pressureCurve, stroke.opacity, stroke.motionStyle, stroke.motionStrength, stroke.points.map(point => point.pressure)]);
     entry.bezierKey = bezierKey;
   }
   return entry;
