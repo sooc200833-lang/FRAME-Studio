@@ -15,13 +15,19 @@ export function normalizeVectorPressure(value) {
   return Number.isFinite(pressure) ? Math.max(0.02, Math.min(1, pressure)) : 0.5;
 }
 export function normalizeStrokeWidthProfile(profile, count = 5) {
-  const source = Array.isArray(profile) && profile.length ? profile : [];
-  return Array.from({ length: Math.max(2, count) }, (_, index) => {
-    const value = Number(source[index] ?? 1);
-    return Number.isFinite(value) ? Math.max(0.1, Math.min(2.2, value)) : 1;
+  const source = Array.isArray(profile) && profile.length ? profile : [1];
+  const targetCount = Math.max(2, count);
+  return Array.from({ length: targetCount }, (_, index) => {
+    const position = targetCount <= 1 ? 0 : index / (targetCount - 1) * (source.length - 1);
+    const left = Math.floor(position);
+    const right = Math.min(source.length - 1, left + 1);
+    const mix = position - left;
+    const a = Number(source[left]);
+    const b = Number(source[right]);
+    const value = (Number.isFinite(a) ? a : 1) * (1 - mix) + (Number.isFinite(b) ? b : 1) * mix;
+    return Math.max(0.1, Math.min(2.2, value));
   });
 }
-
 export function sampleStrokeWidthProfile(profile, progress) {
   const values = normalizeStrokeWidthProfile(profile);
   const position = Math.max(0, Math.min(1, Number(progress) || 0)) * (values.length - 1);
