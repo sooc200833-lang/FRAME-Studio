@@ -10,7 +10,7 @@ import { normalizeRasterCels, normalizeRasterTransformCels } from './animation/f
 import { cloneRasterTransformRecords, composeRasterTransformStack, createTranslationMatrix, createRotationMatrix, rasterizeRasterTransformStack } from './selection/raster-transform.js';
 import { containsSelectionPoint, hitTestSelectionHandle, moveSelectionRect, normalizeSelectionRect, lineStrokeIntersectsPolygon, pointInPolygon, resizeSelectionRectFromHandle, resolveSelectionTargets, transformLineStrokes, transformLineStrokesByMatrix, transformPolygon, translatePolygon, getSelectionPreviewTransform, getPolygonBounds, getPolygonCentroid, hitTestPolygonTransformHandle, resizePolygonFromHandle } from './selection/selection.js';
 import { convertLegacyPointsToBezierPath } from './line/legacy-bezier-bridge.js';
-import { insertBezierAnchor, moveBezierAnchor, moveBezierHandle, projectPointToBezierPath, sampleBezierPath, setBezierAnchorMode } from './line/bezier-path.js';
+import { insertBezierAnchor, moveBezierAnchor, moveBezierHandle, projectPointToBezierPath, removeBezierAnchor, sampleBezierPath, setBezierAnchorMode } from './line/bezier-path.js';
 
 import {
   createLineStroke,
@@ -876,13 +876,15 @@ function updateLineInspector() {
   if (nodeStatus) nodeStatus.textContent = stroke.bezierPath
     ? `${stroke.bezierPath.anchors.length}개 앵커 · ${stroke.bezierPath.segments.length * 2}개 핸들`
     : `${stroke.points.length}개 노드${selectedNodeIndex === null ? '' : ` · ${selectedNodeIndex + 1}번 선택`}`;
+  const hasAnchor = Boolean(stroke.bezierPath && Number.isInteger(selectedBezierAnchor) && selectedBezierAnchor > 0 && selectedBezierAnchor < stroke.bezierPath.anchors.length - 1);
   const anchorModeButton = document.getElementById('toggleBezierAnchorMode');
   if (anchorModeButton) {
-    const hasAnchor = Boolean(stroke.bezierPath && Number.isInteger(selectedBezierAnchor) && selectedBezierAnchor > 0 && selectedBezierAnchor < stroke.bezierPath.anchors.length - 1);
     const mode = hasAnchor ? (stroke.bezierPath.anchorModes?.[selectedBezierAnchor] || 'smooth') : 'corner';
     anchorModeButton.disabled = !hasAnchor;
     anchorModeButton.textContent = mode === 'smooth' ? '모서리 앵커로 변경' : '부드러운 앵커로 변경';
   }
+  const removeAnchorButton = document.getElementById('deleteBezierAnchor');
+  if (removeAnchorButton) removeAnchorButton.disabled = !hasAnchor;
   const removeNode = document.getElementById('deleteLineNode');
   if (removeNode) removeNode.disabled = Boolean(stroke.bezierPath) || selectedNodeIndex === null || selectedNodeIndex <= 0 || selectedNodeIndex >= stroke.points.length - 1;
 }
@@ -1480,6 +1482,21 @@ function bindControls() {
       const index = vectorStrokes.findIndex(item => item.id === selectedStrokeId);
       vectorStrokes[index] = { ...stroke, bezierPath: convertLegacyPointsToBezierPath(stroke.points, stroke.id) };
     }
+    render();
+  };
+  document.getElementById('deleteBezierAnchor').onclick = () => {
+    const stroke = selectedStroke();
+    if (!stroke?.bezierPath || !Number.isInteger(selectedBezierAnchor)) return;
+    const anchorIndex = selectedBezierAnchor;
+    const nextPath = removeBezierAnchor(stroke.bezierPath, anchorIndex);
+    if (nextPath === stroke.bezierPath) return;
+    commitLineHistory(lineSnapshot());
+    const index = vectorStrokes.findIndex(item => item.id === selectedStrokeId);
+    vectorStrokes[index] = { ...stroke, bezierPath: nextPath };
+    selectedBezierAnchor = nextPath.anchors.length > 2
+      ? Math.max(1, Math.min(anchorIndex - 1, nextPath.anchors.length - 2))
+      : null;
+    selectedBezierHandle = null;
     render();
   };
   document.getElementById('toggleBezierAnchorMode').onclick = () => {

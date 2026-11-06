@@ -188,6 +188,41 @@ export function insertBezierAnchor(path, segmentIndex, t) {
   return next;
 }
 
+/** Remove an interior anchor and fit one cubic using the adjacent endpoint tangents. */
+export function removeBezierAnchor(path, anchorIndex) {
+  if (!path?.anchors || !Number.isInteger(anchorIndex) || anchorIndex <= 0 || anchorIndex >= path.anchors.length - 1) {
+    return path;
+  }
+  const next = cloneBezierPath(path);
+  const start = next.anchors[anchorIndex - 1];
+  const anchor = next.anchors[anchorIndex];
+  const end = next.anchors[anchorIndex + 1];
+  const incoming = next.segments[anchorIndex - 1];
+  const outgoing = next.segments[anchorIndex];
+  const incomingLength = Math.hypot(anchor.x - incoming.control2.x, anchor.y - incoming.control2.y);
+  const outgoingLength = Math.hypot(outgoing.control1.x - anchor.x, outgoing.control1.y - anchor.y);
+  const total = incomingLength + outgoingLength;
+  const chordIncoming = Math.hypot(anchor.x - start.x, anchor.y - start.y);
+  const chordOutgoing = Math.hypot(end.x - anchor.x, end.y - anchor.y);
+  const chordTotal = chordIncoming + chordOutgoing;
+  const ratio = total > Number.EPSILON
+    ? incomingLength / total
+    : (chordTotal > Number.EPSILON ? chordIncoming / chordTotal : 0.5);
+  const split = Math.max(0.05, Math.min(0.95, ratio));
+  const control1 = {
+    x: start.x + (incoming.control1.x - start.x) / split,
+    y: start.y + (incoming.control1.y - start.y) / split,
+  };
+  const control2 = {
+    x: end.x + (outgoing.control2.x - end.x) / (1 - split),
+    y: end.y + (outgoing.control2.y - end.y) / (1 - split),
+  };
+  next.anchors.splice(anchorIndex, 1);
+  next.anchorModes.splice(anchorIndex, 1);
+  next.segments.splice(anchorIndex - 1, 2, { control1, control2 });
+  return next;
+}
+
 /** Move one control handle. Optionally mirror the opposite handle at its anchor. */
 export function moveBezierHandle(path, segmentIndex, handle, point, { mirrorOpposite } = {}) {
   if (!path?.segments || !Number.isInteger(segmentIndex) || !path.segments[segmentIndex]) return path;

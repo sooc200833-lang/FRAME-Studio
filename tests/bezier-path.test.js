@@ -5,6 +5,7 @@ import {
   createBezierPathFromAnchors,
   cloneBezierPath,
   insertBezierAnchor,
+  removeBezierAnchor,
   projectPointToBezierPath,
   sampleBezierPath,
   moveBezierHandle,
@@ -204,4 +205,33 @@ test('inserting an anchor splits a cubic without changing its shape', () => {
 
 test('rejects non-finite Bézier split parameters', () => {
   assert.throws(() => insertBezierAnchor(curvedPath(), 0, NaN), TypeError);
+});
+
+
+test('removing an inserted anchor reconstructs the original cubic', () => {
+  const original = curvedPath();
+  const inserted = insertBezierAnchor(original, 0, 0.4);
+  const restored = removeBezierAnchor(inserted, 1);
+  assert.deepEqual(restored.anchors, original.anchors);
+  assert.equal(restored.segments.length, 1);
+  for (const key of ['control1', 'control2']) {
+    assert.ok(Math.abs(restored.segments[0][key].x - original.segments[0][key].x) < 1e-9);
+    assert.ok(Math.abs(restored.segments[0][key].y - original.segments[0][key].y) < 1e-9);
+  }
+  assert.deepEqual(restored.anchorModes, original.anchorModes);
+});
+
+test('anchor removal refuses endpoints and preserves valid segment counts', () => {
+  const path = createBezierPath({
+    anchors: [{ x: 0, y: 0 }, { x: 50, y: 0 }, { x: 100, y: 0 }],
+    segments: [
+      { control1: { x: 10, y: 0 }, control2: { x: 40, y: 0 } },
+      { control1: { x: 60, y: 0 }, control2: { x: 90, y: 0 } },
+    ],
+  });
+  assert.equal(removeBezierAnchor(path, 0), path);
+  assert.equal(removeBezierAnchor(path, 2), path);
+  const removed = removeBezierAnchor(path, 1);
+  assert.equal(removed.anchors.length, 2);
+  assert.equal(removed.segments.length, 1);
 });
