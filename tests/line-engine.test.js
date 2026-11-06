@@ -10,6 +10,7 @@ import {
   insertLineStrokePoint,
   removeLineStrokePoint,
   smoothLineStroke,
+  sampleLineStrokePath,
 } from '../apps/web/src/line/line-engine.js';
 
 const line = () => createLineStroke({
@@ -106,4 +107,30 @@ test('rejects malformed vector edit snapshots without mutating strokes', async (
   assert.equal(restoreLineStrokeSnapshot(strokes, '{broken'), false);
   assert.equal(restoreLineStrokeSnapshot(strokes, JSON.stringify({ points: [] })), false);
   assert.deepEqual(strokes, before);
+});
+
+
+test('samples the same quadratic centerline that is rendered on screen', () => {
+  const stroke = { points: [{ x: 0, y: 0 }, { x: 50, y: 100 }, { x: 100, y: 0 }] };
+  const path = sampleLineStrokePath(stroke.points, 12);
+  assert.equal(path.points.length, 14);
+  assert.deepEqual(path.points[6], { x: 43.75, y: 50 });
+  assert.equal(path.segmentIndices[5], 0);
+  assert.equal(path.segmentIndices.at(-1), 1);
+});
+
+test('hit testing follows the visible quadratic curve rather than its control polygon', () => {
+  const stroke = { ...line(), points: [{ x: 0, y: 0 }, { x: 50, y: 100 }, { x: 100, y: 0 }], width: 0 };
+  assert.equal(hitTestLineStroke(stroke, { x: 43.75, y: 50 }, 1), true);
+  assert.equal(hitTestLineStroke(stroke, { x: 50, y: 100 }, 1), false);
+});
+
+test('projects insertions onto the visible curve while retaining the editable segment index', () => {
+  const stroke = { ...line(), points: [{ x: 0, y: 0 }, { x: 50, y: 100 }, { x: 100, y: 0 }] };
+  const projection = projectPointToLineStroke(stroke, { x: 43.75, y: 50 });
+  assert.equal(projection.segmentIndex, 0);
+  assert.ok(projection.renderedSegmentIndex >= 0);
+  assert.ok(projection.distance < 0.01);
+  const inserted = insertLineStrokePoint(stroke, { x: 43.75, y: 50 });
+  assert.deepEqual(inserted.points[1], { x: 43.75, y: 50 });
 });
