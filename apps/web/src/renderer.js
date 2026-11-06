@@ -84,8 +84,8 @@ export class PixiStageRenderer {
     };
     for (let index = 1; index < points.length; index++) {
       if (preset.texture === 'dry' && index % 7 === 0) continue;
-      const widthA = getVectorPointWidth(stroke, { pressure: pressureAt(index - 1) }, index - 1);
-      const widthB = getVectorPointWidth(stroke, { pressure: pressureAt(index) }, index);
+      const widthA = getVectorPointWidth(stroke, { pressure: pressureAt(index - 1) }, index - 1, points.length);
+      const widthB = getVectorPointWidth(stroke, { pressure: pressureAt(index) }, index, points.length);
       graphics.moveTo(points[index - 1].x, points[index - 1].y);
       graphics.lineTo(points[index].x, points[index].y);
       graphics.stroke({ color: (typeof stroke.color === 'number' ? stroke.color : Number.parseInt(stroke.color.slice(1), 16)), width: Math.max(0.35, (widthA + widthB) / 2), alpha: preset.texture === 'marker' ? alpha * 0.72 : alpha, cap: 'round', join: 'round' });
