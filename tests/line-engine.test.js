@@ -153,3 +153,21 @@ test('hit testing and translation use editable cubic geometry when present', asy
   assert.deepEqual(moved.bezierPath.segments[0].control1, { x: 42, y: 92 });
   assert.deepEqual(stroke.bezierPath.anchors[0], { x: 0, y: 0 });
 });
+
+
+test('hit testing and translation use editable cubic geometry when present', async () => {
+  const { createBezierPath } = await import('../apps/web/src/line/bezier-path.js');
+  const stroke = {
+    ...line(),
+    bezierPath: createBezierPath({
+      anchors: [{ x: 0, y: 0 }, { x: 120, y: 0 }],
+      segments: [{ control1: { x: 30, y: 100 }, control2: { x: 90, y: 100 } }],
+    }),
+  };
+  assert.equal(hitTestLineStroke(stroke, { x: 60, y: 75 }, 2), true);
+  assert.equal(hitTestLineStroke(stroke, { x: 60, y: 0 }, 2), false);
+  const moved = translateLineStroke(stroke, 12, -8);
+  assert.deepEqual(moved.bezierPath.anchors[0], { x: 12, y: -8 });
+  assert.deepEqual(moved.bezierPath.segments[0].control1, { x: 42, y: 92 });
+  assert.deepEqual(stroke.bezierPath.anchors[0], { x: 0, y: 0 });
+});
