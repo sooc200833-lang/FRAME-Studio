@@ -1,6 +1,5 @@
 import { sampleLineStrokePath } from './line/line-engine.js';
-import { sampleBezierPath } from './line/bezier-path.js';
-import { getVectorPointWidth, getVectorBrushPreset } from './line/vector-brush.js';
+import { buildVectorStrokeSegments } from './line/vector-rendering.js';
 import { Application, Graphics, Sprite, Texture } from 'pixi.js';
 import { applyBrushTexture } from './brush/brush-engine.js';
 import { getVectorGraphicsCacheEntry, pruneVectorGraphicsCache } from './renderer/vector-graphics-cache.js';
@@ -67,28 +66,18 @@ export class PixiStageRenderer {
   }
 
   drawVectorStroke(graphics, stroke, pointsOverride = null, alphaOverride = 1) {
-    const sampled = pointsOverride ? { points: pointsOverride } : (stroke.bezierPath ? sampleBezierPath(stroke.bezierPath) : { points: stroke.points });
-    const points = sampled.points || [];
-    if (points.length < 2) return;
-    const preset = getVectorBrushPreset(stroke.brushPreset);
-    const alpha = (stroke.opacity ?? preset.opacity) * alphaOverride;
-    const source = stroke.points || [];
-    const pressureAt = index => {
-      if (!source.length) return 0.5;
-      const ratio = index / Math.max(1, points.length - 1);
-      const sourcePosition = ratio * (source.length - 1);
-      const left = Math.floor(sourcePosition);
-      const right = Math.min(source.length - 1, left + 1);
-      const mix = sourcePosition - left;
-      return (source[left].pressure ?? 0.5) * (1 - mix) + (source[right].pressure ?? 0.5) * mix;
-    };
-    for (let index = 1; index < points.length; index++) {
-      if (preset.texture === 'dry' && index % 7 === 0) continue;
-      const widthA = getVectorPointWidth(stroke, { pressure: pressureAt(index - 1) }, index - 1, points.length);
-      const widthB = getVectorPointWidth(stroke, { pressure: pressureAt(index) }, index, points.length);
-      graphics.moveTo(points[index - 1].x, points[index - 1].y);
-      graphics.lineTo(points[index].x, points[index].y);
-      graphics.stroke({ color: (typeof stroke.color === 'number' ? stroke.color : Number.parseInt(stroke.color.slice(1), 16)), width: Math.max(0.35, (widthA + widthB) / 2), alpha: preset.texture === 'marker' ? alpha * 0.72 : alpha, cap: 'round', join: 'round' });
+    const color = typeof stroke.color === 'number' ? stroke.color : Number.parseInt(stroke.color.slice(1), 16);
+    for (const segment of buildVectorStrokeSegments(stroke, pointsOverride)) {
+      if (segment.skip) continue;
+      graphics.moveTo(segment.from.x, segment.from.y);
+      graphics.lineTo(segment.to.x, segment.to.y);
+      graphics.stroke({
+        color,
+        width: segment.width,
+        alpha: segment.alpha * alphaOverride,
+        cap: 'round',
+        join: 'round',
+      });
     }
   }
 

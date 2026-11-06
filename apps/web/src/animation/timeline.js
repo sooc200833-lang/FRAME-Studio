@@ -4,6 +4,7 @@ function cloneStrokes(strokes = []) {
   return strokes.map(stroke => ({
     ...stroke,
     points: (stroke.points || []).map(point => ({ ...point })),
+    ...(Array.isArray(stroke.pressureProfile) ? { pressureProfile: [...stroke.pressureProfile] } : {}),
     ...(stroke.bezierPath ? { bezierPath: {
       ...stroke.bezierPath,
       anchorModes: stroke.bezierPath.anchorModes ? [...stroke.bezierPath.anchorModes] : stroke.bezierPath.anchors.map((_, index) => index > 0 && index < stroke.bezierPath.anchors.length - 1 ? 'smooth' : 'corner'),

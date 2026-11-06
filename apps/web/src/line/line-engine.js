@@ -1,8 +1,8 @@
 import { sampleBezierPath, cloneBezierPath } from './bezier-path.js';
 
-import { createVectorBrushStyle, normalizeVectorPressure } from './vector-brush.js';
+import { createVectorBrushStyle, normalizeVectorPressure, normalizeStrokeWidthProfile } from './vector-brush.js';
 
-export function createLineStroke({ id, points, color = '#24242a', width = 7, brushPreset = 'ink', pressureCurve = 1, opacity, motionStyle = 'none', motionStrength = 3 }) {
+export function createLineStroke({ id, points, color = '#24242a', width = 7, brushPreset = 'ink', pressureCurve = 1, opacity, motionStyle = 'none', motionStrength = 3, pressureProfile }) {
   if (!id) throw new TypeError('A stable line id is required.');
   if (!Array.isArray(points) || points.length < 2) throw new RangeError('A line needs at least two points.');
   return {
@@ -11,6 +11,7 @@ export function createLineStroke({ id, points, color = '#24242a', width = 7, bru
     color,
     width: Math.max(0.5, Number(width) || 1),
     ...createVectorBrushStyle({ brushPreset, pressureCurve, opacity, motionStyle, motionStrength }),
+    pressureProfile: normalizeStrokeWidthProfile(pressureProfile),
   };
 }
 function pointSegmentDistance(point, a, b) {
@@ -105,6 +106,9 @@ export function updateLineStrokeStyle(stroke, changes) {
     color: changes.color ?? stroke.color,
     width: changes.width === undefined ? stroke.width : Math.max(0.5, Number(changes.width) || 0.5),
     ...createVectorBrushStyle({ ...stroke, ...changes }),
+    pressureProfile: changes.pressureProfile === undefined
+      ? normalizeStrokeWidthProfile(stroke.pressureProfile)
+      : normalizeStrokeWidthProfile(changes.pressureProfile),
   };
 }
 
@@ -112,6 +116,7 @@ export function cloneLineStrokes(strokes) {
   return strokes.map(stroke => ({
     ...stroke,
     points: stroke.points.map(point => ({ ...point })),
+    ...(Array.isArray(stroke.pressureProfile) ? { pressureProfile: [...stroke.pressureProfile] } : {}),
     ...(stroke.bezierPath ? { bezierPath: cloneBezierPath(stroke.bezierPath) } : {}),
   }));
 }
