@@ -116,6 +116,7 @@ export function cloneLineStrokes(strokes) {
   return strokes.map(stroke => ({
     ...stroke,
     points: stroke.points.map(point => ({ ...point })),
+    pressureProfile: Array.isArray(stroke.pressureProfile) ? [...stroke.pressureProfile] : [1, 1, 1, 1, 1],
     ...(stroke.bezierPath ? { bezierPath: cloneBezierPath(stroke.bezierPath) } : {}),
   }));
 }
