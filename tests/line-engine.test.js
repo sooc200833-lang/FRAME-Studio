@@ -169,8 +169,8 @@ test('shared vector render segments use pressure, width profile and opacity for 
     pressureProfile: [0.5, 1.5, 0.5],
   });
   const segments = buildVectorStrokeSegments(stroke);
-  assert.equal(segments.length, 2);
-  assert.ok(segments[0].width < segments[1].width);
+  assert.equal(segments.length, 25);
+  assert.ok(segments[12].width > segments[0].width);
   assert.equal(segments[0].alpha, 0.4);
   assert.equal(segments[0].skip, false);
 });
