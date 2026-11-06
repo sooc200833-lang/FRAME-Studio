@@ -26,3 +26,25 @@ export function createRendererInitOptions({
     ...(backend === 'canvas' ? { canvasOptions: { backgroundAlpha: 1 } } : {}),
   };
 }
+
+export async function initializeWithBackendFallback(createAttempt, backends = RENDERER_BACKEND_ORDER) {
+  if (typeof createAttempt !== 'function') {
+    throw new TypeError('createAttempt must be a function');
+  }
+
+  const failures = [];
+  for (const backend of backends) {
+    try {
+      return { backend, value: await createAttempt(backend) };
+    } catch (error) {
+      failures.push({ backend, error });
+    }
+  }
+
+  const details = failures
+    .map(({ backend, error }) => `${backend}: ${error?.message || error}`)
+    .join('; ');
+  const failure = new Error(`No supported renderer could be initialized. ${details}`);
+  failure.causes = failures;
+  throw failure;
+}
