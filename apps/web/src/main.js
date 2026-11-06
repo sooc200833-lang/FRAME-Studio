@@ -501,6 +501,11 @@ async function loadTimelineFrame(frameId, saveCurrent = true) {
   vectorStrokes.splice(0, vectorStrokes.length, ...(frame?.strokes || []).map(stroke => ({
     ...stroke,
     points: stroke.points.map(point => ({ x: point.x, y: point.y })),
+    ...(stroke.bezierPath ? { bezierPath: {
+      ...stroke.bezierPath,
+      anchors: stroke.bezierPath.anchors.map(point => ({ ...point })),
+      segments: stroke.bezierPath.segments.map(segment => ({ control1: { ...segment.control1 }, control2: { ...segment.control2 } })),
+    } } : {}),
   })));
   selectedStrokeId = null;
   loadingFrame = false;
@@ -865,9 +870,11 @@ function updateLineInspector() {
   document.getElementById('lineWidth').value = stroke.width;
   document.getElementById('lineWidthOut').value = stroke.width + 'px';
   const nodeStatus = document.getElementById('lineNodeStatus');
-  if (nodeStatus) nodeStatus.textContent = `${stroke.points.length}개 노드${selectedNodeIndex === null ? '' : ` · ${selectedNodeIndex + 1}번 선택`}`;
+  if (nodeStatus) nodeStatus.textContent = stroke.bezierPath
+    ? `${stroke.bezierPath.anchors.length}개 앵커 · ${stroke.bezierPath.segments.length * 2}개 핸들`
+    : `${stroke.points.length}개 노드${selectedNodeIndex === null ? '' : ` · ${selectedNodeIndex + 1}번 선택`}`;
   const removeNode = document.getElementById('deleteLineNode');
-  if (removeNode) removeNode.disabled = selectedNodeIndex === null || selectedNodeIndex <= 0 || selectedNodeIndex >= stroke.points.length - 1;
+  if (removeNode) removeNode.disabled = Boolean(stroke.bezierPath) || selectedNodeIndex === null || selectedNodeIndex <= 0 || selectedNodeIndex >= stroke.points.length - 1;
 }
 
 function applySelectedStyle(changes) {
