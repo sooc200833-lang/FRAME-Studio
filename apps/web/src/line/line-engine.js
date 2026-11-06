@@ -23,7 +23,7 @@ function pointSegmentDistance(point, a, b) {
  * Sample the exact quadratic path convention used by the canvas renderer.
  * Each sampled segment retains the editable control-segment index that produced it.
  */
-export function sampleLineStrokePath(points, subdivisions = 12) {
+export function sampleLineStrokePath(points, subdivisions = 24) {
   if (!Array.isArray(points) || points.length < 2) return { points: [], segmentIndices: [] };
   const steps = Math.max(2, Math.min(64, Math.floor(Number(subdivisions) || 24)));
   const sampled = [{ x: points[0].x, y: points[0].y }];
