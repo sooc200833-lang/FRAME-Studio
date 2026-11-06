@@ -1600,7 +1600,7 @@ function bindCanvasEvents() {
     if (tool === 'select') {
       const hit = hitTestLineStrokes(vectorStrokes, point, 9);
       const nodeMode = nodeEditEnabled;
-      if (nodeMode && selectedStroke() && selectedStrokeId) {
+      if (nodeMode && selectedStroke() && selectedStrokeId && (hit?.id === selectedStrokeId || (!hit && selectedStroke().bezierPath))) {
         const stroke = selectedStroke();
         const path = stroke.bezierPath || convertLegacyPointsToBezierPath(stroke.points, stroke.id);
         let nearest = null, distance = 17;
@@ -1652,6 +1652,12 @@ function bindCanvasEvents() {
       selectedStrokeId = hit?.id || null;
       selectedNodeIndex = null;
       selectedBezierHandle = null;
+      const newlySelected = selectedStroke();
+      if (nodeEditEnabled && newlySelected && !newlySelected.bezierPath) {
+        commitLineHistory(lineSnapshot());
+        const index = vectorStrokes.findIndex(item => item.id === selectedStrokeId);
+        vectorStrokes[index] = { ...newlySelected, bezierPath: convertLegacyPointsToBezierPath(newlySelected.points, newlySelected.id) };
+      }
       movingStroke = Boolean(hit);
       moveSnapshot = hit ? lineSnapshot() : null;
       moveChanged = false;
