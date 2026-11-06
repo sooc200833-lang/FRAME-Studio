@@ -21,6 +21,10 @@ export function createRendererInitOptions({
     autoDensity: true,
     resolution,
     preference: [backend],
+    // FRAME Studio owns pointer input on the canvas element itself. Disable Pixi's
+    // duplicate DOM listeners; this also avoids a Safari/iPadOS init crash when
+    // Pixi's EventSystem receives an unavailable event target during startup.
+    eventFeatures: { click: false, move: false, globalMove: false, wheel: false },
     ...(backend === 'webgl' ? { webgl: { antialias: true } } : {}),
     ...(backend === 'webgpu' ? { webgpu: { antialias: false } } : {}),
     ...(backend === 'canvas' ? { canvasOptions: { backgroundAlpha: 1 } } : {}),
