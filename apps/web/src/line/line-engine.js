@@ -1,3 +1,5 @@
+import { sampleBezierPath, cloneBezierPath } from './bezier-path.js';
+
 export function createLineStroke({ id, points, color = '#24242a', width = 7 }) {
   if (!id) throw new TypeError('A stable line id is required.');
   if (!Array.isArray(points) || points.length < 2) throw new RangeError('A line needs at least two points.');
@@ -55,10 +57,14 @@ export function sampleLineStrokePath(points, subdivisions = 24) {
   return { points: sampled, segmentIndices };
 }
 
+export function sampleStrokePath(stroke, options = {}) {
+  return stroke?.bezierPath ? sampleBezierPath(stroke.bezierPath, options) : sampleLineStrokePath(stroke?.points || []);
+}
+
 export function hitTestLineStroke(stroke, point, tolerance = 8) {
   if (!stroke || !Array.isArray(stroke.points) || stroke.points.length < 2) return false;
   const threshold = Math.max(0, Number(tolerance) || 0) + Math.max(0, Number(stroke.width) || 0) / 2;
-  const path = sampleLineStrokePath(stroke.points);
+  const path = sampleStrokePath(stroke);
   for (let index = 1; index < path.points.length; index++) {
     if (pointSegmentDistance(point, path.points[index - 1], path.points[index]) <= threshold) return true;
   }
@@ -72,10 +78,22 @@ export function hitTestLineStrokes(strokes, point, tolerance = 8) {
   return null;
 }
 
+function translateBezierPath(path, dx, dy) {
+  return {
+    ...path,
+    anchors: path.anchors.map(point => ({ x: point.x + dx, y: point.y + dy })),
+    segments: path.segments.map(segment => ({
+      control1: { x: segment.control1.x + dx, y: segment.control1.y + dy },
+      control2: { x: segment.control2.x + dx, y: segment.control2.y + dy },
+    })),
+  };
+}
+
 export function translateLineStroke(stroke, dx, dy) {
   return {
     ...stroke,
     points: stroke.points.map(point => ({ x: point.x + dx, y: point.y + dy })),
+    ...(stroke.bezierPath ? { bezierPath: translateBezierPath(stroke.bezierPath, dx, dy) } : {}),
   };
 }
 
@@ -91,6 +109,7 @@ export function cloneLineStrokes(strokes) {
   return strokes.map(stroke => ({
     ...stroke,
     points: stroke.points.map(point => ({ x: point.x, y: point.y })),
+    ...(stroke.bezierPath ? { bezierPath: cloneBezierPath(stroke.bezierPath) } : {}),
   }));
 }
 
@@ -98,7 +117,7 @@ export function cloneLineStrokes(strokes) {
 /** Return the closest point and segment index for an editable vector path. */
 export function projectPointToLineStroke(stroke, point) {
   if (!stroke?.points || stroke.points.length < 2) return null;
-  const path = sampleLineStrokePath(stroke.points);
+  const path = sampleStrokePath(stroke);
   let best = { distance: Infinity, segmentIndex: -1, renderedSegmentIndex: -1, point: null, t: 0 };
   for (let index = 0; index < path.points.length - 1; index++) {
     const a = path.points[index], b = path.points[index + 1];
