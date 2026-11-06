@@ -4,6 +4,7 @@ import { applyScreentoneToCanvas } from './tone/screentone.js';
 import { clientToCanvasPoint, parseCssTransformMatrix } from './viewport/coordinates.js';
 import { applyBrushTexture, coalescedPointerEvents, createBrushOutline, createFrameScheduler, getBrushPreset, normalizePointerPressure, resolveBrushStrokeOptions, stabilizePoint } from './brush/brush-engine.js';
 import { createSmudgeSession } from './brush/smudge-engine.js';
+import { normalizeBrushBlendMode } from './brush/blend-modes.js';
 import { expandRegionMask, findConnectedRegion } from './fill/flood-fill.js';
 import { animateLineStrokes, lineBoilPhase } from './line/line-boil.js';
 import { activeFrame, addFrame, createTimeline, deleteFrame, frameAtTime, getOnionSkin, selectFrame, updateFrameCels, updateFrameStrokes, updateFrameTransformCels } from './animation/timeline.js';
@@ -1535,7 +1536,7 @@ function bindControls() {
     document.getElementById('brushOpacityOut').value = event.target.value + '%';
   };
   document.getElementById('brushBlendMode').onchange = event => {
-    brushBlendMode = event.target.value;
+    brushBlendMode = normalizeBrushBlendMode(event.target.value);
   };
   document.getElementById('smudgeStrength').oninput = event => {
     smudgeStrength = Number(event.target.value) / 100;
@@ -2449,7 +2450,7 @@ function bindCanvasEvents() {
         context.save();
         context.globalCompositeOperation = drawingMask
           ? (tool === 'eraser' ? 'source-over' : 'destination-out')
-          : (tool === 'eraser' ? 'destination-out' : brushBlendMode);
+          : (tool === 'eraser' ? 'destination-out' : normalizeBrushBlendMode(brushBlendMode));
         context.globalAlpha = drawingMask ? 1 : (tool === 'eraser' ? 1 : currentBrushPreset().opacity * brushOpacity);
         context.fillStyle = drawingMask ? '#fff' : color;
         context.beginPath();
