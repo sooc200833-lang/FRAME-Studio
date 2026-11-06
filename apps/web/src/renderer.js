@@ -126,7 +126,7 @@ export class PixiStageRenderer {
     for (const ghost of onionSkin) {
       for (const stroke of ghost.strokes) {
         const graphics = this.acquireGraphics();
-        this.drawPath(graphics, stroke.points, ghost.tint, stroke.width, ghost.alpha);
+        this.drawPath(graphics, stroke.bezierPath ? sampleBezierPath(stroke.bezierPath).points : stroke.points, ghost.tint, stroke.width, ghost.alpha);
         this.app.stage.addChildAt(graphics, this.app.stage.children.length - 1);
         this.strokeGraphics.push(graphics);
       }
@@ -143,7 +143,7 @@ export class PixiStageRenderer {
       );
       if (stroke.id === selectedStrokeId) {
         const highlight = this.acquireGraphics();
-        this.drawPath(highlight, stroke.points, 0xe5b85c, stroke.width + 8, 0.55);
+        this.drawPath(highlight, stroke.bezierPath ? sampleBezierPath(stroke.bezierPath).points : stroke.points, 0xe5b85c, stroke.width + 8, 0.55);
         this.app.stage.addChildAt(highlight, this.app.stage.children.length - 1);
         this.strokeGraphics.push(highlight);
       }
