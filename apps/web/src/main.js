@@ -3,6 +3,7 @@ import { PixiStageRenderer } from './renderer.js';
 import { applyScreentoneToCanvas } from './tone/screentone.js';
 import { clientToCanvasPoint, parseCssTransformMatrix } from './viewport/coordinates.js';
 import { applyBrushTexture, coalescedPointerEvents, createBrushOutline, createFrameScheduler, getBrushPreset, normalizePointerPressure, resolveBrushStrokeOptions, stabilizePoint } from './brush/brush-engine.js';
+import { createSmudgeSession } from './brush/smudge-engine.js';
 import { expandRegionMask, findConnectedRegion } from './fill/flood-fill.js';
 import { animateLineStrokes, lineBoilPhase } from './line/line-boil.js';
 import { activeFrame, addFrame, createTimeline, deleteFrame, frameAtTime, getOnionSkin, selectFrame, updateFrameCels, updateFrameStrokes, updateFrameTransformCels } from './animation/timeline.js';
@@ -44,6 +45,13 @@ let strokeIsStylus = false;
 let pressureEnabled = true;
 let brushSmoothing = 0.28;
 let brushOpacity = 1;
+let brushBlendMode = 'source-over';
+let smudgeStrength = 0.62;
+let smudgeSpacing = 0.22;
+let smudgeSession = null;
+let smudgeOriginalData = null;
+let smudgeUndoBefore = null;
+let smudgeRedoBefore = null;
 let pressureCurve = getBrushPreset('ink').pressureCurve;
 let maskEditing = false;
 let selectionRect = null;
@@ -1279,7 +1287,7 @@ function bindControls() {
     button.onclick = () => {
       if (boilEnabled) setBoilEnabled(false);
       tool = button.dataset.tool;
-      if (maskEditing && tool !== 'pen' && tool !== 'eraser') {
+      if (maskEditing && tool !== 'pen' && tool !== 'eraser' && tool !== 'smudge') {
         maskEditing = false;
         document.getElementById('maskEdit').classList.remove('active');
         document.getElementById('maskState').textContent = '일반 그림 편집 중';
@@ -1526,6 +1534,17 @@ function bindControls() {
     brushOpacity = Number(event.target.value) / 100;
     document.getElementById('brushOpacityOut').value = event.target.value + '%';
   };
+  document.getElementById('brushBlendMode').onchange = event => {
+    brushBlendMode = event.target.value;
+  };
+  document.getElementById('smudgeStrength').oninput = event => {
+    smudgeStrength = Number(event.target.value) / 100;
+    document.getElementById('smudgeStrengthOut').value = event.target.value + '%';
+  };
+  document.getElementById('smudgeSpacing').oninput = event => {
+    smudgeSpacing = Number(event.target.value) / 100;
+    document.getElementById('smudgeSpacingOut').value = event.target.value + '%';
+  };
   document.getElementById('pressureCurve').oninput = event => {
     pressureCurve = Number(event.target.value) / 100;
     document.getElementById('pressureCurveOut').value = pressureCurve.toFixed(2);
@@ -1730,7 +1749,7 @@ function bindCanvasEvents() {
     if (!strokeSamples.length) return;
     const outline = createBrushOutline(strokeSamples, currentStrokeOptions(true));
     if (!maskEditing && tool === 'pen') {
-      renderer.previewBrush(outline, color, currentBrushPreset().opacity * brushOpacity, strokeSamples, { preset: brushPreset, size, color });
+      renderer.previewBrush(outline, color, currentBrushPreset().opacity * brushOpacity, strokeSamples, { preset: brushPreset, size, color, blendMode: brushBlendMode });
     } else {
       renderer.previewPolygon(outline, maskEditing ? (tool === 'eraser' ? 0xffffff : 0x171719) : 0xf4f0e8, 0.9);
     }
@@ -1742,7 +1761,7 @@ function bindCanvasEvents() {
     if (playbackActive) setPlaybackEnabled(false);
     if (boilEnabled) setBoilEnabled(false);
     inputSurface.setPointerCapture(event.pointerId);
-    if (['pen', 'eraser', 'line', 'fill'].includes(tool)) ensureEditableLayerAfterTransform();
+    if (['pen', 'eraser', 'smudge', 'line', 'fill'].includes(tool)) ensureEditableLayerAfterTransform();
     const point = position(event);
 
     if (tool === 'hand') {
@@ -1932,6 +1951,29 @@ function bindCanvasEvents() {
       return;
     }
 
+    if (tool === 'smudge') {
+      const targetLayer = layers[active];
+      smudgeUndoBefore = targetLayer.undo.slice();
+      smudgeRedoBefore = targetLayer.redo.slice();
+      save(targetLayer);
+      const context = targetLayer.canvas.getContext('2d', { willReadFrequently: true });
+      const imageData = context.getImageData(0, 0, W, H);
+      smudgeOriginalData = new Uint8ClampedArray(imageData.data);
+      smudgeSession = createSmudgeSession(imageData, {
+        size,
+        strength: smudgeStrength,
+        spacing: smudgeSpacing,
+      });
+      smudgeSession.addPoint({
+        ...point,
+        pressure: normalizePointerPressure(event, pressureEnabled),
+      });
+      down = true;
+      lineStartPoint = last = point;
+      strokeIsStylus = event.pointerType === 'pen';
+      return;
+    }
+
     down = true;
     lineStartPoint = last = point;
     strokeIsStylus = event.pointerType === 'pen';
@@ -2091,6 +2133,25 @@ function bindCanvasEvents() {
 
     if (tool === 'line') {
       renderer.previewLine(lineStartPoint, point, Number.parseInt(color.slice(1), 16), size);
+      return;
+    }
+
+    if (tool === 'smudge' && smudgeSession) {
+      let touched = 0;
+      for (const sample of coalescedPointerEvents(event)) {
+        const rawPoint = position(sample);
+        const smoothPoint = stabilizePoint(last, rawPoint, brushSmoothing);
+        touched += smudgeSession.addPoint({
+          ...smoothPoint,
+          pressure: normalizePointerPressure(sample, pressureEnabled),
+        });
+        last = smoothPoint;
+      }
+      if (touched > 0) {
+        const context = layers[active].canvas.getContext('2d');
+        context.putImageData(smudgeSession.imageData, 0, 0);
+        render([active]);
+      }
       return;
     }
 
@@ -2291,6 +2352,36 @@ function bindCanvasEvents() {
     if (!down) return;
     const point = position(event);
 
+    if (tool === 'smudge' && smudgeSession) {
+      const targetLayer = layers[active];
+      const context = targetLayer.canvas.getContext('2d');
+      if (event.type === 'pointercancel') {
+        smudgeSession.imageData.data.set(smudgeOriginalData);
+        context.putImageData(smudgeSession.imageData, 0, 0);
+        targetLayer.undo = smudgeUndoBefore || [];
+        targetLayer.redo = smudgeRedoBefore || [];
+      } else {
+        smudgeSession.addPoint({
+          ...point,
+          pressure: normalizePointerPressure(event, pressureEnabled),
+        });
+        smudgeSession.flush();
+        context.putImageData(smudgeSession.imageData, 0, 0);
+        if (smudgeSession.dabCount === 0) {
+          targetLayer.undo = smudgeUndoBefore || [];
+          targetLayer.redo = smudgeRedoBefore || [];
+        }
+      }
+      smudgeSession = null;
+      smudgeOriginalData = null;
+      smudgeUndoBefore = null;
+      smudgeRedoBefore = null;
+      strokeIsStylus = false;
+      down = false;
+      render([active]);
+      return;
+    }
+
     if (tool === 'shape') {
       const points = createShapePoints(shapeKind, lineStartPoint, point);
       commitLineHistory(lineSnapshot());
@@ -2356,7 +2447,9 @@ function bindCanvasEvents() {
           targetLayer.maskRedo = [];
         }
         context.save();
-        context.globalCompositeOperation = drawingMask ? (tool === 'eraser' ? 'source-over' : 'destination-out') : (tool === 'eraser' ? 'destination-out' : 'source-over');
+        context.globalCompositeOperation = drawingMask
+          ? (tool === 'eraser' ? 'source-over' : 'destination-out')
+          : (tool === 'eraser' ? 'destination-out' : brushBlendMode);
         context.globalAlpha = drawingMask ? 1 : (tool === 'eraser' ? 1 : currentBrushPreset().opacity * brushOpacity);
         context.fillStyle = drawingMask ? '#fff' : color;
         context.beginPath();
