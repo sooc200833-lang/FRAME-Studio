@@ -1,16 +1,18 @@
 import { sampleBezierPath, cloneBezierPath } from './bezier-path.js';
 
-export function createLineStroke({ id, points, color = '#24242a', width = 7 }) {
+import { createVectorBrushStyle, normalizeVectorPressure } from './vector-brush.js';
+
+export function createLineStroke({ id, points, color = '#24242a', width = 7, brushPreset = 'ink', pressureCurve = 1, opacity, motionStyle = 'none', motionStrength = 3 }) {
   if (!id) throw new TypeError('A stable line id is required.');
   if (!Array.isArray(points) || points.length < 2) throw new RangeError('A line needs at least two points.');
   return {
     id,
-    points: points.map(point => ({ x: Number(point.x), y: Number(point.y) })),
+    points: points.map(point => ({ x: Number(point.x), y: Number(point.y), pressure: Number.isFinite(Number(point.pressure)) ? normalizeVectorPressure(point.pressure) : 0.5 })),
     color,
     width: Math.max(0.5, Number(width) || 1),
+    ...createVectorBrushStyle({ brushPreset, pressureCurve, opacity, motionStyle, motionStrength }),
   };
 }
-
 function pointSegmentDistance(point, a, b) {
   const dx = b.x - a.x;
   const dy = b.y - a.y;
@@ -102,13 +104,14 @@ export function updateLineStrokeStyle(stroke, changes) {
     ...stroke,
     color: changes.color ?? stroke.color,
     width: changes.width === undefined ? stroke.width : Math.max(0.5, Number(changes.width) || 0.5),
+    ...createVectorBrushStyle({ ...stroke, ...changes }),
   };
 }
 
 export function cloneLineStrokes(strokes) {
   return strokes.map(stroke => ({
     ...stroke,
-    points: stroke.points.map(point => ({ x: point.x, y: point.y })),
+    points: stroke.points.map(point => ({ ...point })),
     ...(stroke.bezierPath ? { bezierPath: cloneBezierPath(stroke.bezierPath) } : {}),
   }));
 }
