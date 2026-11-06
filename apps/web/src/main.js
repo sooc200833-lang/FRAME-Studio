@@ -229,7 +229,7 @@ function setCurrentColor(value, { applyToSelectedLine = true, remember = true } 
     renderRecentPalette();
   }
   renderPaletteSwatches();
-  if (applyToSelectedLine && selectedStroke()) applySelectedStyle({ color });
+  if (applyToSelectedLine && (selectedStrokeId || selectedStrokeIds.size)) applySelectedStyle({ color });
 }
 
 function renderPaletteCategories() {
@@ -933,6 +933,12 @@ function updateLineInspector() {
     return;
   }
   const selectedCount = selectedStrokeIds.size || 1;
+  vectorBrushPreset = stroke.brushPreset || 'ink';
+  vectorBrushOpacity = stroke.opacity ?? getVectorBrushPreset(vectorBrushPreset).opacity;
+  vectorPressureCurve = stroke.pressureCurve || 1;
+  vectorPressureProfile = normalizeStrokeWidthProfile(stroke.pressureProfile);
+  vectorMotionStyle = stroke.motionStyle || 'none';
+  vectorMotionStrength = stroke.motionStrength ?? 3;
   const lineColor = document.getElementById('lineColor');
   const lineWidth = document.getElementById('lineWidth');
   if (document.activeElement !== lineColor) lineColor.value = stroke.color;
@@ -948,7 +954,7 @@ function updateLineInspector() {
   document.getElementById('vectorMotionStrengthOut').value = (stroke.motionStrength ?? 3) + 'px';
   if (document.activeElement !== lineWidth) lineWidth.value = stroke.width;
   document.getElementById('lineWidthOut').value = stroke.width + 'px';
-  if (selectedCount > 1) document.getElementById('lineNodeStatus').textContent = `${selectedCount}개 벡터선 선택 · 아래 스타일은 모두에 적용됩니다.`;
+  if (selectedCount > 1 && nodeStatus) nodeStatus.textContent += ` · ${selectedCount}개 선택, 스타일 일괄 적용`;
   const nodeStatus = document.getElementById('lineNodeStatus');
   if (nodeStatus) nodeStatus.textContent = stroke.bezierPath
     ? `${stroke.bezierPath.anchors.length}개 앵커 · ${stroke.bezierPath.segments.length * 2}개 핸들`
@@ -963,7 +969,7 @@ function updateLineInspector() {
   const removeAnchorButton = document.getElementById('deleteBezierAnchor');
   if (removeAnchorButton) removeAnchorButton.disabled = !hasAnchor;
   const removeNode = document.getElementById('deleteLineNode');
-  if (removeNode) removeNode.disabled = Boolean(stroke.bezierPath) || selectedNodeIndex === null || selectedNodeIndex <= 0 || selectedNodeIndex >= stroke.points.length - 1;
+  if (removeNode) removeNode.disabled = selectedCount > 1 || Boolean(stroke.bezierPath) || selectedNodeIndex === null || selectedNodeIndex <= 0 || selectedNodeIndex >= stroke.points.length - 1;
 }
 
 function applySelectedStyle(changes, recordHistory = true) {
@@ -1652,12 +1658,17 @@ function bindControls() {
     applySelectedStyle({ width: Number(event.target.value) }, false);
   };
   document.getElementById('deleteLine').onclick = () => {
-    if (!selectedStroke()) return;
+    const ids = selectedStrokeIds.size ? new Set(selectedStrokeIds) : new Set(selectedStrokeId ? [selectedStrokeId] : []);
+    if (!ids.size) return;
     commitLineHistory(lineSnapshot());
-    const index = vectorStrokes.findIndex(item => item.id === selectedStrokeId);
-    vectorStrokes.splice(index, 1);
+    for (let index = vectorStrokes.length - 1; index >= 0; index--) {
+      if (ids.has(vectorStrokes[index].id)) vectorStrokes.splice(index, 1);
+    }
     selectedStrokeId = null;
+    selectedStrokeIds.clear();
     selectedNodeIndex = null;
+    selectedBezierAnchor = null;
+    selectedBezierHandle = null;
     render();
   };
   document.getElementById('deleteLineNode').onclick = () => {
