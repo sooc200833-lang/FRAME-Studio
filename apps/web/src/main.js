@@ -430,7 +430,7 @@ function render(dirtyIndices = [], displayStrokes = vectorStrokes) {
   }
   applyGroupState();
   if (!loadingFrame) updateFrameStrokes(timeline, timeline.activeFrameId, vectorStrokes);
-  renderer.sync(layers, dirtyIndices, displayStrokes, selectedStrokeId, onionEnabled ? getOnionSkin(timeline) : [], selectionRect, selectionPolygon, selectedNodeIndex, nodeEditEnabled);
+  renderer.sync(layers, dirtyIndices, displayStrokes, selectedStrokeId, onionEnabled ? getOnionSkin(timeline) : [], selectionRect, selectionPolygon, selectedNodeIndex, nodeEditEnabled, nodeHandleRadius());
   document.getElementById('status').textContent = tool.toUpperCase();
   drawLayers();
   updateLayerInspector();
@@ -568,6 +568,24 @@ function position(event) {
     canvasHeight: H,
     matrix: parseCssTransformMatrix(transform),
   });
+}
+
+// Keep vector-node controls a consistent physical size while the canvas zooms.
+function canvasUnitsPerCssPixel() {
+  const width = inputSurface?.clientWidth || W;
+  return Math.max(0.01, (width * viewport.scale) / W);
+}
+
+function nodeHandleRadius() {
+  return 5.5 / canvasUnitsPerCssPixel();
+}
+
+function nodeHitRadius() {
+  return 12 / canvasUnitsPerCssPixel();
+}
+
+function nodeInsertTolerance() {
+  return 16 / canvasUnitsPerCssPixel();
 }
 
 function withBrushContext(draw, lineWidth = size) {
@@ -816,7 +834,7 @@ function animationTick(timestamp) {
       amplitude: Number(document.getElementById('boilAmplitude').value),
       frequency: Number(document.getElementById('boilFrequency').value),
     });
-    renderer.sync(layers, [], displayStrokes, selectedStrokeId, onionEnabled ? getOnionSkin(timeline) : [], selectionRect, selectionPolygon, selectedNodeIndex, nodeEditEnabled);
+    renderer.sync(layers, [], displayStrokes, selectedStrokeId, onionEnabled ? getOnionSkin(timeline) : [], selectionRect, selectionPolygon, selectedNodeIndex, nodeEditEnabled, nodeHandleRadius());
     lastAnimationPaint = timestamp;
   }
   animationFrame = requestAnimationFrame(animationTick);
@@ -1574,7 +1592,7 @@ function bindCanvasEvents() {
       if (nodeMode && selectedStroke() && hit?.id === selectedStrokeId) {
         const stroke = selectedStroke();
         let nearestIndex = -1;
-        let nearestDistance = 14;
+        let nearestDistance = nodeHitRadius();
         stroke.points.forEach((node, index) => {
           const distance = Math.hypot(point.x - node.x, point.y - node.y);
           if (distance < nearestDistance) { nearestDistance = distance; nearestIndex = index; }
@@ -1584,7 +1602,7 @@ function bindCanvasEvents() {
           selectedNodeIndex = nearestIndex;
         } else {
           const projection = projectPointToLineStroke(stroke, point);
-          if (!projection || projection.distance > 18) {
+          if (!projection || projection.distance > nodeInsertTolerance()) {
             nodeMoveSnapshot = null;
             return;
           }
