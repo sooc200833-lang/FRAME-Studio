@@ -57,12 +57,12 @@
     </nav>
 
     <section class="panel-content active" id="toolsPanel">
-      <h3>VECTOR BRUSH</h3>
-      <div class="field"><label for="vectorBrushPreset">벡터 브러시</label><select id="vectorBrushPreset"><option value="pencil">연필 · Pencil</option><option value="ink" selected>잉크 · Ink</option><option value="brush">수채 붓 · Brush</option><option value="marker">마커 · Marker</option><option value="nib">딥펜 · Nib</option><option value="dry">드라이 브러시 · Dry</option></select></div>
-      <div class="field"><label for="vectorPressureCurve">필압 반응</label><input id="vectorPressureCurve" type="range" min="50" max="200" value="100"><output id="vectorPressureCurveOut">1.00</output></div>
+      <h3>벡터 선 도구 · 새 선 기본값</h3>
+      <div class="field"><label for="vectorBrushPreset">브러시 프리셋</label><select id="vectorBrushPreset"><option value="pencil">연필 · Pencil</option><option value="ink" selected>잉크 · Ink</option><option value="brush">수채 붓 · Brush</option><option value="marker">마커 · Marker</option><option value="nib">딥펜 · Nib</option><option value="dry">드라이 브러시 · Dry</option></select></div>
+      <div class="field"><label for="vectorPressureCurve">필압 민감도</label><input id="vectorPressureCurve" type="range" min="50" max="200" value="100"><output id="vectorPressureCurveOut">1.00</output></div>
       <div class="field"><label for="shapeKind">도형 종류</label><select id="shapeKind"><option value="rectangle">사각형</option><option value="ellipse">타원</option></select></div>
       <div class="field"><label for="vectorMotionStyle">선 움직임</label><select id="vectorMotionStyle"><option value="none">고정</option><option value="redraw">다시 그리기 · Redraw</option><option value="flicker">손떨림 · Flicker</option><option value="wave">구불거림 · Wave</option></select></div>
-      <div class="field"><label for="vectorBrushOpacity">벡터 불투명도</label><input id="vectorBrushOpacity" type="range" min="5" max="100" value="100"><output id="vectorBrushOpacityOut">100%</output></div>
+      <div class="field"><label for="vectorBrushOpacity">선 불투명도</label><input id="vectorBrushOpacity" type="range" min="5" max="100" value="100"><output id="vectorBrushOpacityOut">100%</output></div>
       <div class="field"><label for="vectorMotionStrength">움직임 강도</label><input id="vectorMotionStrength" type="range" min="0" max="12" value="3"><output id="vectorMotionStrengthOut">3px</output></div>
       <label class="check-field"><input id="selectedOutlineToggle" type="checkbox" checked><span>선택 벡터선 노란색 강조 표시</span></label>
       <div class="field"><label for="brushPreset">브러시 종류</label><select id="brushPreset"><option value="pencil">연필 · Pencil</option><option value="ink" selected>잉크 펜 · Ink</option><option value="marker">마커 · Marker</option><option value="brush">브러시 · Brush</option></select></div>
@@ -99,14 +99,14 @@
       </section>
 
       <section id="lineTools" hidden>
-        <h3 class="section-title">선 스타일</h3>
+        <h3 class="section-title">선 속성 · 선택한 선에 적용</h3>
         <div class="field"><label for="lineColor">선 색상</label><input id="lineColor" type="color" value="#24242a"></div>
         <div class="field"><label for="lineWidth">선 굵기</label><input id="lineWidth" type="range" min="1" max="100" value="7"><output id="lineWidthOut">7px</output></div>
         <label class="check-field"><input id="nodeEditToggle" type="checkbox"><span>곡선 핸들 편집 모드</span></label>
         <label class="check-field"><input id="linkBezierHandles" type="checkbox"><span>핸들 연결 · 부드러운 곡선</span></label>
         <button id="toggleBezierAnchorMode" class="transform-apply" disabled>부드러운 앵커로 변경</button>
         <button id="deleteBezierAnchor" class="delete-line" disabled>선택 앵커 삭제</button>
-        <p id="lineNodeStatus" class="note">곡선 위를 누르면 새 앵커가 추가됩니다. 앵커를 드래그하면 양쪽 핸들이 함께 이동합니다. 핸들 연결을 켜면 반대쪽 핸들도 대칭으로 움직입니다. Shift로 일시 전환할 수 있습니다.</p>
+        <p id="lineNodeStatus" class="note">선택한 선의 속성을 조절합니다. 곡선 위를 누르면 새 앵커가 추가됩니다. 앵커를 드래그하면 양쪽 핸들이 함께 이동합니다. 핸들 연결을 켜면 반대쪽 핸들도 대칭으로 움직입니다. Shift로 일시 전환할 수 있습니다.</p>
         <div class="layer-actions"><button id="deleteLineNode" disabled>선택 노드 삭제</button><button id="smoothLine">곡선 부드럽게</button></div>
         <button id="deleteLine" class="delete-line">선 삭제</button>
       </section>
