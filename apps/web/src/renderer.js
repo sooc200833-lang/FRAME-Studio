@@ -80,7 +80,7 @@ export class PixiStageRenderer {
     else graphics.destroy();
   }
 
-  sync(layers, dirtyIndices = [], strokes = [], selectedStrokeId = null, onionSkin = [], selectionRect = null, selectionPolygon = null, selectedNodeIndex = null, showNodeHandles = false) {
+  sync(layers, dirtyIndices = [], strokes = [], selectedStrokeId = null, onionSkin = [], selectionRect = null, selectionPolygon = null, selectedNodeIndex = null, showNodeHandles = false, nodeHandleRadius = 5.5) {
     if (!this.app) return;
 
     // Rebuild transient overlays, but keep committed vector paths attached to their cache entries.
@@ -156,7 +156,7 @@ export class PixiStageRenderer {
         const nodes = this.acquireGraphics();
         stroke.points.forEach((point, index) => {
           const selected = index === selectedNodeIndex;
-          nodes.circle(point.x, point.y, selected ? 6.5 : 4.5)
+          nodes.circle(point.x, point.y, Math.max(1, nodeHandleRadius + (selected ? 2 : 0)))
             .fill(selected ? 0xe5b85c : 0xf8f6f0)
             .stroke({ color: selected ? 0x24242a : 0x6d7785, width: selected ? 2 : 1.5 });
         });
