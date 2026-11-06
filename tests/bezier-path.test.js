@@ -235,3 +235,30 @@ test('anchor removal refuses endpoints and preserves valid segment counts', () =
   assert.equal(removed.anchors.length, 2);
   assert.equal(removed.segments.length, 1);
 });
+
+test('removing anchors inserted near either endpoint reconstructs the original cubic', () => {
+  const original = curvedPath();
+  for (const amount of [0.001, 0.01, 0.99, 0.999]) {
+    const inserted = insertBezierAnchor(original, 0, amount);
+    const restored = removeBezierAnchor(inserted, 1);
+    for (const key of ['control1', 'control2']) {
+      assert.ok(Math.abs(restored.segments[0][key].x - original.segments[0][key].x) < 1e-7);
+      assert.ok(Math.abs(restored.segments[0][key].y - original.segments[0][key].y) < 1e-7);
+    }
+  }
+});
+
+test('anchor removal remains finite when both handles meet at the removed anchor', () => {
+  const path = createBezierPath({
+    anchors: [{ x: 0, y: 0 }, { x: 50, y: 40 }, { x: 100, y: 0 }],
+    segments: [
+      { control1: { x: 10, y: 0 }, control2: { x: 50, y: 40 } },
+      { control1: { x: 50, y: 40 }, control2: { x: 90, y: 0 } },
+    ],
+  });
+  const removed = removeBezierAnchor(path, 1);
+  assert.equal(removed.anchors.length, 2);
+  assert.ok(removed.segments.every(segment =>
+    [segment.control1, segment.control2].every(point => Number.isFinite(point.x) && Number.isFinite(point.y))
+  ));
+});
