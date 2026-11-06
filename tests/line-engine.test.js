@@ -112,7 +112,7 @@ test('rejects malformed vector edit snapshots without mutating strokes', async (
 
 test('samples the same quadratic centerline that is rendered on screen', () => {
   const stroke = { points: [{ x: 0, y: 0 }, { x: 50, y: 100 }, { x: 100, y: 0 }] };
-  const path = sampleLineStrokePath(stroke.points, 12);
+  const path = sampleLineStrokePath(stroke.points, 24);
   assert.equal(path.points.length, 26);
   assert.deepEqual(path.points[12], { x: 43.75, y: 62.5 });
   assert.equal(path.segmentIndices[5], 0);
@@ -127,7 +127,7 @@ test('hit testing follows the visible quadratic curve rather than its control po
 
 test('projects insertions onto the visible curve while retaining the editable segment index', () => {
   const stroke = { ...line(), points: [{ x: 0, y: 0 }, { x: 50, y: 100 }, { x: 100, y: 0 }] };
-  const projection = projectPointToLineStroke(stroke, { x: 43.75, y: 50 });
+  const projection = projectPointToLineStroke(stroke, { x: 43.75, y: 62.5 });
   assert.equal(projection.segmentIndex, 0);
   assert.ok(projection.renderedSegmentIndex >= 0);
   assert.ok(projection.distance < 0.01);
