@@ -1591,6 +1591,15 @@ function createShapePoints(kind, start, end) {
   return [{ x: left, y: top }, { x: right, y: top }, { x: right, y: bottom }, { x: left, y: bottom }, { x: left, y: top }];
 }
 
+function selectVectorStrokesInPolygon(polygon) {
+  selectedStrokeIds.clear();
+  if (!polygon || polygon.length < 3) { selectedStrokeId = null; return; }
+  for (const stroke of vectorStrokes) {
+    if (lineStrokeIntersectsPolygon(stroke, polygon)) selectedStrokeIds.add(stroke.id);
+  }
+  selectedStrokeId = [...selectedStrokeIds].at(-1) || null;
+}
+
 function bindCanvasEvents() {
   const drawBrushPreview = () => {
     if (!strokeSamples.length) return;
@@ -1761,6 +1770,17 @@ function bindCanvasEvents() {
         render();
         return;
       }
+      if (event.shiftKey) {
+        if (hit) {
+          if (selectedStrokeIds.has(hit.id)) selectedStrokeIds.delete(hit.id);
+          else selectedStrokeIds.add(hit.id);
+        }
+        selectedStrokeId = hit?.id || [...selectedStrokeIds].at(-1) || null;
+        render();
+        return;
+      }
+      selectedStrokeIds.clear();
+      if (hit) selectedStrokeIds.add(hit.id);
       selectedStrokeId = hit?.id || null;
       selectedNodeIndex = null;
       selectedBezierHandle = null;
@@ -1931,7 +1951,7 @@ function bindCanvasEvents() {
     if (tool === 'vector') {
       const previous = drawingPoints[drawingPoints.length - 1];
       if (Math.hypot(point.x - previous.x, point.y - previous.y) >= 1.25) {
-        drawingPoints.push(point);
+        drawingPoints.push({ ...point, pressure: event.pointerType === 'pen' ? normalizePointerPressure(event, true) : 0.5 });
         renderer.previewStroke(drawingPoints, Number.parseInt(color.slice(1), 16), size);
       }
       return;
@@ -2022,6 +2042,7 @@ function bindCanvasEvents() {
           commitSelectionDragSources(drag, () => getSelectionDragTransform(drag))
         }
       }
+      if (drag.mode === 'lassoNew') selectVectorStrokesInPolygon(selectionPolygon);
       clearSelectionDragPreviews(drag);
       selectionDrag = null;
       down = false;
@@ -2080,6 +2101,10 @@ function bindCanvasEvents() {
         }
       }
       if (drag.mode === 'new' && (!selectionRect || selectionRect.width < 2 || selectionRect.height < 2)) selectionRect = null;
+      if (drag.mode === 'new' && selectionRect) {
+        const rect = selectionRect;
+        selectVectorStrokesInPolygon([{ x: rect.x, y: rect.y }, { x: rect.x + rect.width, y: rect.y }, { x: rect.x + rect.width, y: rect.y + rect.height }, { x: rect.x, y: rect.y + rect.height }]);
+      }
       clearSelectionDragPreviews(drag);
       selectionDrag = null;
       down = false;
