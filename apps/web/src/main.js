@@ -18,6 +18,8 @@ import {
   insertLineStrokePoint,
   removeLineStrokePoint,
   smoothLineStroke,
+  restoreLineStrokeSnapshot,
+  lineStrokeSnapshotChanged,
 } from './line/line-engine.js';
 
 const W = 1200;
@@ -139,6 +141,7 @@ let selectedStrokeId = null;
 let selectedNodeIndex = null;
 let nodeDragging = false;
 let nodeMoveSnapshot = null;
+let nodeDragChanged = false;
 let nodeEditEnabled = false;
 
 function rasterizeActiveLayerTransforms() {
@@ -1580,6 +1583,7 @@ function bindCanvasEvents() {
           if (distance < nearestDistance) { nearestDistance = distance; nearestIndex = index; }
         });
         nodeMoveSnapshot = lineSnapshot();
+        nodeDragChanged = false;
         if (nearestIndex >= 0) {
           selectedNodeIndex = nearestIndex;
         } else {
@@ -1591,6 +1595,7 @@ function bindCanvasEvents() {
           const index = vectorStrokes.findIndex(item => item.id === selectedStrokeId);
           vectorStrokes[index] = insertLineStrokePoint(stroke, point);
           selectedNodeIndex = projection.segmentIndex + 1;
+          nodeDragChanged = true;
         }
         nodeDragging = true;
         down = false;
@@ -1631,6 +1636,8 @@ function bindCanvasEvents() {
       const stroke = selectedStroke();
       if (stroke?.points[selectedNodeIndex]) {
         const points = stroke.points.map(node => ({ x: node.x, y: node.y }));
+        const previous = points[selectedNodeIndex];
+        if (previous.x !== point.x || previous.y !== point.y) nodeDragChanged = true;
         points[selectedNodeIndex] = { x: point.x, y: point.y };
         const index = vectorStrokes.findIndex(item => item.id === selectedStrokeId);
         vectorStrokes[index] = { ...stroke, points };
@@ -1870,9 +1877,15 @@ function bindCanvasEvents() {
     }
 
     if (tool === 'select' && nodeDragging && nodeMoveSnapshot) {
-      commitLineHistory(nodeMoveSnapshot);
+      if (event.type === 'pointercancel') {
+        restoreLineStrokeSnapshot(vectorStrokes, nodeMoveSnapshot);
+        selectedNodeIndex = null;
+      } else if (nodeDragChanged && lineStrokeSnapshotChanged(vectorStrokes, nodeMoveSnapshot)) {
+        commitLineHistory(nodeMoveSnapshot);
+      }
       nodeDragging = false;
       nodeMoveSnapshot = null;
+      nodeDragChanged = false;
       down = false;
       render();
       return;
