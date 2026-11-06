@@ -29,3 +29,22 @@ test('vector width profile changes the stroke width at the corresponding path po
   assert.ok(middle > start);
   assert.equal(start, end);
 });
+
+
+test('mouse vector pressure responds to drawing speed with smooth bounded values', async () => {
+  const { estimateVectorMousePressure } = await import('../apps/web/src/line/vector-brush.js');
+  const previous = { x: 0, y: 0, pressure: 1 };
+  const slow = estimateVectorMousePressure(previous, { x: 3, y: 0 }, 16, 7);
+  const fast = estimateVectorMousePressure(previous, { x: 28, y: 0 }, 16, 7);
+  assert.ok(slow > fast);
+  assert.ok(slow <= 1 && slow >= 0.12);
+  assert.ok(fast <= 1 && fast >= 0.12);
+});
+
+test('mouse vector pressure is stable for missing or zero-duration samples', async () => {
+  const { estimateVectorMousePressure } = await import('../apps/web/src/line/vector-brush.js');
+  assert.equal(estimateVectorMousePressure(null, { x: 1, y: 1 }, 0, 7), 1);
+  const value = estimateVectorMousePressure({ x: 0, y: 0, pressure: 0.8 }, { x: 2, y: 2 }, 0, 7);
+  assert.ok(Number.isFinite(value));
+  assert.ok(value >= 0.12 && value <= 1);
+});
