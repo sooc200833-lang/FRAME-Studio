@@ -204,7 +204,7 @@ export function transformBezierPath(path, matrix) {
   return {
     id: path.id ?? null,
     anchors: path.anchors.map(transform),
-    anchorModes: path.anchorModes ? [...path.anchorModes] : undefined,
+    anchorModes: path.anchorModes ? [...path.anchorModes] : path.anchors.map((_, index) => index > 0 && index < path.anchors.length - 1 ? 'smooth' : 'corner'),
     segments: path.segments.map(segment => ({
       control1: transform(segment.control1),
       control2: transform(segment.control2),
