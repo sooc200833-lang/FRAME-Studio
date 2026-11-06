@@ -20,13 +20,14 @@
 
   <div class="workspace">
     <nav class="tools" aria-label="도구">
-      <button class="tool active" data-tool="pen" title="펜">✎</button>
-      <button class="tool" data-tool="vector" title="벡터 펜">⌁</button>
+      <button class="tool active" data-tool="vector" title="벡터 브러시">✎</button>
+      <button class="tool" data-tool="hand" title="손 도구 · 캔버스 이동">✋</button>
       <button class="tool" data-tool="select" title="벡터 선 선택 및 이동">↖</button>
       <button class="tool" data-tool="marquee" title="사각형 영역 선택">▧</button>
       <button class="tool" data-tool="lasso" title="자유형 올가미 선택">⌁⃝</button>
       <button class="tool" data-tool="eraser" title="지우개">◩</button>
-      <button class="tool" data-tool="line" title="직선">／</button>
+      <button class="tool" data-tool="line" title="직선 벡터선">／</button>
+      <button class="tool" data-tool="shape" title="도형 벡터선">◇</button>
       <button class="tool" data-tool="fill" title="면 채우기">▧</button>
     </nav>
 
@@ -56,7 +57,14 @@
     </nav>
 
     <section class="panel-content active" id="toolsPanel">
-      <h3>BRUSH</h3>
+      <h3>VECTOR BRUSH</h3>
+      <div class="field"><label for="vectorBrushPreset">벡터 브러시</label><select id="vectorBrushPreset"><option value="pencil">연필 · Pencil</option><option value="ink" selected>잉크 · Ink</option><option value="brush">수채 붓 · Brush</option><option value="marker">마커 · Marker</option><option value="nib">딥펜 · Nib</option><option value="dry">드라이 브러시 · Dry</option></select></div>
+      <div class="field"><label for="vectorPressureCurve">필압 반응</label><input id="vectorPressureCurve" type="range" min="50" max="200" value="100"><output id="vectorPressureCurveOut">1.00</output></div>
+      <div class="field"><label for="shapeKind">도형 종류</label><select id="shapeKind"><option value="rectangle">사각형</option><option value="ellipse">타원</option></select></div>
+      <div class="field"><label for="vectorMotionStyle">선 움직임</label><select id="vectorMotionStyle"><option value="none">고정</option><option value="redraw">다시 그리기 · Redraw</option><option value="flicker">손떨림 · Flicker</option><option value="wave">구불거림 · Wave</option></select></div>
+      <div class="field"><label for="vectorBrushOpacity">벡터 불투명도</label><input id="vectorBrushOpacity" type="range" min="5" max="100" value="100"><output id="vectorBrushOpacityOut">100%</output></div>
+      <div class="field"><label for="vectorMotionStrength">움직임 강도</label><input id="vectorMotionStrength" type="range" min="0" max="12" value="3"><output id="vectorMotionStrengthOut">3px</output></div>
+      <label class="check-field"><input id="selectedOutlineToggle" type="checkbox" checked><span>선택 벡터선 노란색 강조 표시</span></label>
       <div class="field"><label for="brushPreset">브러시 종류</label><select id="brushPreset"><option value="pencil">연필 · Pencil</option><option value="ink" selected>잉크 펜 · Ink</option><option value="marker">마커 · Marker</option><option value="brush">브러시 · Brush</option></select></div>
       <div class="size-control">
         <div class="size-heading"><label for="size">선 굵기</label><strong id="sizeOut">7 px</strong></div>
@@ -74,8 +82,8 @@
         <div class="field"><label for="boilAmplitude">흔들림 강도</label><input id="boilAmplitude" type="range" min="0" max="12" step="0.5" value="3"><output id="boilAmplitudeOut">3px</output></div>
         <div class="field"><label for="boilFrequency">흔들림 패턴</label><input id="boilFrequency" type="range" min="0.02" max="0.24" step="0.01" value="0.08"><output id="boilFrequencyOut">0.08</output></div>
         <div class="field"><label for="boilSpeed">재생 속도</label><input id="boilSpeed" type="range" min="0.2" max="3" step="0.1" value="1"><output id="boilSpeedOut">1.0×</output></div>
-        <button id="boilToggle" class="boil-toggle">Line Boil 미리보기</button>
-        <p class="note">원본 벡터 선은 유지하고 화면에만 흔들림을 적용합니다. PNG 내보내기는 원본 선을 사용합니다.</p>
+        <button id="boilToggle" class="boil-toggle">벡터 움직임 미리보기</button>
+        <p class="note">원본 벡터 선은 유지합니다. Redraw는 한 선을 여러 번 다시 그은 듯한 패스를 겹쳐 표현합니다.</p>
       </section>
       <section id="toneTools">
         <h3 class="section-title">MANGA · SCREENTONE</h3>

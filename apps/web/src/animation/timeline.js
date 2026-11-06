@@ -3,7 +3,7 @@ import { cloneRasterCels, cloneRasterTransformCels } from './frame-cels.js';
 function cloneStrokes(strokes = []) {
   return strokes.map(stroke => ({
     ...stroke,
-    points: (stroke.points || []).map(point => ({ x: point.x, y: point.y })),
+    points: (stroke.points || []).map(point => ({ ...point })),
     ...(stroke.bezierPath ? { bezierPath: {
       ...stroke.bezierPath,
       anchorModes: stroke.bezierPath.anchorModes ? [...stroke.bezierPath.anchorModes] : stroke.bezierPath.anchors.map((_, index) => index > 0 && index < stroke.bezierPath.anchors.length - 1 ? 'smooth' : 'corner'),

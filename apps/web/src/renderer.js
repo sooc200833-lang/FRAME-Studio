@@ -1,5 +1,6 @@
 import { sampleLineStrokePath } from './line/line-engine.js';
 import { sampleBezierPath } from './line/bezier-path.js';
+import { getVectorPointWidth, getVectorBrushPreset } from './line/vector-brush.js';
 import { Application, Graphics, Sprite, Texture } from 'pixi.js';
 import { applyBrushTexture } from './brush/brush-engine.js';
 import { getVectorGraphicsCacheEntry, pruneVectorGraphicsCache } from './renderer/vector-graphics-cache.js';
@@ -65,6 +66,32 @@ export class PixiStageRenderer {
     graphics.stroke({ color, width, alpha, cap: 'round', join: 'round' });
   }
 
+  drawVectorStroke(graphics, stroke, pointsOverride = null, alphaOverride = 1) {
+    const sampled = pointsOverride ? { points: pointsOverride } : (stroke.bezierPath ? sampleBezierPath(stroke.bezierPath) : { points: stroke.points });
+    const points = sampled.points || [];
+    if (points.length < 2) return;
+    const preset = getVectorBrushPreset(stroke.brushPreset);
+    const alpha = (stroke.opacity ?? preset.opacity) * alphaOverride;
+    const source = stroke.points || [];
+    const pressureAt = index => {
+      if (!source.length) return 0.5;
+      const ratio = index / Math.max(1, points.length - 1);
+      const sourcePosition = ratio * (source.length - 1);
+      const left = Math.floor(sourcePosition);
+      const right = Math.min(source.length - 1, left + 1);
+      const mix = sourcePosition - left;
+      return (source[left].pressure ?? 0.5) * (1 - mix) + (source[right].pressure ?? 0.5) * mix;
+    };
+    for (let index = 1; index < points.length; index++) {
+      if (preset.texture === 'dry' && index % 7 === 0) continue;
+      const widthA = getVectorPointWidth(stroke, { pressure: pressureAt(index - 1) }, index - 1);
+      const widthB = getVectorPointWidth(stroke, { pressure: pressureAt(index) }, index);
+      graphics.moveTo(points[index - 1].x, points[index - 1].y);
+      graphics.lineTo(points[index].x, points[index].y);
+      graphics.stroke({ color: (typeof stroke.color === 'number' ? stroke.color : Number.parseInt(stroke.color.slice(1), 16)), width: Math.max(0.35, (widthA + widthB) / 2), alpha: preset.texture === 'marker' ? alpha * 0.72 : alpha, cap: 'round', join: 'round' });
+    }
+  }
+
   acquireGraphics() {
     return this.graphicsPool.pop() || new Graphics();
   }
@@ -76,7 +103,7 @@ export class PixiStageRenderer {
     else graphics.destroy();
   }
 
-  sync(layers, dirtyIndices = [], strokes = [], selectedStrokeId = null, onionSkin = [], selectionRect = null, selectionPolygon = null, selectedNodeIndex = null, showNodeHandles = false, selectedBezierHandle = null, selectedBezierAnchor = null) {
+  sync(layers, dirtyIndices = [], strokes = [], selectedStrokeId = null, onionSkin = [], selectionRect = null, selectionPolygon = null, selectedNodeIndex = null, showNodeHandles = false, selectedBezierHandle = null, selectedBezierAnchor = null, showSelectedHighlight = true, selectedStrokeIds = new Set()) {
     if (!this.app) return;
 
     // Rebuild transient overlays, but keep committed vector paths attached to their cache entries.
@@ -126,7 +153,7 @@ export class PixiStageRenderer {
     for (const ghost of onionSkin) {
       for (const stroke of ghost.strokes) {
         const graphics = this.acquireGraphics();
-        this.drawPath(graphics, stroke.bezierPath ? sampleBezierPath(stroke.bezierPath).points : stroke.points, ghost.tint, stroke.width, ghost.alpha);
+        this.drawVectorStroke(graphics, { ...stroke, color: ghost.tint }, null, ghost.alpha);
         this.app.stage.addChildAt(graphics, this.app.stage.children.length - 1);
         this.strokeGraphics.push(graphics);
       }
@@ -139,11 +166,14 @@ export class PixiStageRenderer {
         this.vectorGraphicsCache,
         stroke,
         () => this.acquireGraphics(),
-        (graphics, item) => this.drawPath(graphics, item.bezierPath ? sampleBezierPath(item.bezierPath).points : item.points, Number.parseInt(item.color.slice(1), 16), item.width),
+        (graphics, item) => {
+          this.drawVectorStroke(graphics, item);
+          for (const pass of item.motionPasses || []) this.drawVectorStroke(graphics, item, pass.points, pass.alpha);
+        },
       );
-      if (stroke.id === selectedStrokeId) {
+      if (showSelectedHighlight && (stroke.id === selectedStrokeId || selectedStrokeIds.has(stroke.id))) {
         const highlight = this.acquireGraphics();
-        this.drawPath(highlight, stroke.bezierPath ? sampleBezierPath(stroke.bezierPath).points : stroke.points, 0xe5b85c, stroke.width + 8, 0.55);
+        this.drawVectorStroke(highlight, { ...stroke, color: '#e5b85c', width: stroke.width + 8, opacity: 1 }, null, 0.55);
         this.app.stage.addChildAt(highlight, this.app.stage.children.length - 1);
         this.strokeGraphics.push(highlight);
       }

@@ -1,16 +1,18 @@
 import { sampleBezierPath, cloneBezierPath } from './bezier-path.js';
 
-export function createLineStroke({ id, points, color = '#24242a', width = 7 }) {
+import { createVectorBrushStyle, normalizeVectorPressure } from './vector-brush.js';
+
+export function createLineStroke({ id, points, color = '#24242a', width = 7, brushPreset = 'ink', pressureCurve = 1, opacity, motionStyle = 'none', motionStrength = 3 }) {
   if (!id) throw new TypeError('A stable line id is required.');
   if (!Array.isArray(points) || points.length < 2) throw new RangeError('A line needs at least two points.');
   return {
     id,
-    points: points.map(point => ({ x: Number(point.x), y: Number(point.y) })),
+    points: points.map(point => ({ x: Number(point.x), y: Number(point.y), pressure: Number.isFinite(Number(point.pressure)) ? normalizeVectorPressure(point.pressure) : 0.5 })),
     color,
     width: Math.max(0.5, Number(width) || 1),
+    ...createVectorBrushStyle({ brushPreset, pressureCurve, opacity, motionStyle, motionStrength }),
   };
 }
-
 function pointSegmentDistance(point, a, b) {
   const dx = b.x - a.x;
   const dy = b.y - a.y;
@@ -92,7 +94,7 @@ function translateBezierPath(path, dx, dy) {
 export function translateLineStroke(stroke, dx, dy) {
   return {
     ...stroke,
-    points: stroke.points.map(point => ({ x: point.x + dx, y: point.y + dy })),
+    points: stroke.points.map(point => ({ ...point, x: point.x + dx, y: point.y + dy })),
     ...(stroke.bezierPath ? { bezierPath: translateBezierPath(stroke.bezierPath, dx, dy) } : {}),
   };
 }
@@ -102,13 +104,14 @@ export function updateLineStrokeStyle(stroke, changes) {
     ...stroke,
     color: changes.color ?? stroke.color,
     width: changes.width === undefined ? stroke.width : Math.max(0.5, Number(changes.width) || 0.5),
+    ...createVectorBrushStyle({ ...stroke, ...changes }),
   };
 }
 
 export function cloneLineStrokes(strokes) {
   return strokes.map(stroke => ({
     ...stroke,
-    points: stroke.points.map(point => ({ x: point.x, y: point.y })),
+    points: stroke.points.map(point => ({ ...point })),
     ...(stroke.bezierPath ? { bezierPath: cloneBezierPath(stroke.bezierPath) } : {}),
   }));
 }
@@ -146,8 +149,11 @@ export function insertLineStrokePoint(stroke, point) {
   if (!stroke?.points || stroke.points.length < 2) return stroke;
   const projection = projectPointToLineStroke(stroke, point);
   if (!projection) return stroke;
-  const points = stroke.points.map(item => ({ x: item.x, y: item.y }));
-  points.splice(projection.segmentIndex + 1, 0, projection.point);
+  const points = stroke.points.map(item => ({ ...item }));
+  const left = stroke.points[projection.segmentIndex];
+  const right = stroke.points[projection.segmentIndex + 1];
+  const pressure = (left.pressure ?? 0.5) + ((right.pressure ?? 0.5) - (left.pressure ?? 0.5)) * projection.t;
+  points.splice(projection.segmentIndex + 1, 0, { ...projection.point, pressure });
   return { ...stroke, bezierPath: undefined, points };
 }
 
@@ -156,7 +162,7 @@ export function removeLineStrokePoint(stroke, pointIndex) {
   if (!stroke?.points || stroke.points.length <= 2) return stroke;
   const index = Math.floor(Number(pointIndex));
   if (!Number.isInteger(index) || index <= 0 || index >= stroke.points.length - 1) return stroke;
-  const points = stroke.points.filter((_, point) => point !== index).map(item => ({ x: item.x, y: item.y }));
+  const points = stroke.points.filter((_, point) => point !== index).map(item => ({ ...item }));
   return { ...stroke, bezierPath: undefined, points };
 }
 
@@ -169,7 +175,7 @@ export function smoothLineStroke(stroke, subdivisions = 5, tension = 0.5) {
   const steps = Math.max(2, Math.min(16, Math.floor(Number(subdivisions) || 5)));
   const alpha = Math.max(0, Math.min(1, Number(tension) || 0));
   const source = stroke.points;
-  const points = [{ x: source[0].x, y: source[0].y }];
+  const points = [{ ...source[0] }];
   for (let index = 0; index < source.length - 1; index++) {
     const p0 = source[Math.max(0, index - 1)];
     const p1 = source[index];
@@ -188,10 +194,11 @@ export function smoothLineStroke(stroke, subdivisions = 5, tension = 0.5) {
       points.push({
         x: h00 * p1.x + h10 * m1x + h01 * p2.x + h11 * m2x,
         y: h00 * p1.y + h10 * m1y + h01 * p2.y + h11 * m2y,
+        pressure: (p1.pressure ?? 0.5) + ((p2.pressure ?? 0.5) - (p1.pressure ?? 0.5)) * t,
       });
     }
   }
-  points[points.length - 1] = { x: source.at(-1).x, y: source.at(-1).y };
+  points[points.length - 1] = { ...source.at(-1) };
   return { ...stroke, bezierPath: undefined, points };
 }
 

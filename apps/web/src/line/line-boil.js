@@ -89,14 +89,33 @@ export function computeLineBoilPoints(stroke, {
   });
 }
 
-export function animateLineStrokes(strokes, settings) {
-  return strokes.map(stroke => ({
-    ...stroke,
-    points: computeLineBoilPoints(stroke, settings),
-    bezierPath: undefined,
-  }));
+export function animateLineStrokes(strokes, settings = {}) {
+  const phase = Number(settings.phase) || 0;
+  return strokes.map(stroke => {
+    const mode = stroke.motionStyle || 'wave';
+    const strength = Math.max(0, Math.min(16, Number(stroke.motionStrength ?? settings.amplitude) || 0));
+    if (mode === 'none' || strength === 0) return { ...stroke, motionPasses: null };
+    const source = stroke.bezierPath ? sampleBezierPath(stroke.bezierPath).points : stroke.points;
+    if (mode === 'wave') {
+      const moved = computeLineBoilPoints(stroke, { ...settings, amplitude: strength });
+      return { ...stroke, points: moved.map((point, index) => ({ ...point, pressure: stroke.points[Math.min(index, stroke.points.length - 1)]?.pressure ?? 0.5 })), bezierPath: undefined, motionPasses: null };
+    }
+    const passes = [];
+    const count = mode === 'redraw' ? 3 : 2;
+    for (let pass = 0; pass < count; pass++) {
+      const offset = (pass - (count - 1) / 2) * strength * (mode === 'redraw' ? 0.42 : 0.18);
+      const passPoints = source.map((point, index) => {
+        const tangent = tangentAt(source, index);
+        const seed = hashId(stroke.id) % 31;
+        const distance = index / Math.max(1, source.length - 1);
+        const drift = Math.sin(distance * Math.PI * (3 + pass) + phase + seed) * strength * 0.16;
+        return { x: point.x - tangent.y * (offset + drift), y: point.y + tangent.x * (offset + drift) };
+      });
+      passes.push({ points: passPoints, alpha: mode === 'redraw' ? [0.28, 0.42, 0.28][pass] : 0.32 });
+    }
+    return { ...stroke, motionPasses: passes };
+  });
 }
-
 export function lineBoilPhase(elapsedMs, speed = 1) {
   return (Math.max(0, elapsedMs) / 1000) * Math.max(0, Math.min(8, speed)) * Math.PI * 2;
 }

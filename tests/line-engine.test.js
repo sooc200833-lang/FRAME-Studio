@@ -43,8 +43,8 @@ test('topmost matching stroke is selected first', () => {
 test('translation moves every point without mutating the original', () => {
   const original = line();
   const moved = translateLineStroke(original, 5, -3);
-  assert.deepEqual(moved.points[0], { x: 15, y: 7 });
-  assert.deepEqual(original.points[0], { x: 10, y: 10 });
+  assert.deepEqual(moved.points[0], { x: 15, y: 7, pressure: 0.5 });
+  assert.deepEqual(original.points[0], { x: 10, y: 10, pressure: 0.5 });
 });
 
 test('style updates preserve identity and geometry', () => {
@@ -64,7 +64,7 @@ test('projects onto the nearest vector segment with stable insertion coordinates
   assert.ok(Math.abs(projection.point.y - 12.31) < 0.1);
   const inserted = insertLineStrokePoint(original, { x: 50, y: 14 });
   assert.equal(inserted.id, original.id);
-  assert.deepEqual(inserted.points[1], projection.point);
+  assert.deepEqual(inserted.points[1], { ...projection.point, pressure: 0.5 });
   assert.equal(original.points.length, 3);
 });
 
@@ -133,7 +133,7 @@ test('projects insertions onto the visible curve while retaining the editable se
   assert.ok(projection.renderedSegmentIndex >= 0);
   assert.ok(projection.distance < 0.01);
   const inserted = insertLineStrokePoint(stroke, { x: 43.75, y: 62.5 });
-  assert.deepEqual(inserted.points[1], projection.point);
+  assert.deepEqual(inserted.points[1], { ...projection.point, pressure: 0.5 });
 });
 
 
