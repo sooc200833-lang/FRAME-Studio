@@ -878,7 +878,7 @@ function updateLineInspector() {
     : `${stroke.points.length}개 노드${selectedNodeIndex === null ? '' : ` · ${selectedNodeIndex + 1}번 선택`}`;
   const anchorModeButton = document.getElementById('toggleBezierAnchorMode');
   if (anchorModeButton) {
-    const hasAnchor = Boolean(stroke.bezierPath && Number.isInteger(selectedBezierAnchor));
+    const hasAnchor = Boolean(stroke.bezierPath && Number.isInteger(selectedBezierAnchor) && selectedBezierAnchor > 0 && selectedBezierAnchor < stroke.bezierPath.anchors.length - 1);
     const mode = hasAnchor ? (stroke.bezierPath.anchorModes?.[selectedBezierAnchor] || 'corner') : 'corner';
     anchorModeButton.disabled = !hasAnchor;
     anchorModeButton.textContent = mode === 'smooth' ? '모서리 앵커로 변경' : '부드러운 앵커로 변경';
