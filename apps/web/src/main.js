@@ -577,11 +577,12 @@ function updateTimelineFPS(value) {
   document.getElementById('fpsOut').value = fps + ' FPS';
 }
 
-const viewport = { scale: 1, rotation: 0 };
+const viewport = { scale: 1, rotation: 0, x: 0, y: 0 };
+let panDrag = null;
 
 function applyViewport() {
   if (!inputSurface) return;
-  inputSurface.style.transform = `rotate(${viewport.rotation}deg) scale(${viewport.scale})`;
+  inputSurface.style.transform = `translate(${viewport.x}px, ${viewport.y}px) rotate(${viewport.rotation}deg) scale(${viewport.scale})`;
   document.getElementById('zoomLevel').value = Math.round(viewport.scale * 100) + '%';
 }
 
@@ -1140,6 +1141,8 @@ function bindViewportControls() {
   document.getElementById('resetViewport').onclick = () => {
     viewport.scale = 1;
     viewport.rotation = 0;
+    viewport.x = 0;
+    viewport.y = 0;
     applyViewport();
   };
 }
