@@ -21,6 +21,8 @@
   <div class="workspace">
     <nav class="tools" aria-label="도구">
       <button class="tool active" data-tool="vector" title="벡터 브러시">✎</button>
+      <button class="tool" data-tool="pen" title="래스터 브러시 · 필압과 질감">✐</button>
+      <button class="tool" data-tool="smudge" title="스머지 · 색 섞기">◉</button>
       <button class="tool" data-tool="hand" title="손 도구 · 캔버스 이동">✋</button>
       <button class="tool" data-tool="select" title="벡터 선 선택 및 이동">↖</button>
       <button class="tool" data-tool="marquee" title="사각형 영역 선택">▧</button>
@@ -75,6 +77,11 @@
       <div class="field"><label for="brushOpacity">브러시 불투명도</label><input id="brushOpacity" type="range" min="5" max="100" value="100"><output id="brushOpacityOut">100%</output></div>
       <div class="field"><label for="pressureCurve">필압 반응 곡선</label><input id="pressureCurve" type="range" min="50" max="200" value="92"><output id="pressureCurveOut">0.92</output></div>
       <div class="field"><label for="brushSmoothing">획 안정화</label><input id="brushSmoothing" type="range" min="0" max="80" value="28"><output id="brushSmoothingOut">28%</output></div>
+      <div class="field"><label for="brushBlendMode">브러시 혼합 방식</label><select id="brushBlendMode"><option value="source-over">일반</option><option value="multiply">곱하기</option><option value="screen">스크린</option><option value="overlay">오버레이</option></select></div>
+      <h3 class="section-title">SMUDGE · 색 혼합</h3>
+      <div class="field"><label for="smudgeStrength">혼합 강도</label><input id="smudgeStrength" type="range" min="5" max="100" value="62"><output id="smudgeStrengthOut">62%</output></div>
+      <div class="field"><label for="smudgeSpacing">브러시 간격</label><input id="smudgeSpacing" type="range" min="8" max="60" value="22"><output id="smudgeSpacingOut">22%</output></div>
+      <p class="note">스머지는 활성 래스터 레이어의 기존 색을 드래그 방향으로 섞습니다. 벡터 선은 선택·편집 도구를 사용하세요.</p>
       <div class="field"><label for="tolerance">채우기 허용 오차</label><input id="tolerance" type="range" min="0" max="100" value="24"><output id="tolOut">24</output></div>
       <div class="field"><label for="edge">선화 아래 확장</label><input id="edge" type="range" min="0" max="4" value="1"><output id="edgeOut">1px</output></div>
       <section id="boilTools">
