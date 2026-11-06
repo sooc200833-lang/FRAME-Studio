@@ -91,16 +91,18 @@ function splitCubic(p0, p1, p2, p3) {
   ];
 }
 
-function sampleCubicAdaptive(points, tolerance, maxDepth, output, depth = 0) {
+function sampleCubicAdaptive(points, tolerance, maxDepth, output, ranges, t0 = 0, t1 = 1, depth = 0) {
   const [p0, p1, p2, p3] = points;
   const flatness = Math.max(distanceToChord(p1, p0, p3), distanceToChord(p2, p0, p3));
   if (flatness <= tolerance || depth >= maxDepth) {
     output.push({ x: p3.x, y: p3.y });
+    ranges.push({ t0, t1 });
     return;
   }
   const [left, right] = splitCubic(p0, p1, p2, p3);
-  sampleCubicAdaptive(left, tolerance, maxDepth, output, depth + 1);
-  sampleCubicAdaptive(right, tolerance, maxDepth, output, depth + 1);
+  const middle = (t0 + t1) / 2;
+  sampleCubicAdaptive(left, tolerance, maxDepth, output, ranges, t0, middle, depth + 1);
+  sampleCubicAdaptive(right, tolerance, maxDepth, output, ranges, middle, t1, depth + 1);
 }
 
 /**
@@ -115,6 +117,7 @@ export function sampleBezierPath(path, { tolerance = 0.75, maxDepth = 10 } = {})
   const depthLimit = Math.max(1, Math.min(16, Math.floor(Number(maxDepth) || 10)));
   const points = [copyPoint(path.anchors[0])];
   const segmentIndices = [];
+  const segmentRanges = [];
   path.segments.forEach((segment, index) => {
     const before = points.length;
     sampleCubicAdaptive([
@@ -122,10 +125,10 @@ export function sampleBezierPath(path, { tolerance = 0.75, maxDepth = 10 } = {})
       segment.control1,
       segment.control2,
       path.anchors[index + 1],
-    ], flatness, depthLimit, points);
+    ], flatness, depthLimit, points, segmentRanges);
     for (let edge = before - 1; edge < points.length - 1; edge++) segmentIndices.push(index);
   });
-  return { points, segmentIndices };
+  return { points, segmentIndices, segmentRanges };
 }
 
 /** Move one control handle. Optionally mirror the opposite handle at its anchor. */
