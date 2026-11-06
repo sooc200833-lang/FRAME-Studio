@@ -1,4 +1,5 @@
-import { sampleLineStrokePath } from '../line/line-engine.js';
+import { sampleStrokePath } from '../line/line-engine.js';
+import { transformBezierPath } from '../line/bezier-path.js';
 export function normalizeSelectionRect(start, end) {
   const left = Math.min(start.x, end.x);
   const top = Math.min(start.y, end.y);
@@ -105,7 +106,7 @@ function pointToSegmentDistance(point, start, end) {
 export function lineStrokeIntersectsPolygon(stroke, polygon) {
   const controlPoints = stroke?.points || [];
   if (!Array.isArray(polygon) || polygon.length < 3 || controlPoints.length < 2) return false;
-  const points = sampleLineStrokePath(controlPoints).points;
+  const points = sampleStrokePath(stroke).points;
   if (points.some(point => pointInPolygon(point, polygon))) return true;
 
   // A vector stroke is a visible area, not an infinitely thin centerline.
@@ -129,25 +130,31 @@ export function lineStrokeIntersectsPolygon(stroke, polygon) {
 
 export function transformLineStrokes(strokes, polygon, angleDegrees = 0, scale = 1) {
   const selectedIds = new Set(strokes.filter(stroke => lineStrokeIntersectsPolygon(stroke, polygon)).map(stroke => stroke.id));
-  if (!selectedIds.size) return strokes.map(stroke => ({ ...stroke, points: stroke.points.map(point => ({ ...point })) }));
   const center = polygon.reduce((sum, point) => ({
     x: sum.x + point.x / polygon.length,
     y: sum.y + point.y / polygon.length,
   }), { x: 0, y: 0 });
   const radians = angleDegrees * Math.PI / 180;
   const cos = Math.cos(radians), sin = Math.sin(radians);
-  return strokes.map(stroke => selectedIds.has(stroke.id) ? ({
-    ...stroke,
-    width: stroke.width * scale,
-    points: stroke.points.map(point => {
-      const x = (point.x - center.x) * scale;
-      const y = (point.y - center.y) * scale;
-      return {
-        x: center.x + x * cos - y * sin,
-        y: center.y + x * sin + y * cos,
-      };
-    }),
-  }) : ({ ...stroke, points: stroke.points.map(point => ({ ...point })) }));
+  const matrix = [
+    scale * cos, scale * sin, -scale * sin, scale * cos,
+    center.x - scale * cos * center.x + scale * sin * center.y,
+    center.y - scale * sin * center.x - scale * cos * center.y,
+  ];
+  return strokes.map(stroke => {
+    const selected = selectedIds.has(stroke.id);
+    return {
+      ...stroke,
+      width: selected ? stroke.width * scale : stroke.width,
+      points: stroke.points.map(point => selected ? ({
+        x: matrix[0] * point.x + matrix[2] * point.y + matrix[4],
+        y: matrix[1] * point.x + matrix[3] * point.y + matrix[5],
+      }) : ({ ...point })),
+      ...(stroke.bezierPath ? {
+        bezierPath: transformBezierPath(stroke.bezierPath, selected ? matrix : [1, 0, 0, 1, 0, 0]),
+      } : {}),
+    };
+  });
 }
 
 export function getSelectionRectHandles(rect, rotationOffset = 36) {
@@ -263,14 +270,18 @@ export function transformLineStrokesByMatrix(strokes, polygon, matrix) {
     const points = stroke.points.map(point => selectedIds.has(stroke.id)
       ? { x: a * point.x + c * point.y + e, y: b * point.x + d * point.y + f }
       : { x: point.x, y: point.y });
+    const bezierPath = stroke.bezierPath
+      ? transformBezierPath(stroke.bezierPath, selectedIds.has(stroke.id) ? matrix : [1, 0, 0, 1, 0, 0])
+      : null;
     let widthScale = determinantScale;
     if (selectedIds.has(stroke.id) && stroke.points.length > 1) {
       // Stroke width is perpendicular to the path tangent. Under anisotropic
       // scaling, use the transformed normal instead of a global area scale.
       let weightedScale = 0;
       let totalLength = 0;
-      for (let index = 0; index < stroke.points.length - 1; index++) {
-        const start = stroke.points[index], end = stroke.points[index + 1];
+      const widthPath = sampleStrokePath(stroke).points;
+      for (let index = 0; index < widthPath.length - 1; index++) {
+        const start = widthPath[index], end = widthPath[index + 1];
         const dx = end.x - start.x, dy = end.y - start.y;
         const length = Math.hypot(dx, dy);
         if (length <= Number.EPSILON) continue;
@@ -285,6 +296,7 @@ export function transformLineStrokesByMatrix(strokes, polygon, matrix) {
       ...stroke,
       width: selectedIds.has(stroke.id) ? Math.max(0.5, stroke.width * widthScale) : stroke.width,
       points,
+      ...(bezierPath ? { bezierPath } : {}),
     };
   });
 }

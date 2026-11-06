@@ -1,3 +1,5 @@
+import { sampleBezierPath } from './bezier-path.js';
+
 function hashId(id) {
   let hash = 2166136261;
   for (let index = 0; index < String(id).length; index++) {
@@ -52,7 +54,7 @@ export function computeLineBoilPoints(stroke, {
   frequency = 0.08,
   seed = hashId(stroke.id),
 } = {}) {
-  const points = stroke.points;
+  const points = stroke.bezierPath ? sampleBezierPath(stroke.bezierPath).points : stroke.points;
   if (!Array.isArray(points) || points.length < 2) return points || [];
 
   const safeAmplitude = Math.max(0, Math.min(24, Number(amplitude) || 0));
@@ -91,6 +93,7 @@ export function animateLineStrokes(strokes, settings) {
   return strokes.map(stroke => ({
     ...stroke,
     points: computeLineBoilPoints(stroke, settings),
+    bezierPath: undefined,
   }));
 }
 

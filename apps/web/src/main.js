@@ -9,6 +9,9 @@ import { activeFrame, addFrame, createTimeline, deleteFrame, frameAtTime, getOni
 import { normalizeRasterCels, normalizeRasterTransformCels } from './animation/frame-cels.js';
 import { cloneRasterTransformRecords, composeRasterTransformStack, createTranslationMatrix, createRotationMatrix, rasterizeRasterTransformStack } from './selection/raster-transform.js';
 import { containsSelectionPoint, hitTestSelectionHandle, moveSelectionRect, normalizeSelectionRect, lineStrokeIntersectsPolygon, pointInPolygon, resizeSelectionRectFromHandle, resolveSelectionTargets, transformLineStrokes, transformLineStrokesByMatrix, transformPolygon, translatePolygon, getSelectionPreviewTransform, getPolygonBounds, getPolygonCentroid, hitTestPolygonTransformHandle, resizePolygonFromHandle } from './selection/selection.js';
+import { convertLegacyPointsToBezierPath } from './line/legacy-bezier-bridge.js';
+import { moveBezierHandle, sampleBezierPath } from './line/bezier-path.js';
+
 import {
   createLineStroke,
   hitTestLineStrokes,
@@ -143,6 +146,8 @@ let nodeDragging = false;
 let nodeMoveSnapshot = null;
 let nodeDragChanged = false;
 let nodeEditEnabled = false;
+let selectedBezierHandle = null;
+let bezierHandleDrag = null;
 
 function rasterizeActiveLayerTransforms() {
   const layer = layers[active];
@@ -373,7 +378,13 @@ function drawVectorStrokes(context, strokes = vectorStrokes) {
   for (const stroke of strokes) {
     if (!stroke.points.length) continue;
     context.beginPath();
-    context.moveTo(stroke.points[0].x, stroke.points[0].y);
+    if (stroke.bezierPath) {
+      const sampled = sampleBezierPath(stroke.bezierPath).points;
+      if (!sampled.length) continue;
+      context.moveTo(sampled[0].x, sampled[0].y);
+      for (let index = 1; index < sampled.length; index++) context.lineTo(sampled[index].x, sampled[index].y);
+    } else {
+      context.moveTo(stroke.points[0].x, stroke.points[0].y);
     if (stroke.points.length === 2) {
       context.lineTo(stroke.points[1].x, stroke.points[1].y);
     } else {
@@ -384,6 +395,7 @@ function drawVectorStrokes(context, strokes = vectorStrokes) {
       }
       const lastPoint = stroke.points[stroke.points.length - 1];
       context.lineTo(lastPoint.x, lastPoint.y);
+    }
     }
     context.strokeStyle = stroke.color;
     context.lineWidth = stroke.width;
@@ -433,7 +445,7 @@ function render(dirtyIndices = [], displayStrokes = vectorStrokes) {
   }
   applyGroupState();
   if (!loadingFrame) updateFrameStrokes(timeline, timeline.activeFrameId, vectorStrokes);
-  renderer.sync(layers, dirtyIndices, displayStrokes, selectedStrokeId, onionEnabled ? getOnionSkin(timeline) : [], selectionRect, selectionPolygon, selectedNodeIndex, nodeEditEnabled);
+  renderer.sync(layers, dirtyIndices, displayStrokes, selectedStrokeId, onionEnabled ? getOnionSkin(timeline) : [], selectionRect, selectionPolygon, selectedNodeIndex, nodeEditEnabled, selectedBezierHandle);
   document.getElementById('status').textContent = tool.toUpperCase();
   drawLayers();
   updateLayerInspector();
@@ -489,6 +501,11 @@ async function loadTimelineFrame(frameId, saveCurrent = true) {
   vectorStrokes.splice(0, vectorStrokes.length, ...(frame?.strokes || []).map(stroke => ({
     ...stroke,
     points: stroke.points.map(point => ({ x: point.x, y: point.y })),
+    ...(stroke.bezierPath ? { bezierPath: {
+      ...stroke.bezierPath,
+      anchors: stroke.bezierPath.anchors.map(point => ({ ...point })),
+      segments: stroke.bezierPath.segments.map(segment => ({ control1: { ...segment.control1 }, control2: { ...segment.control2 } })),
+    } } : {}),
   })));
   selectedStrokeId = null;
   loadingFrame = false;
@@ -853,9 +870,11 @@ function updateLineInspector() {
   document.getElementById('lineWidth').value = stroke.width;
   document.getElementById('lineWidthOut').value = stroke.width + 'px';
   const nodeStatus = document.getElementById('lineNodeStatus');
-  if (nodeStatus) nodeStatus.textContent = `${stroke.points.length}개 노드${selectedNodeIndex === null ? '' : ` · ${selectedNodeIndex + 1}번 선택`}`;
+  if (nodeStatus) nodeStatus.textContent = stroke.bezierPath
+    ? `${stroke.bezierPath.anchors.length}개 앵커 · ${stroke.bezierPath.segments.length * 2}개 핸들`
+    : `${stroke.points.length}개 노드${selectedNodeIndex === null ? '' : ` · ${selectedNodeIndex + 1}번 선택`}`;
   const removeNode = document.getElementById('deleteLineNode');
-  if (removeNode) removeNode.disabled = selectedNodeIndex === null || selectedNodeIndex <= 0 || selectedNodeIndex >= stroke.points.length - 1;
+  if (removeNode) removeNode.disabled = Boolean(stroke.bezierPath) || selectedNodeIndex === null || selectedNodeIndex <= 0 || selectedNodeIndex >= stroke.points.length - 1;
 }
 
 function applySelectedStyle(changes) {
@@ -1443,6 +1462,13 @@ function bindControls() {
   document.getElementById('nodeEditToggle').onchange = event => {
     nodeEditEnabled = event.target.checked;
     selectedNodeIndex = null;
+    selectedBezierHandle = null;
+    const stroke = selectedStroke();
+    if (nodeEditEnabled && stroke && !stroke.bezierPath) {
+      commitLineHistory(lineSnapshot());
+      const index = vectorStrokes.findIndex(item => item.id === selectedStrokeId);
+      vectorStrokes[index] = { ...stroke, bezierPath: convertLegacyPointsToBezierPath(stroke.points, stroke.id) };
+    }
     render();
   };
   document.getElementById('lineColor').oninput = event => applySelectedStyle({ color: event.target.value });
@@ -1574,8 +1600,29 @@ function bindCanvasEvents() {
     if (tool === 'select') {
       const hit = hitTestLineStrokes(vectorStrokes, point, 9);
       const nodeMode = nodeEditEnabled;
-      if (nodeMode && selectedStroke() && hit?.id === selectedStrokeId) {
+      if (nodeMode && selectedStroke() && selectedStrokeId && (hit?.id === selectedStrokeId || (!hit && selectedStroke().bezierPath))) {
         const stroke = selectedStroke();
+        const path = stroke.bezierPath || convertLegacyPointsToBezierPath(stroke.points, stroke.id);
+        let nearest = null, distance = 17;
+        path.segments.forEach((segment, segmentIndex) => {
+          [['out', segment.control1], ['in', segment.control2]].forEach(([handle, control]) => {
+            const nextDistance = Math.hypot(point.x - control.x, point.y - control.y);
+            if (nextDistance < distance) { distance = nextDistance; nearest = { segmentIndex, handle }; }
+          });
+        });
+        if (nearest) {
+          nodeMoveSnapshot = lineSnapshot();
+          nodeDragChanged = !stroke.bezierPath;
+          const index = vectorStrokes.findIndex(item => item.id === selectedStrokeId);
+          vectorStrokes[index] = { ...stroke, bezierPath: path };
+          selectedBezierHandle = nearest;
+          bezierHandleDrag = { ...nearest };
+          nodeDragging = true;
+          down = false;
+          render();
+          return;
+        }
+        if (stroke.bezierPath) return;
         let nearestIndex = -1;
         let nearestDistance = 14;
         stroke.points.forEach((node, index) => {
@@ -1604,6 +1651,13 @@ function bindCanvasEvents() {
       }
       selectedStrokeId = hit?.id || null;
       selectedNodeIndex = null;
+      selectedBezierHandle = null;
+      const newlySelected = selectedStroke();
+      if (nodeEditEnabled && newlySelected && !newlySelected.bezierPath) {
+        commitLineHistory(lineSnapshot());
+        const index = vectorStrokes.findIndex(item => item.id === selectedStrokeId);
+        vectorStrokes[index] = { ...newlySelected, bezierPath: convertLegacyPointsToBezierPath(newlySelected.points, newlySelected.id) };
+      }
       movingStroke = Boolean(hit);
       moveSnapshot = hit ? lineSnapshot() : null;
       moveChanged = false;
@@ -1631,6 +1685,20 @@ function bindCanvasEvents() {
 
   inputSurface.addEventListener('pointermove', event => {
     const point = position(event);
+
+    if (tool === 'select' && bezierHandleDrag) {
+      const stroke = selectedStroke();
+      if (stroke?.bezierPath) {
+        const index = vectorStrokes.findIndex(item => item.id === selectedStrokeId);
+        vectorStrokes[index] = {
+          ...stroke,
+          bezierPath: moveBezierHandle(stroke.bezierPath, bezierHandleDrag.segmentIndex, bezierHandleDrag.handle, point, { mirrorOpposite: Boolean(event.shiftKey) }),
+        };
+        nodeDragChanged = true;
+        render();
+      }
+      return;
+    }
 
     if (tool === 'select' && nodeDragging && selectedNodeIndex !== null) {
       const stroke = selectedStroke();
@@ -1873,6 +1941,22 @@ function bindCanvasEvents() {
       selectionDrag = null;
       down = false;
       render(layers.map((_, index) => index));
+      return;
+    }
+
+    if (tool === 'select' && bezierHandleDrag && nodeMoveSnapshot) {
+      if (event.type === 'pointercancel') {
+        restoreLineStrokeSnapshot(vectorStrokes, nodeMoveSnapshot);
+        selectedBezierHandle = null;
+      } else if (nodeDragChanged && lineStrokeSnapshotChanged(vectorStrokes, nodeMoveSnapshot)) {
+        commitLineHistory(nodeMoveSnapshot);
+      }
+      bezierHandleDrag = null;
+      nodeDragging = false;
+      nodeMoveSnapshot = null;
+      nodeDragChanged = false;
+      down = false;
+      render();
       return;
     }
 
