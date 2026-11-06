@@ -13,7 +13,8 @@ export function getVectorGraphicsCacheEntry(cache, stroke, createGraphics, drawS
     entry = { stroke: null, points: null, color: null, width: null, graphics: createGraphics() };
     cache.set(stroke.id, entry);
   }
-  if (entry.stroke !== stroke || entry.points !== stroke.points || !hasSameGeometry(entry.geometry, stroke.points) || entry.color !== stroke.color || entry.width !== stroke.width) {
+  const bezierKey = stroke.bezierPath ? JSON.stringify(stroke.bezierPath) : '';
+  if (entry.stroke !== stroke || entry.points !== stroke.points || !hasSameGeometry(entry.geometry, stroke.points) || entry.bezierKey !== bezierKey || entry.color !== stroke.color || entry.width !== stroke.width) {
     entry.graphics.clear();
     drawStroke(entry.graphics, stroke);
     entry.stroke = stroke;
@@ -21,6 +22,7 @@ export function getVectorGraphicsCacheEntry(cache, stroke, createGraphics, drawS
     entry.geometry = stroke.points.map(point => ({ x: point.x, y: point.y }));
     entry.color = stroke.color;
     entry.width = stroke.width;
+    entry.bezierKey = bezierKey;
   }
   return entry;
 }
