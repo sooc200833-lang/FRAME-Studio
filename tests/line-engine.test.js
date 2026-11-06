@@ -43,7 +43,7 @@ test('topmost matching stroke is selected first', () => {
 test('translation moves every point without mutating the original', () => {
   const original = line();
   const moved = translateLineStroke(original, 5, -3);
-  assert.deepEqual(moved.points[0], { x: 15, y: 7 });
+  assert.deepEqual(moved.points[0], { x: 15, y: 7, pressure: 0.5 });
   assert.deepEqual(original.points[0], { x: 10, y: 10 });
 });
 
