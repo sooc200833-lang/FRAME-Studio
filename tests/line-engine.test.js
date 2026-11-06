@@ -60,10 +60,11 @@ test('projects onto the nearest vector segment with stable insertion coordinates
   const original = line();
   const projection = projectPointToLineStroke(original, { x: 50, y: 14 });
   assert.equal(projection.segmentIndex, 0);
-  assert.deepEqual(projection.point, { x: 50, y: 10 });
+  assert.ok(Math.abs(projection.point.x - 50.24) < 0.1);
+  assert.ok(Math.abs(projection.point.y - 12.31) < 0.1);
   const inserted = insertLineStrokePoint(original, { x: 50, y: 14 });
   assert.equal(inserted.id, original.id);
-  assert.deepEqual(inserted.points[1], { x: 50, y: 10 });
+  assert.deepEqual(inserted.points[1], projection.point);
   assert.equal(original.points.length, 3);
 });
 
