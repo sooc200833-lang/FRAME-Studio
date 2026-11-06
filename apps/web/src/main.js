@@ -1926,6 +1926,22 @@ function bindCanvasEvents() {
       return;
     }
 
+    if (tool === 'select' && bezierHandleDrag && nodeMoveSnapshot) {
+      if (event.type === 'pointercancel') {
+        restoreLineStrokeSnapshot(vectorStrokes, nodeMoveSnapshot);
+        selectedBezierHandle = null;
+      } else if (nodeDragChanged && lineStrokeSnapshotChanged(vectorStrokes, nodeMoveSnapshot)) {
+        commitLineHistory(nodeMoveSnapshot);
+      }
+      bezierHandleDrag = null;
+      nodeDragging = false;
+      nodeMoveSnapshot = null;
+      nodeDragChanged = false;
+      down = false;
+      render();
+      return;
+    }
+
     if (tool === 'select' && nodeDragging && nodeMoveSnapshot) {
       if (event.type === 'pointercancel') {
         restoreLineStrokeSnapshot(vectorStrokes, nodeMoveSnapshot);
