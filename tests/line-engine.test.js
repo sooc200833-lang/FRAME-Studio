@@ -64,7 +64,7 @@ test('projects onto the nearest vector segment with stable insertion coordinates
   assert.ok(Math.abs(projection.point.y - 12.31) < 0.1);
   const inserted = insertLineStrokePoint(original, { x: 50, y: 14 });
   assert.equal(inserted.id, original.id);
-  assert.deepEqual(inserted.points[1], projection.point);
+  assert.deepEqual(inserted.points[1], { ...projection.point, pressure: 0.5 });
   assert.equal(original.points.length, 3);
 });
 
