@@ -1590,6 +1590,28 @@ function bindCanvasEvents() {
       const nodeMode = nodeEditEnabled;
       if (nodeMode && selectedStroke() && hit?.id === selectedStrokeId) {
         const stroke = selectedStroke();
+        const path = stroke.bezierPath || convertLegacyPointsToBezierPath(stroke.points, stroke.id);
+        let nearest = null, distance = 17;
+        path.segments.forEach((segment, segmentIndex) => {
+          [['out', segment.control1], ['in', segment.control2]].forEach(([handle, control]) => {
+            const nextDistance = Math.hypot(point.x - control.x, point.y - control.y);
+            if (nextDistance < distance) { distance = nextDistance; nearest = { segmentIndex, handle }; }
+          });
+        });
+        if (nearest) {
+          nodeMoveSnapshot = lineSnapshot();
+          nodeDragChanged = false;
+          const index = vectorStrokes.findIndex(item => item.id === selectedStrokeId);
+          vectorStrokes[index] = { ...stroke, bezierPath: path };
+          selectedBezierHandle = nearest;
+          bezierHandleDrag = { ...nearest };
+          nodeDragging = true;
+          down = false;
+          render();
+          return;
+        }
+        if (stroke.bezierPath) return;
+        const stroke = selectedStroke();
         let nearestIndex = -1;
         let nearestDistance = 14;
         stroke.points.forEach((node, index) => {
