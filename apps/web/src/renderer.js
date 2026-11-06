@@ -156,9 +156,10 @@ export class PixiStageRenderer {
         const nodes = this.acquireGraphics();
         stroke.points.forEach((point, index) => {
           const selected = index === selectedNodeIndex;
+          const screenScale = Math.max(0.01, nodeHandleRadius / 5.5);
           nodes.circle(point.x, point.y, Math.max(1, nodeHandleRadius + (selected ? 2 : 0)))
             .fill(selected ? 0xe5b85c : 0xf8f6f0)
-            .stroke({ color: selected ? 0x24242a : 0x6d7785, width: selected ? 2 : 1.5 });
+            .stroke({ color: selected ? 0x24242a : 0x6d7785, width: (selected ? 2 : 1.5) * screenScale });
         });
         this.app.stage.addChildAt(nodes, this.app.stage.children.length - 1);
         this.strokeGraphics.push(nodes);
