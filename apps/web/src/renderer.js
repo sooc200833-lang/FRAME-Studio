@@ -76,7 +76,7 @@ export class PixiStageRenderer {
     else graphics.destroy();
   }
 
-  sync(layers, dirtyIndices = [], strokes = [], selectedStrokeId = null, onionSkin = [], selectionRect = null, selectionPolygon = null, selectedNodeIndex = null, showNodeHandles = false, selectedBezierHandle = null) {
+  sync(layers, dirtyIndices = [], strokes = [], selectedStrokeId = null, onionSkin = [], selectionRect = null, selectionPolygon = null, selectedNodeIndex = null, showNodeHandles = false, selectedBezierHandle = null, selectedBezierAnchor = null) {
     if (!this.app) return;
 
     // Rebuild transient overlays, but keep committed vector paths attached to their cache entries.
@@ -163,8 +163,11 @@ export class PixiStageRenderer {
           handles.circle(segment.control2.x, segment.control2.y, inSelected ? 7 : 5)
             .fill(inSelected ? 0xe5b85c : 0x8ec5ff).stroke({ color: 0x24242a, width: 1.3 });
         });
-        stroke.bezierPath.anchors.forEach(point => {
-          handles.circle(point.x, point.y, 3.5).fill(0xf8f6f0).stroke({ color: 0x24242a, width: 1.1 });
+        stroke.bezierPath.anchors.forEach((point, index) => {
+          const selected = selectedBezierAnchor === index;
+          handles.circle(point.x, point.y, selected ? 6 : 4)
+            .fill(selected ? 0xe5b85c : 0xf8f6f0)
+            .stroke({ color: 0x24242a, width: selected ? 1.8 : 1.1 });
         });
         this.app.stage.addChildAt(handles, this.app.stage.children.length - 1);
         this.strokeGraphics.push(handles);
