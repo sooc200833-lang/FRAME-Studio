@@ -4,7 +4,7 @@ import { Application, Graphics, Sprite, Texture } from 'pixi.js';
 import { applyBrushTexture } from './brush/brush-engine.js';
 import { getVectorGraphicsCacheEntry, pruneVectorGraphicsCache } from './renderer/vector-graphics-cache.js';
 import { getPolygonBounds, getPolygonTransformHandles } from './selection/selection.js';
-import { createRendererInitOptions, RENDERER_BACKEND_ORDER } from './renderer/renderer-options.js';
+import { createRendererInitOptions, initializeWithBackendFallback } from './renderer/renderer-options.js';
 
 export class PixiStageRenderer {
   constructor(width, height) {
@@ -25,12 +25,9 @@ export class PixiStageRenderer {
   }
 
   async init(host) {
-    let app = null;
-    const failures = [];
-
-    // A backend may report itself as supported but still fail during context/device
-    // creation (common on constrained mobile browsers). Retry each backend explicitly.
-    for (const backend of RENDERER_BACKEND_ORDER) {
+    // A backend can pass capability detection but still fail while creating its
+    // context/device. Retry independently and retain the last useful diagnostics.
+    const initialized = await initializeWithBackendFallback(async backend => {
       const candidate = new Application();
       try {
         await candidate.init(createRendererInitOptions({
@@ -39,25 +36,20 @@ export class PixiStageRenderer {
           devicePixelRatio: window.devicePixelRatio || 1,
           backend,
         }));
-        app = candidate;
-        this.rendererBackend = backend;
-        break;
+        return candidate;
       } catch (error) {
-        failures.push({ backend, error });
         console.warn(`FRAME Studio: ${backend} renderer initialization failed.`, error);
         try {
           candidate.destroy({ removeView: true }, { children: true, texture: true, textureSource: true });
         } catch {
           // Initialization may have failed before PixiJS had resources to destroy.
         }
+        throw error;
       }
-    }
+    });
 
-    if (!app) {
-      const details = failures.map(({ backend, error }) => `${backend}: ${error?.message || error}`).join('; ');
-      throw new Error(`No supported renderer could be initialized. ${details}`);
-    }
-
+    const app = initialized.value;
+    this.rendererBackend = initialized.backend;
     this.app = app;
     app.canvas.className = 'pixi-canvas';
     app.canvas.setAttribute('aria-label', 'FRAME Studio drawing canvas');
