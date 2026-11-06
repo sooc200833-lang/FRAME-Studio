@@ -7,6 +7,7 @@ import {
   sampleBezierPath,
   moveBezierHandle,
   moveBezierAnchor,
+  setBezierAnchorMode,
   transformBezierPath,
 } from '../apps/web/src/line/bezier-path.js';
 
@@ -101,4 +102,58 @@ test('clone returns independent geometry', () => {
   const copy = cloneBezierPath(original);
   copy.segments[0].control1.x = 999;
   assert.equal(original.segments[0].control1.x, 30);
+});
+
+
+test('interior anchors default to smooth mode and endpoints default to corner mode', () => {
+  const path = createBezierPath({
+    anchors: [{ x: 0, y: 0 }, { x: 50, y: 0 }, { x: 100, y: 0 }],
+    segments: [
+      { control1: { x: 10, y: 0 }, control2: { x: 40, y: 0 } },
+      { control1: { x: 60, y: 0 }, control2: { x: 90, y: 0 } },
+    ],
+  });
+  assert.deepEqual(path.anchorModes, ['corner', 'smooth', 'corner']);
+});
+
+test('smooth anchors mirror the opposite handle by default', () => {
+  const path = createBezierPath({
+    anchors: [{ x: 0, y: 0 }, { x: 60, y: 0 }, { x: 120, y: 0 }],
+    segments: [
+      { control1: { x: 20, y: 0 }, control2: { x: 40, y: 0 } },
+      { control1: { x: 80, y: 0 }, control2: { x: 100, y: 0 } },
+    ],
+  });
+  const moved = moveBezierHandle(path, 1, 'out', { x: 60, y: 20 });
+  assert.deepEqual(moved.segments[0].control2, { x: 60, y: -20 });
+});
+
+test('corner mode leaves the opposite handle independent; smooth mode restores linking', () => {
+  const path = createBezierPath({
+    anchors: [{ x: 0, y: 0 }, { x: 60, y: 0 }, { x: 120, y: 0 }],
+    segments: [
+      { control1: { x: 20, y: 0 }, control2: { x: 40, y: 0 } },
+      { control1: { x: 80, y: 0 }, control2: { x: 100, y: 0 } },
+    ],
+  });
+  const corner = setBezierAnchorMode(path, 1, 'corner');
+  const independent = moveBezierHandle(corner, 1, 'out', { x: 60, y: 20 });
+  assert.deepEqual(independent.segments[0].control2, { x: 40, y: 0 });
+  const smooth = setBezierAnchorMode(corner, 1, 'smooth');
+  const linked = moveBezierHandle(smooth, 1, 'out', { x: 60, y: 20 });
+  assert.deepEqual(linked.segments[0].control2, { x: 60, y: -20 });
+  assert.throws(() => setBezierAnchorMode(path, 0, 'smooth'), RangeError);
+});
+
+test('anchor modes survive cloning and affine transforms', () => {
+  const path = createBezierPath({
+    anchors: [{ x: 0, y: 0 }, { x: 50, y: 0 }, { x: 100, y: 0 }],
+    segments: [
+      { control1: { x: 10, y: 0 }, control2: { x: 40, y: 0 } },
+      { control1: { x: 60, y: 0 }, control2: { x: 90, y: 0 } },
+    ],
+  });
+  const corner = setBezierAnchorMode(path, 1, 'corner');
+  assert.deepEqual(cloneBezierPath(corner).anchorModes, ['corner', 'corner', 'corner']);
+  assert.deepEqual(transformBezierPath(corner, [1, 0, 0, 1, 5, 8]).anchorModes, corner.anchorModes);
 });
