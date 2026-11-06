@@ -96,6 +96,7 @@
         <div class="field"><label for="lineWidth">선 굵기</label><input id="lineWidth" type="range" min="1" max="100" value="7"><output id="lineWidthOut">7px</output></div>
         <label class="check-field"><input id="nodeEditToggle" type="checkbox"><span>곡선 핸들 편집 모드</span></label>
         <label class="check-field"><input id="linkBezierHandles" type="checkbox"><span>핸들 연결 · 부드러운 곡선</span></label>
+        <button id="toggleBezierAnchorMode" class="transform-apply" disabled>부드러운 앵커로 변경</button>
         <p id="lineNodeStatus" class="note">앵커를 움직이면 양쪽 핸들이 함께 이동합니다. 핸들 연결을 켜면 반대쪽 핸들도 대칭으로 움직입니다. Shift로 일시 전환할 수 있습니다.</p>
         <div class="layer-actions"><button id="deleteLineNode" disabled>선택 노드 삭제</button><button id="smoothLine">곡선 부드럽게</button></div>
         <button id="deleteLine" class="delete-line">선 삭제</button>
