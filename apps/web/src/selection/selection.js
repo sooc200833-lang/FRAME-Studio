@@ -253,8 +253,7 @@ export function transformLineStrokesByMatrix(strokes, polygon, matrix) {
     throw new TypeError('A finite six-value affine matrix is required.');
   }
   const [a, b, c, d, e, f] = matrix;
-  const determinant = a * d - b * c;
-  const widthScale = Math.sqrt(Math.abs(determinant));
+  const determinantScale = Math.sqrt(Math.abs(a * d - b * c));
   const selectedIds = new Set(
     strokes.filter(stroke => lineStrokeIntersectsPolygon(stroke, polygon)).map(stroke => stroke.id),
   );
@@ -262,6 +261,24 @@ export function transformLineStrokesByMatrix(strokes, polygon, matrix) {
     const points = stroke.points.map(point => selectedIds.has(stroke.id)
       ? { x: a * point.x + c * point.y + e, y: b * point.x + d * point.y + f }
       : { x: point.x, y: point.y });
+    let widthScale = determinantScale;
+    if (selectedIds.has(stroke.id) && stroke.points.length > 1) {
+      // Stroke width is perpendicular to the path tangent. Under anisotropic
+      // scaling, use the transformed normal instead of a global area scale.
+      let weightedScale = 0;
+      let totalLength = 0;
+      for (let index = 0; index < stroke.points.length - 1; index++) {
+        const start = stroke.points[index], end = stroke.points[index + 1];
+        const dx = end.x - start.x, dy = end.y - start.y;
+        const length = Math.hypot(dx, dy);
+        if (length <= Number.EPSILON) continue;
+        const nx = -dy / length, ny = dx / length;
+        const transformedNormalLength = Math.hypot(a * nx + c * ny, b * nx + d * ny);
+        weightedScale += transformedNormalLength * length;
+        totalLength += length;
+      }
+      if (totalLength > 0) widthScale = weightedScale / totalLength;
+    }
     return {
       ...stroke,
       width: selectedIds.has(stroke.id) ? Math.max(0.5, stroke.width * widthScale) : stroke.width,

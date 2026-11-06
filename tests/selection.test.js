@@ -151,7 +151,7 @@ test('applies affine translation and non-uniform scale to intersecting vector st
   ];
   const result = transformLineStrokesByMatrix(strokes, polygon, [2, 0, 0, 0.5, 10, 3]);
   assert.deepEqual(result[0].points, [{ x: 14, y: 5 }, { x: 26, y: 8 }]);
-  assert.equal(result[0].width, 4);
+  assert.ok(Math.abs(result[0].width - 4 * Math.sqrt(2.125)) < 1e-9);
   assert.deepEqual(result[1].points, strokes[1].points);
   assert.equal(result[1].width, strokes[1].width);
   assert.deepEqual(strokes[0].points, [{ x: 2, y: 4 }, { x: 8, y: 10 }]);
@@ -180,4 +180,19 @@ test('does not select a thick vector stroke that remains outside the selection b
   const polygon = [{ x: 10, y: 10 }, { x: 30, y: 10 }, { x: 30, y: 30 }, { x: 10, y: 30 }];
   const stroke = { width: 6, points: [{ x: 0, y: 0 }, { x: 5, y: 0 }] };
   assert.equal(lineStrokeIntersectsPolygon(stroke, polygon), false);
+});
+
+
+test('scales vector stroke width perpendicular to a horizontal path under anisotropic transforms', () => {
+  const polygon = [{ x: -10, y: -10 }, { x: 40, y: -10 }, { x: 40, y: 20 }, { x: -10, y: 20 }];
+  const horizontal = { id: 'h', width: 8, points: [{ x: 0, y: 0 }, { x: 20, y: 0 }] };
+  const result = transformLineStrokesByMatrix([horizontal], polygon, [2, 0, 0, 0.5, 0, 0]);
+  assert.equal(result[0].width, 4);
+});
+
+test('scales vector stroke width perpendicular to a vertical path under anisotropic transforms', () => {
+  const polygon = [{ x: -10, y: -10 }, { x: 20, y: -10 }, { x: 20, y: 40 }, { x: -10, y: 40 }];
+  const vertical = { id: 'v', width: 8, points: [{ x: 0, y: 0 }, { x: 0, y: 20 }] };
+  const result = transformLineStrokesByMatrix([vertical], polygon, [2, 0, 0, 0.5, 0, 0]);
+  assert.equal(result[0].width, 16);
 });
