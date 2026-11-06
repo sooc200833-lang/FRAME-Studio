@@ -131,6 +131,63 @@ export function sampleBezierPath(path, { tolerance = 0.75, maxDepth = 10 } = {})
   return { points, segmentIndices, segmentRanges };
 }
 
+/** Project a document point onto the sampled visible cubic path. */
+export function projectPointToBezierPath(path, point, options = {}) {
+  const sampled = sampleBezierPath(path, options);
+  let best = { distance: Infinity, segmentIndex: -1, t: 0, point: null, edgeIndex: -1 };
+  for (let index = 0; index < sampled.points.length - 1; index++) {
+    const start = sampled.points[index];
+    const end = sampled.points[index + 1];
+    const dx = end.x - start.x;
+    const dy = end.y - start.y;
+    const lengthSquared = dx * dx + dy * dy;
+    const edgeT = lengthSquared > Number.EPSILON
+      ? Math.max(0, Math.min(1, ((point.x - start.x) * dx + (point.y - start.y) * dy) / lengthSquared))
+      : 0;
+    const projected = { x: start.x + dx * edgeT, y: start.y + dy * edgeT };
+    const distance = Math.hypot(point.x - projected.x, point.y - projected.y);
+    if (distance < best.distance) {
+      const range = sampled.segmentRanges[index];
+      best = {
+        distance,
+        segmentIndex: sampled.segmentIndices[index],
+        t: range.t0 + (range.t1 - range.t0) * edgeT,
+        point: projected,
+        edgeIndex: index,
+      };
+    }
+  }
+  return best.segmentIndex < 0 ? null : best;
+}
+
+/** Split one cubic segment at t, preserving the original curve exactly. */
+export function insertBezierAnchor(path, segmentIndex, t) {
+  if (!path?.segments || !Number.isInteger(segmentIndex) || !path.segments[segmentIndex]) return path;
+  const amount = Math.max(0.001, Math.min(0.999, Number(t)));
+  if (!Number.isFinite(amount)) throw new TypeError('A finite split parameter is required.');
+  const next = cloneBezierPath(path);
+  const start = next.anchors[segmentIndex];
+  const end = next.anchors[segmentIndex + 1];
+  const segment = next.segments[segmentIndex];
+  const lerp = (a, b) => ({
+    x: a.x + (b.x - a.x) * amount,
+    y: a.y + (b.y - a.y) * amount,
+  });
+  const p01 = lerp(start, segment.control1);
+  const p12 = lerp(segment.control1, segment.control2);
+  const p23 = lerp(segment.control2, end);
+  const p012 = lerp(p01, p12);
+  const p123 = lerp(p12, p23);
+  const anchor = lerp(p012, p123);
+  next.anchors.splice(segmentIndex + 1, 0, anchor);
+  next.anchorModes.splice(segmentIndex + 1, 0, 'smooth');
+  next.segments.splice(segmentIndex, 1,
+    { control1: p01, control2: p012 },
+    { control1: p123, control2: p23 },
+  );
+  return next;
+}
+
 /** Move one control handle. Optionally mirror the opposite handle at its anchor. */
 export function moveBezierHandle(path, segmentIndex, handle, point, { mirrorOpposite } = {}) {
   if (!path?.segments || !Number.isInteger(segmentIndex) || !path.segments[segmentIndex]) return path;
