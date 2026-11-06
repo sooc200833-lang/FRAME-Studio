@@ -88,7 +88,7 @@ export class PixiStageRenderer {
       const widthB = getVectorPointWidth(stroke, { pressure: pressureAt(index) }, index);
       graphics.moveTo(points[index - 1].x, points[index - 1].y);
       graphics.lineTo(points[index].x, points[index].y);
-      graphics.stroke({ color: Number.parseInt(stroke.color.slice(1), 16), width: Math.max(0.35, (widthA + widthB) / 2), alpha: preset.texture === 'marker' ? alpha * 0.72 : alpha, cap: 'round', join: 'round' });
+      graphics.stroke({ color: (typeof stroke.color === 'number' ? stroke.color : Number.parseInt(stroke.color.slice(1), 16)), width: Math.max(0.35, (widthA + widthB) / 2), alpha: preset.texture === 'marker' ? alpha * 0.72 : alpha, cap: 'round', join: 'round' });
     }
   }
 
@@ -103,7 +103,7 @@ export class PixiStageRenderer {
     else graphics.destroy();
   }
 
-  sync(layers, dirtyIndices = [], strokes = [], selectedStrokeId = null, onionSkin = [], selectionRect = null, selectionPolygon = null, selectedNodeIndex = null, showNodeHandles = false, selectedBezierHandle = null, selectedBezierAnchor = null, showSelectedHighlight = true) {
+  sync(layers, dirtyIndices = [], strokes = [], selectedStrokeId = null, onionSkin = [], selectionRect = null, selectionPolygon = null, selectedNodeIndex = null, showNodeHandles = false, selectedBezierHandle = null, selectedBezierAnchor = null, showSelectedHighlight = true, selectedStrokeIds = new Set()) {
     if (!this.app) return;
 
     // Rebuild transient overlays, but keep committed vector paths attached to their cache entries.
@@ -171,9 +171,9 @@ export class PixiStageRenderer {
           for (const pass of item.motionPasses || []) this.drawVectorStroke(graphics, item, pass.points, pass.alpha);
         },
       );
-      if (showSelectedHighlight && stroke.id === selectedStrokeId) {
+      if (showSelectedHighlight && (stroke.id === selectedStrokeId || selectedStrokeIds.has(stroke.id))) {
         const highlight = this.acquireGraphics();
-        this.drawVectorStroke(highlight, { ...stroke, color: '#e5b85c', width: stroke.width + 8, opacity: 0.55 }, null, 0.55);
+        this.drawVectorStroke(highlight, { ...stroke, color: '#e5b85c', width: stroke.width + 8, opacity: 1 }, null, 0.55);
         this.app.stage.addChildAt(highlight, this.app.stage.children.length - 1);
         this.strokeGraphics.push(highlight);
       }
