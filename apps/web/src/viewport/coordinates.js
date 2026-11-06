@@ -61,6 +61,7 @@ export function clientToCanvasPoint(event, {
 export function canvasUnitsPerCssPixel(elementWidth, canvasWidth, zoom = 1) {
   const width = Math.max(1, Number(elementWidth) || Number(canvasWidth) || 1);
   const logicalWidth = Math.max(1, Number(canvasWidth) || 1);
-  const scale = Math.max(0.01, Number(zoom) || 1);
+  const requestedScale = Number(zoom);
+  const scale = Number.isFinite(requestedScale) && requestedScale > 0 ? requestedScale : 1;
   return width * scale / logicalWidth;
 }
