@@ -10,6 +10,7 @@ test('renderer options explicitly select one backend per initialization attempt'
   for (const backend of RENDERER_BACKEND_ORDER) {
     const options = createRendererInitOptions({ width: 1200, height: 900, backend });
     assert.deepEqual(options.preference, [backend]);
+    assert.deepEqual(options.eventFeatures, { click: false, move: false, globalMove: false, wheel: false });
     assert.equal(options.width, 1200);
     assert.equal(options.height, 900);
   }
