@@ -208,3 +208,21 @@ test('lasso intersection follows the rendered quadratic curve instead of the con
   ];
   assert.equal(lineStrokeIntersectsPolygon(stroke, aroundCurve), true);
 });
+
+
+test('affine selection transforms preserve editable Bézier anchors and handles', async () => {
+  const { createBezierPath } = await import('../apps/web/src/line/bezier-path.js');
+  const stroke = {
+    id: 'curve-selection', width: 4,
+    points: [{ x: 0, y: 0 }, { x: 50, y: 50 }, { x: 100, y: 0 }],
+    bezierPath: createBezierPath({
+      anchors: [{ x: 0, y: 0 }, { x: 100, y: 0 }],
+      segments: [{ control1: { x: 20, y: 60 }, control2: { x: 80, y: 60 } }],
+    }),
+  };
+  const polygon = [{ x: -5, y: -5 }, { x: 105, y: -5 }, { x: 105, y: 70 }, { x: -5, y: 70 }];
+  const transformed = transformLineStrokesByMatrix([stroke], polygon, [2, 0, 0, 2, 10, 5])[0];
+  assert.deepEqual(transformed.bezierPath.anchors[1], { x: 210, y: 5 });
+  assert.deepEqual(transformed.bezierPath.segments[0].control1, { x: 50, y: 125 });
+  assert.deepEqual(stroke.bezierPath.anchors[1], { x: 100, y: 0 });
+});
