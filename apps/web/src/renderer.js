@@ -166,7 +166,10 @@ export class PixiStageRenderer {
         this.vectorGraphicsCache,
         stroke,
         () => this.acquireGraphics(),
-        (graphics, item) => this.drawVectorStroke(graphics, item),
+        (graphics, item) => {
+          this.drawVectorStroke(graphics, item);
+          for (const pass of item.motionPasses || []) this.drawVectorStroke(graphics, item, pass.points, pass.alpha);
+        },
       );
       if (showSelectedHighlight && stroke.id === selectedStrokeId) {
         const highlight = this.acquireGraphics();
