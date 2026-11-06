@@ -1600,7 +1600,7 @@ function bindCanvasEvents() {
         });
         if (nearest) {
           nodeMoveSnapshot = lineSnapshot();
-          nodeDragChanged = false;
+          nodeDragChanged = !stroke.bezierPath;
           const index = vectorStrokes.findIndex(item => item.id === selectedStrokeId);
           vectorStrokes[index] = { ...stroke, bezierPath: path };
           selectedBezierHandle = nearest;
@@ -1611,7 +1611,6 @@ function bindCanvasEvents() {
           return;
         }
         if (stroke.bezierPath) return;
-        const stroke = selectedStroke();
         let nearestIndex = -1;
         let nearestDistance = 14;
         stroke.points.forEach((node, index) => {
