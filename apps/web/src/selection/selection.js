@@ -290,5 +290,6 @@ export function transformLineStrokesByMatrix(strokes, polygon, matrix) {
       width: selectedIds.has(stroke.id) ? Math.max(0.5, stroke.width * widthScale) : stroke.width,
       points,
       ...(bezierPath ? { bezierPath } : {}),
+    };
   });
 }
