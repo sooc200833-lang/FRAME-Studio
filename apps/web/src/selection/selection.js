@@ -1,3 +1,4 @@
+import { sampleLineStrokePath } from '../line/line-engine.js';
 export function normalizeSelectionRect(start, end) {
   const left = Math.min(start.x, end.x);
   const top = Math.min(start.y, end.y);
@@ -102,8 +103,9 @@ function pointToSegmentDistance(point, start, end) {
 }
 
 export function lineStrokeIntersectsPolygon(stroke, polygon) {
-  const points = stroke?.points || [];
-  if (!Array.isArray(polygon) || polygon.length < 3 || points.length < 2) return false;
+  const controlPoints = stroke?.points || [];
+  if (!Array.isArray(polygon) || polygon.length < 3 || controlPoints.length < 2) return false;
+  const points = sampleLineStrokePath(controlPoints).points;
   if (points.some(point => pointInPolygon(point, polygon))) return true;
 
   // A vector stroke is a visible area, not an infinitely thin centerline.

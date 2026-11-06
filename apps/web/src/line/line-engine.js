@@ -19,11 +19,48 @@ function pointSegmentDistance(point, a, b) {
   return Math.hypot(point.x - projection.x, point.y - projection.y);
 }
 
+/**
+ * Sample the exact quadratic path convention used by the canvas renderer.
+ * Each sampled segment retains the editable control-segment index that produced it.
+ */
+export function sampleLineStrokePath(points, subdivisions = 24) {
+  if (!Array.isArray(points) || points.length < 2) return { points: [], segmentIndices: [] };
+  const steps = Math.max(2, Math.min(64, Math.floor(Number(subdivisions) || 24)));
+  const sampled = [{ x: points[0].x, y: points[0].y }];
+  const segmentIndices = [];
+  if (points.length === 2) {
+    sampled.push({ x: points[1].x, y: points[1].y });
+    segmentIndices.push(0);
+    return { points: sampled, segmentIndices };
+  }
+
+  for (let index = 1; index < points.length - 1; index++) {
+    const control = points[index];
+    const next = points[index + 1];
+    const end = { x: (control.x + next.x) / 2, y: (control.y + next.y) / 2 };
+    const start = sampled.at(-1);
+    for (let step = 1; step <= steps; step++) {
+      const t = step / steps;
+      const inverse = 1 - t;
+      sampled.push({
+        x: inverse * inverse * start.x + 2 * inverse * t * control.x + t * t * end.x,
+        y: inverse * inverse * start.y + 2 * inverse * t * control.y + t * t * end.y,
+      });
+      segmentIndices.push(index - 1);
+    }
+  }
+
+  sampled.push({ x: points.at(-1).x, y: points.at(-1).y });
+  segmentIndices.push(points.length - 2);
+  return { points: sampled, segmentIndices };
+}
+
 export function hitTestLineStroke(stroke, point, tolerance = 8) {
   if (!stroke || !Array.isArray(stroke.points) || stroke.points.length < 2) return false;
   const threshold = Math.max(0, Number(tolerance) || 0) + Math.max(0, Number(stroke.width) || 0) / 2;
-  for (let index = 1; index < stroke.points.length; index++) {
-    if (pointSegmentDistance(point, stroke.points[index - 1], stroke.points[index]) <= threshold) return true;
+  const path = sampleLineStrokePath(stroke.points);
+  for (let index = 1; index < path.points.length; index++) {
+    if (pointSegmentDistance(point, path.points[index - 1], path.points[index]) <= threshold) return true;
   }
   return false;
 }
@@ -61,9 +98,10 @@ export function cloneLineStrokes(strokes) {
 /** Return the closest point and segment index for an editable vector path. */
 export function projectPointToLineStroke(stroke, point) {
   if (!stroke?.points || stroke.points.length < 2) return null;
-  let best = { distance: Infinity, segmentIndex: -1, point: null, t: 0 };
-  for (let index = 0; index < stroke.points.length - 1; index++) {
-    const a = stroke.points[index], b = stroke.points[index + 1];
+  const path = sampleLineStrokePath(stroke.points);
+  let best = { distance: Infinity, segmentIndex: -1, renderedSegmentIndex: -1, point: null, t: 0 };
+  for (let index = 0; index < path.points.length - 1; index++) {
+    const a = path.points[index], b = path.points[index + 1];
     const dx = b.x - a.x, dy = b.y - a.y;
     const lengthSquared = dx * dx + dy * dy;
     const t = lengthSquared
@@ -71,7 +109,15 @@ export function projectPointToLineStroke(stroke, point) {
       : 0;
     const projected = { x: a.x + dx * t, y: a.y + dy * t };
     const distance = Math.hypot(point.x - projected.x, point.y - projected.y);
-    if (distance < best.distance) best = { distance, segmentIndex: index, point: projected, t };
+    if (distance < best.distance) {
+      best = {
+        distance,
+        segmentIndex: path.segmentIndices[index],
+        renderedSegmentIndex: index,
+        point: projected,
+        t,
+      };
+    }
   }
   return best;
 }
