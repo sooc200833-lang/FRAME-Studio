@@ -2151,11 +2151,40 @@ function bindCanvasEvents() {
   inputSurface.addEventListener('pointercancel', end);
 }
 
+function bindKeyboardShortcuts() {
+  window.addEventListener('keydown', event => {
+    const target = event.target;
+    const isTextEntry = target instanceof HTMLElement && (
+      target.isContentEditable
+      || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName)
+    );
+    if (isTextEntry || event.altKey || event.ctrlKey || event.metaKey) return;
+
+    if ((event.key === 'Delete' || event.key === 'Backspace')
+      && nodeEditEnabled
+      && Number.isInteger(selectedBezierAnchor)) {
+      const deleteButton = document.getElementById('deleteBezierAnchor');
+      if (deleteButton && !deleteButton.disabled) {
+        event.preventDefault();
+        deleteButton.click();
+      }
+      return;
+    }
+
+    if (event.key === 'Escape' && (selectedBezierAnchor !== null || selectedBezierHandle !== null)) {
+      selectedBezierAnchor = null;
+      selectedBezierHandle = null;
+      render();
+    }
+  });
+}
+
 async function start() {
   inputSurface = await renderer.init(host);
   bindControls();
   bindViewportControls();
   bindCanvasEvents();
+  bindKeyboardShortcuts();
 
   const lineContext = layers[1].canvas.getContext('2d');
   lineContext.strokeStyle = '#24242a';
