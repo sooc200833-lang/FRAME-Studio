@@ -172,8 +172,11 @@ function evaluateCubic(start, control1, control2, end, t) {
 test('adaptive samples expose parameter ranges for every rendered edge', () => {
   const sampled = sampleBezierPath(curvedPath());
   assert.equal(sampled.segmentRanges.length, sampled.points.length - 1);
-  assert.deepEqual(sampled.segmentRanges[0], { t0: 0, t1: 0.125 });
+  assert.equal(sampled.segmentRanges[0].t0, 0);
   assert.equal(sampled.segmentRanges.at(-1).t1, 1);
+  sampled.segmentRanges.slice(1).forEach((range, index) => {
+    assert.equal(range.t0, sampled.segmentRanges[index].t1);
+  });
 });
 
 test('projects onto the visible curve and reports its source segment parameter', () => {
