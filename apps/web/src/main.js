@@ -9,6 +9,9 @@ import { activeFrame, addFrame, createTimeline, deleteFrame, frameAtTime, getOni
 import { normalizeRasterCels, normalizeRasterTransformCels } from './animation/frame-cels.js';
 import { cloneRasterTransformRecords, composeRasterTransformStack, createTranslationMatrix, createRotationMatrix, rasterizeRasterTransformStack } from './selection/raster-transform.js';
 import { containsSelectionPoint, hitTestSelectionHandle, moveSelectionRect, normalizeSelectionRect, lineStrokeIntersectsPolygon, pointInPolygon, resizeSelectionRectFromHandle, resolveSelectionTargets, transformLineStrokes, transformLineStrokesByMatrix, transformPolygon, translatePolygon, getSelectionPreviewTransform, getPolygonBounds, getPolygonCentroid, hitTestPolygonTransformHandle, resizePolygonFromHandle } from './selection/selection.js';
+import { convertLegacyPointsToBezierPath } from './line/legacy-bezier-bridge.js';
+import { moveBezierHandle, sampleBezierPath } from './line/bezier-path.js';
+
 import {
   createLineStroke,
   hitTestLineStrokes,
@@ -143,6 +146,8 @@ let nodeDragging = false;
 let nodeMoveSnapshot = null;
 let nodeDragChanged = false;
 let nodeEditEnabled = false;
+let selectedBezierHandle = null;
+let bezierHandleDrag = null;
 
 function rasterizeActiveLayerTransforms() {
   const layer = layers[active];
@@ -373,7 +378,13 @@ function drawVectorStrokes(context, strokes = vectorStrokes) {
   for (const stroke of strokes) {
     if (!stroke.points.length) continue;
     context.beginPath();
-    context.moveTo(stroke.points[0].x, stroke.points[0].y);
+    if (stroke.bezierPath) {
+      const sampled = sampleBezierPath(stroke.bezierPath).points;
+      if (!sampled.length) continue;
+      context.moveTo(sampled[0].x, sampled[0].y);
+      for (let index = 1; index < sampled.length; index++) context.lineTo(sampled[index].x, sampled[index].y);
+    } else {
+      context.moveTo(stroke.points[0].x, stroke.points[0].y);
     if (stroke.points.length === 2) {
       context.lineTo(stroke.points[1].x, stroke.points[1].y);
     } else {
@@ -384,6 +395,7 @@ function drawVectorStrokes(context, strokes = vectorStrokes) {
       }
       const lastPoint = stroke.points[stroke.points.length - 1];
       context.lineTo(lastPoint.x, lastPoint.y);
+    }
     }
     context.strokeStyle = stroke.color;
     context.lineWidth = stroke.width;
@@ -433,7 +445,7 @@ function render(dirtyIndices = [], displayStrokes = vectorStrokes) {
   }
   applyGroupState();
   if (!loadingFrame) updateFrameStrokes(timeline, timeline.activeFrameId, vectorStrokes);
-  renderer.sync(layers, dirtyIndices, displayStrokes, selectedStrokeId, onionEnabled ? getOnionSkin(timeline) : [], selectionRect, selectionPolygon, selectedNodeIndex, nodeEditEnabled);
+  renderer.sync(layers, dirtyIndices, displayStrokes, selectedStrokeId, onionEnabled ? getOnionSkin(timeline) : [], selectionRect, selectionPolygon, selectedNodeIndex, nodeEditEnabled, selectedBezierHandle);
   document.getElementById('status').textContent = tool.toUpperCase();
   drawLayers();
   updateLayerInspector();
@@ -1443,6 +1455,8 @@ function bindControls() {
   document.getElementById('nodeEditToggle').onchange = event => {
     nodeEditEnabled = event.target.checked;
     selectedNodeIndex = null;
+    selectedBezierHandle = null;
+    selectedBezierHandle = null;
     render();
   };
   document.getElementById('lineColor').oninput = event => applySelectedStyle({ color: event.target.value });
