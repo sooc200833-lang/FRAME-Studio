@@ -1456,7 +1456,6 @@ function bindControls() {
     nodeEditEnabled = event.target.checked;
     selectedNodeIndex = null;
     selectedBezierHandle = null;
-    selectedBezierHandle = null;
     render();
   };
   document.getElementById('lineColor').oninput = event => applySelectedStyle({ color: event.target.value });
@@ -1588,7 +1587,7 @@ function bindCanvasEvents() {
     if (tool === 'select') {
       const hit = hitTestLineStrokes(vectorStrokes, point, 9);
       const nodeMode = nodeEditEnabled;
-      if (nodeMode && selectedStroke() && hit?.id === selectedStrokeId) {
+      if (nodeMode && selectedStroke() && selectedStrokeId && (hit?.id === selectedStrokeId || selectedStroke().bezierPath)) {
         const stroke = selectedStroke();
         const path = stroke.bezierPath || convertLegacyPointsToBezierPath(stroke.points, stroke.id);
         let nearest = null, distance = 17;
@@ -1639,6 +1638,7 @@ function bindCanvasEvents() {
       }
       selectedStrokeId = hit?.id || null;
       selectedNodeIndex = null;
+      selectedBezierHandle = null;
       movingStroke = Boolean(hit);
       moveSnapshot = hit ? lineSnapshot() : null;
       moveChanged = false;
