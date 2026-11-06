@@ -25,7 +25,7 @@ function pointSegmentDistance(point, a, b) {
  */
 export function sampleLineStrokePath(points, subdivisions = 12) {
   if (!Array.isArray(points) || points.length < 2) return { points: [], segmentIndices: [] };
-  const steps = Math.max(2, Math.min(64, Math.floor(Number(subdivisions) || 12)));
+  const steps = Math.max(2, Math.min(64, Math.floor(Number(subdivisions) || 24)));
   const sampled = [{ x: points[0].x, y: points[0].y }];
   const segmentIndices = [];
   if (points.length === 2) {
