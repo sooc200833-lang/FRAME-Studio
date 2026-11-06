@@ -878,6 +878,14 @@ function updateLineInspector() {
     return;
   }
   document.getElementById('lineColor').value = stroke.color;
+  document.getElementById('vectorBrushPreset').value = stroke.brushPreset || 'ink';
+  document.getElementById('vectorBrushOpacity').value = Math.round((stroke.opacity ?? 1) * 100);
+  document.getElementById('vectorBrushOpacityOut').value = Math.round((stroke.opacity ?? 1) * 100) + '%';
+  document.getElementById('vectorPressureCurve').value = Math.round((stroke.pressureCurve || 1) * 100);
+  document.getElementById('vectorPressureCurveOut').value = (stroke.pressureCurve || 1).toFixed(2);
+  document.getElementById('vectorMotionStyle').value = stroke.motionStyle || 'none';
+  document.getElementById('vectorMotionStrength').value = stroke.motionStrength ?? 3;
+  document.getElementById('vectorMotionStrengthOut').value = (stroke.motionStrength ?? 3) + 'px';
   document.getElementById('lineWidth').value = stroke.width;
   document.getElementById('lineWidthOut').value = stroke.width + 'px';
   const nodeStatus = document.getElementById('lineNodeStatus');
@@ -1152,11 +1160,12 @@ function bindViewportControls() {
 
 function bindControls() {
   document.getElementById('applyTone').onclick = applyMangaTone;
-  document.getElementById('vectorBrushPreset').onchange = event => { vectorBrushPreset = event.target.value; };
+  document.getElementById('vectorBrushPreset').onchange = event => { vectorBrushPreset = event.target.value; if (selectedStrokeIds.size || selectedStrokeId) applySelectedStyle({ brushPreset: vectorBrushPreset }); };
   document.getElementById('shapeKind').onchange = event => { shapeKind = event.target.value; };
-  document.getElementById('vectorPressureCurve').oninput = event => { vectorPressureCurve = Number(event.target.value) / 100; document.getElementById('vectorPressureCurveOut').value = vectorPressureCurve.toFixed(2); };
-  document.getElementById('vectorMotionStyle').onchange = event => { vectorMotionStyle = event.target.value; };
-  document.getElementById('vectorMotionStrength').oninput = event => { vectorMotionStrength = Number(event.target.value); document.getElementById('vectorMotionStrengthOut').value = vectorMotionStrength + 'px'; };
+  document.getElementById('vectorPressureCurve').oninput = event => { vectorPressureCurve = Number(event.target.value) / 100; document.getElementById('vectorPressureCurveOut').value = vectorPressureCurve.toFixed(2); if (selectedStrokeIds.size || selectedStrokeId) applySelectedStyle({ pressureCurve: vectorPressureCurve }); };
+  document.getElementById('vectorMotionStyle').onchange = event => { vectorMotionStyle = event.target.value; if (selectedStrokeIds.size || selectedStrokeId) applySelectedStyle({ motionStyle: vectorMotionStyle }); };
+  document.getElementById('vectorBrushOpacity').oninput = event => { const opacity = Number(event.target.value) / 100; document.getElementById('vectorBrushOpacityOut').value = event.target.value + '%'; if (selectedStrokeIds.size || selectedStrokeId) applySelectedStyle({ opacity }); };
+  document.getElementById('vectorMotionStrength').oninput = event => { vectorMotionStrength = Number(event.target.value); document.getElementById('vectorMotionStrengthOut').value = vectorMotionStrength + 'px'; if (selectedStrokeIds.size || selectedStrokeId) applySelectedStyle({ motionStrength: vectorMotionStrength }); };
   document.getElementById('selectedOutlineToggle').onchange = event => { showSelectedVectorHighlight = event.target.checked; render(); };
   ['toneSpacing', 'toneDotSize', 'toneAngle', 'toneOpacity'].forEach(id => {
     document.getElementById(id).oninput = updateToneControls;
