@@ -1,3 +1,4 @@
+import { sampleLineStrokePath } from './line/line-engine.js';
 import { Application, Graphics, Sprite, Texture } from 'pixi.js';
 import { applyBrushTexture } from './brush/brush-engine.js';
 import { getVectorGraphicsCacheEntry, pruneVectorGraphicsCache } from './renderer/vector-graphics-cache.js';
@@ -54,17 +55,11 @@ export class PixiStageRenderer {
 
   drawPath(graphics, points, color, width, alpha = 1) {
     if (!points?.length) return;
-    graphics.moveTo(points[0].x, points[0].y);
-    if (points.length === 2) {
-      graphics.lineTo(points[1].x, points[1].y);
-    } else {
-      for (let index = 1; index < points.length - 1; index++) {
-        const current = points[index];
-        const next = points[index + 1];
-        graphics.quadraticCurveTo(current.x, current.y, (current.x + next.x) / 2, (current.y + next.y) / 2);
-      }
-      const last = points[points.length - 1];
-      graphics.lineTo(last.x, last.y);
+    const path = sampleLineStrokePath(points);
+    if (!path.points.length) return;
+    graphics.moveTo(path.points[0].x, path.points[0].y);
+    for (let index = 1; index < path.points.length; index++) {
+      graphics.lineTo(path.points[index].x, path.points[index].y);
     }
     graphics.stroke({ color, width, alpha, cap: 'round', join: 'round' });
   }
