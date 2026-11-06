@@ -181,3 +181,18 @@ test('does not select a thick vector stroke that remains outside the selection b
   const stroke = { width: 6, points: [{ x: 0, y: 0 }, { x: 5, y: 0 }] };
   assert.equal(lineStrokeIntersectsPolygon(stroke, polygon), false);
 });
+
+
+test('scales vector stroke width perpendicular to a horizontal path under anisotropic transforms', () => {
+  const polygon = [{ x: -10, y: -10 }, { x: 40, y: -10 }, { x: 40, y: 20 }, { x: -10, y: 20 }];
+  const horizontal = { id: 'h', width: 8, points: [{ x: 0, y: 0 }, { x: 20, y: 0 }] };
+  const result = transformLineStrokesByMatrix([horizontal], polygon, [2, 0, 0, 0.5, 0, 0]);
+  assert.equal(result[0].width, 4);
+});
+
+test('scales vector stroke width perpendicular to a vertical path under anisotropic transforms', () => {
+  const polygon = [{ x: -10, y: -10 }, { x: 20, y: -10 }, { x: 20, y: 40 }, { x: -10, y: 40 }];
+  const vertical = { id: 'v', width: 8, points: [{ x: 0, y: 0 }, { x: 0, y: 20 }] };
+  const result = transformLineStrokesByMatrix([vertical], polygon, [2, 0, 0, 0.5, 0, 0]);
+  assert.equal(result[0].width, 16);
+});
