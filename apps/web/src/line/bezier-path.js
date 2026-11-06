@@ -208,7 +208,9 @@ export function removeBezierAnchor(path, anchorIndex) {
   const ratio = total > Number.EPSILON
     ? incomingLength / total
     : (chordTotal > Number.EPSILON ? chordIncoming / chordTotal : 0.5);
-  const split = Math.max(0.05, Math.min(0.95, ratio));
+  // Match insertBezierAnchor's supported parameter range; a 0.05 clamp
+  // prevented exact reconstruction for anchors inserted near segment ends.
+  const split = Math.max(0.001, Math.min(0.999, ratio));
   const control1 = {
     x: start.x + (incoming.control1.x - start.x) / split,
     y: start.y + (incoming.control1.y - start.y) / split,
