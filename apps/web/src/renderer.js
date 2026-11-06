@@ -4,6 +4,7 @@ import { Application, Graphics, Sprite, Texture } from 'pixi.js';
 import { applyBrushTexture } from './brush/brush-engine.js';
 import { getVectorGraphicsCacheEntry, pruneVectorGraphicsCache } from './renderer/vector-graphics-cache.js';
 import { getPolygonBounds, getPolygonTransformHandles } from './selection/selection.js';
+import { createRendererInitOptions, initializeWithBackendFallback } from './renderer/renderer-options.js';
 
 export class PixiStageRenderer {
   constructor(width, height) {
@@ -24,18 +25,31 @@ export class PixiStageRenderer {
   }
 
   async init(host) {
-    const app = new Application();
-    await app.init({
-      width: this.width,
-      height: this.height,
-      backgroundColor: 0xf4f0e8,
-      antialias: true,
-      autoDensity: true,
-      resolution: Math.min(window.devicePixelRatio || 1, 2),
-      preference: 'webgl',
-      powerPreference: 'high-performance',
+    // A backend can pass capability detection but still fail while creating its
+    // context/device. Retry independently and retain the last useful diagnostics.
+    const initialized = await initializeWithBackendFallback(async backend => {
+      const candidate = new Application();
+      try {
+        await candidate.init(createRendererInitOptions({
+          width: this.width,
+          height: this.height,
+          devicePixelRatio: window.devicePixelRatio || 1,
+          backend,
+        }));
+        return candidate;
+      } catch (error) {
+        console.warn(`FRAME Studio: ${backend} renderer initialization failed.`, error);
+        try {
+          candidate.destroy({ removeView: true }, { children: true, texture: true, textureSource: true });
+        } catch {
+          // Initialization may have failed before PixiJS had resources to destroy.
+        }
+        throw error;
+      }
     });
 
+    const app = initialized.value;
+    this.rendererBackend = initialized.backend;
     this.app = app;
     app.canvas.className = 'pixi-canvas';
     app.canvas.setAttribute('aria-label', 'FRAME Studio drawing canvas');
