@@ -1865,10 +1865,10 @@ function bindCanvasEvents() {
     if (tool === 'select' && nodeDragging && selectedNodeIndex !== null) {
       const stroke = selectedStroke();
       if (stroke?.points[selectedNodeIndex]) {
-        const points = stroke.points.map(node => ({ x: node.x, y: node.y }));
+        const points = stroke.points.map(node => ({ ...node }));
         const previous = points[selectedNodeIndex];
         if (previous.x !== point.x || previous.y !== point.y) nodeDragChanged = true;
-        points[selectedNodeIndex] = { x: point.x, y: point.y };
+        points[selectedNodeIndex] = { ...previous, x: point.x, y: point.y };
         const index = vectorStrokes.findIndex(item => item.id === selectedStrokeId);
         vectorStrokes[index] = { ...stroke, points };
         render();
@@ -1953,8 +1953,6 @@ function bindCanvasEvents() {
       drawingPoints = points;
       renderer.previewStroke(points, Number.parseInt(color.slice(1), 16), size);
       return;
-    }
-
     }
 
     if (tool === 'vector') {
