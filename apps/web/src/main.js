@@ -505,7 +505,7 @@ async function loadTimelineFrame(frameId, saveCurrent = true) {
     points: stroke.points.map(point => ({ x: point.x, y: point.y })),
     ...(stroke.bezierPath ? { bezierPath: {
       ...stroke.bezierPath,
-      anchorModes: stroke.bezierPath.anchorModes ? [...stroke.bezierPath.anchorModes] : undefined,
+      anchorModes: stroke.bezierPath.anchorModes ? [...stroke.bezierPath.anchorModes] : stroke.bezierPath.anchors.map((_, index) => index > 0 && index < stroke.bezierPath.anchors.length - 1 ? 'smooth' : 'corner'),
       anchors: stroke.bezierPath.anchors.map(point => ({ ...point })),
       segments: stroke.bezierPath.segments.map(segment => ({ control1: { ...segment.control1 }, control2: { ...segment.control2 } })),
     } } : {}),
@@ -879,7 +879,7 @@ function updateLineInspector() {
   const anchorModeButton = document.getElementById('toggleBezierAnchorMode');
   if (anchorModeButton) {
     const hasAnchor = Boolean(stroke.bezierPath && Number.isInteger(selectedBezierAnchor) && selectedBezierAnchor > 0 && selectedBezierAnchor < stroke.bezierPath.anchors.length - 1);
-    const mode = hasAnchor ? (stroke.bezierPath.anchorModes?.[selectedBezierAnchor] || 'corner') : 'corner';
+    const mode = hasAnchor ? (stroke.bezierPath.anchorModes?.[selectedBezierAnchor] || 'smooth') : 'corner';
     anchorModeButton.disabled = !hasAnchor;
     anchorModeButton.textContent = mode === 'smooth' ? '모서리 앵커로 변경' : '부드러운 앵커로 변경';
   }
