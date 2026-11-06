@@ -153,3 +153,24 @@ test('hit testing and translation use editable cubic geometry when present', asy
   assert.deepEqual(moved.bezierPath.segments[0].control1, { x: 42, y: 92 });
   assert.deepEqual(stroke.bezierPath.anchors[0], { x: 0, y: 0 });
 });
+
+test('shared vector render segments use pressure, width profile and opacity for export and preview', async () => {
+  const { buildVectorStrokeSegments } = await import('../apps/web/src/line/vector-rendering.js');
+  const stroke = createLineStroke({
+    id: 'render-profile',
+    points: [
+      { x: 0, y: 0, pressure: 1 },
+      { x: 10, y: 0, pressure: 1 },
+      { x: 20, y: 0, pressure: 1 },
+    ],
+    width: 10,
+    brushPreset: 'ink',
+    opacity: 0.4,
+    pressureProfile: [0.5, 1.5, 0.5],
+  });
+  const segments = buildVectorStrokeSegments(stroke);
+  assert.equal(segments.length, 2);
+  assert.ok(segments[0].width < segments[1].width);
+  assert.equal(segments[0].alpha, 0.4);
+  assert.equal(segments[0].skip, false);
+});
