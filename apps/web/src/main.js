@@ -9,7 +9,7 @@ import { createSmudgeSession } from './brush/smudge-engine.js';
 import { normalizeBrushBlendMode } from './brush/blend-modes.js';
 import { expandRegionMask, findConnectedRegion } from './fill/flood-fill.js';
 import { animateLineStrokes, lineBoilPhase } from './line/line-boil.js';
-import { activeFrame, addFrame, createTimeline, deleteFrame, frameAtTime, getOnionSkin, selectFrame, updateFrameCels, updateFrameStrokes, updateFrameTransformCels } from './animation/timeline.js';
+import { activeFrame, addFrame, applyTimelineFps, createTimeline, deleteFrame, frameAtTick, frameHold, getOnionSkin, selectFrame, setFrameHold, totalTicks, updateFrameCels, updateFrameStrokes, updateFrameTransformCels } from './animation/timeline.js';
 import { normalizeRasterCels, normalizeRasterTransformCels } from './animation/frame-cels.js';
 import { applyMatrix, evaluateMotionTrack, invertMatrix, isIdentityMotion, keyframeAt, motionMatrix, removeKeyframe, setKeyframe } from './animation/motion.js';
 import { cloneRasterTransformRecords, composeRasterTransformStack, createTranslationMatrix, createRotationMatrix, rasterizeRasterTransformStack } from './selection/raster-transform.js';
@@ -77,7 +77,10 @@ let animationFrame = 0;
 let lastAnimationPaint = 0;
 let playbackActive = false;
 let playbackStartedAt = 0;
-let playbackStartOffset = 0;
+let playbackStartTick = 0;
+// Fractional playhead while playing, so movement keyframes animate smoothly
+// even while a held drawing stays on screen.
+let playbackTickPosition = null;
 let playbackRaf = 0;
 
 const paletteGroups = {
@@ -147,13 +150,12 @@ let activeGroupId = null;
 
 function groupFor(layer) { return layerGroups.find(group => group.id === layer.groupId) || null; }
 function applyGroupState() {
-  const frameIds = timeline.frames.map(frame => frame.id);
-  const frameIndex = Math.max(0, frameIds.indexOf(timeline.activeFrameId));
+  const tick = playbackActive && playbackTickPosition !== null ? playbackTickPosition : timeline.playhead;
   for (const layer of layers) {
     const group = groupFor(layer);
-    // Movement keyframes are evaluated at the active frame and applied as a
+    // Movement keyframes are evaluated at the playhead and applied as a
     // presentation transform; the layer's canvas pixels stay untouched.
-    const motion = evaluateMotionTrack(layer.motionTrack, frameIds, frameIndex);
+    const motion = evaluateMotionTrack(layer.motionTrack, tick);
     layer.renderMotion = motion;
     layer.renderMatrix = isIdentityMotion({ ...motion, opacity: 1 }) ? null : motionMatrix(motion, W, H);
     layer.renderVisible = layer.visible && (!group || group.visible);
@@ -547,37 +549,103 @@ async function loadTimelineFrame(frameId, saveCurrent = true) {
   render(layers.map((_, index) => index));
 }
 
+function timelineTickWidth() {
+  return window.innerWidth <= 820 ? 30 : 40;
+}
+
 function drawTimeline() {
   const strip = document.getElementById('frameStrip');
   if (!strip) return;
-  strip.replaceChildren();
+  const tickWidth = timelineTickWidth();
+  const ticks = totalTicks(timeline);
+  const lane = document.createElement('div');
+  lane.className = 'lane';
+  lane.style.width = (ticks * tickWidth + tickWidth * 2) + 'px';
+  lane.style.setProperty('--tick', tickWidth + 'px');
+
+  const ruler = document.createElement('div');
+  ruler.className = 'tick-ruler';
+  for (let tick = 0; tick < ticks; tick++) {
+    const mark = document.createElement('span');
+    mark.className = 'tick-mark' + (tick % 4 === 0 ? ' major' : '');
+    mark.style.left = (tick * tickWidth) + 'px';
+    if (tick % 4 === 0) mark.textContent = String(tick + 1);
+    ruler.append(mark);
+  }
+  for (const keyframe of layers[active]?.motionTrack || []) {
+    const diamond = document.createElement('i');
+    diamond.className = 'key-diamond';
+    diamond.title = `움직임 키프레임 · 프레임 ${keyframe.tick + 1}`;
+    diamond.style.left = ((keyframe.tick + 0.5) * tickWidth) + 'px';
+    ruler.append(diamond);
+  }
+  lane.append(ruler);
+
   let activeCell = null;
+  let cursor = 0;
   timeline.frames.forEach((frame, index) => {
-    const button = document.createElement('button');
-    button.className = 'frame-cell' + (frame.id === timeline.activeFrameId ? ' active' : '');
-    button.dataset.frameId = frame.id;
+    const hold = frameHold(frame);
+    const cell = document.createElement('div');
+    cell.className = 'frame-cell' + (frame.id === timeline.activeFrameId ? ' active' : '');
+    cell.dataset.frameId = frame.id;
+    cell.style.left = (cursor * tickWidth) + 'px';
+    cell.style.width = (hold * tickWidth - 3) + 'px';
     const label = document.createElement('span');
-    label.textContent = String(index + 1);
-    button.append(label);
-    button.title = `프레임 ${index + 1} · ${frame.strokes.length}개 선`;
-    button.setAttribute('aria-label', `프레임 ${index + 1}`);
-    applyFrameThumbnail(button, frame.id);
-    if (keyframeAt(layers[active]?.motionTrack, frame.id)) {
-      const diamond = document.createElement('i');
-      diamond.className = 'key-diamond';
-      diamond.title = '움직임 키프레임';
-      button.append(diamond);
+    label.textContent = hold > 1 ? `${index + 1} · ${hold}` : String(index + 1);
+    cell.append(label);
+    cell.title = `그림 ${index + 1} · ${hold}프레임 동안 유지 · ${frame.strokes.length}개 선`;
+    cell.setAttribute('role', 'button');
+    cell.setAttribute('aria-label', `그림 ${index + 1}, ${hold}프레임`);
+    applyFrameThumbnail(cell, frame.id);
+    if (frame.id === timeline.activeFrameId) {
+      const grip = document.createElement('span');
+      grip.className = 'hold-grip';
+      grip.title = '끌어서 그림 길이 조절';
+      cell.append(grip);
+      activeCell = cell;
     }
-    button.onclick = () => { if (frame.id !== timeline.activeFrameId) loadTimelineFrame(frame.id); };
-    if (frame.id === timeline.activeFrameId) activeCell = button;
-    strip.append(button);
+    lane.append(cell);
+    cursor += hold;
   });
+
+  const playhead = document.createElement('div');
+  playhead.className = 'playhead';
+  lane.append(playhead);
+  strip.replaceChildren(lane);
+  positionPlayhead();
+
   if (activeCell && strip.dataset.activeFrameId !== timeline.activeFrameId) {
     strip.dataset.activeFrameId = timeline.activeFrameId;
     activeCell.scrollIntoView({ block: 'nearest', inline: 'nearest' });
   }
+  const holdOut = document.getElementById('holdOut');
+  if (holdOut) holdOut.textContent = frameHold(activeFrame(timeline)) + '프레임';
+}
+
+function positionPlayhead() {
+  const tick = playbackActive && playbackTickPosition !== null ? playbackTickPosition : timeline.playhead;
+  const playhead = document.querySelector('#frameStrip .playhead');
+  if (playhead) playhead.style.left = ((Math.floor(tick) + 0.5) * timelineTickWidth()) + 'px';
   const label = document.getElementById('frameCounter');
-  if (label) label.textContent = `${timeline.frames.findIndex(frame => frame.id === timeline.activeFrameId) + 1} / ${timeline.frames.length}`;
+  if (label) label.textContent = `${Math.floor(tick) + 1} / ${totalTicks(timeline)}`;
+}
+
+function seekToTick(tick) {
+  if (playbackActive) setPlaybackEnabled(false);
+  if (loadingFrame) return;
+  const clamped = Math.max(0, Math.min(totalTicks(timeline) - 1, Math.floor(tick)));
+  const frame = frameAtTick(timeline, clamped);
+  timeline.playhead = clamped;
+  if (frame && frame.id !== timeline.activeFrameId) loadTimelineFrame(frame.id);
+  else render();
+}
+
+function changeActiveHold(hold) {
+  const frame = activeFrame(timeline);
+  if (!frame) return;
+  if (playbackActive) setPlaybackEnabled(false);
+  setFrameHold(timeline, frame.id, hold);
+  render();
 }
 
 function setPlaybackEnabled(enabled) {
@@ -592,14 +660,14 @@ function setPlaybackEnabled(enabled) {
   if (enabled) {
     if (boilEnabled) setBoilEnabled(false);
     saveActiveFrame();
-    const activeIndex = timeline.frames.findIndex(frame => frame.id === timeline.activeFrameId);
-    playbackStartOffset = timeline.frames.slice(0, Math.max(0, activeIndex))
-      .reduce((sum, frame) => sum + frame.durationMs, 0);
+    playbackStartTick = timeline.playhead;
+    playbackTickPosition = timeline.playhead;
     playbackStartedAt = performance.now();
     if (!playbackRaf) playbackRaf = requestAnimationFrame(playbackTick);
   } else {
     if (playbackRaf) cancelAnimationFrame(playbackRaf);
     playbackRaf = 0;
+    playbackTickPosition = null;
     if (!loadingFrame) saveActiveFrame();
     render();
   }
@@ -610,16 +678,27 @@ function playbackTick(timestamp) {
     playbackRaf = 0;
     return;
   }
-  const elapsed = timestamp - playbackStartedAt + playbackStartOffset;
-  const frame = frameAtTime(timeline, elapsed);
-  if (!loadingFrame && frame && frame.id !== timeline.activeFrameId) loadTimelineFrame(frame.id);
+  const total = totalTicks(timeline);
+  const position = (playbackStartTick + Math.max(0, timestamp - playbackStartedAt) * timeline.fps / 1000) % total;
+  playbackTickPosition = position;
+  timeline.playhead = Math.floor(position);
+  const frame = frameAtTick(timeline, position);
+  if (!loadingFrame && frame && frame.id !== timeline.activeFrameId) {
+    loadTimelineFrame(frame.id);
+  } else if (layers.some(layer => layer.motionTrack?.length)) {
+    applyGroupState();
+    renderer.updateLayerTransforms(layers);
+  }
+  positionPlayhead();
   playbackRaf = requestAnimationFrame(playbackTick);
 }
 
 function updateTimelineFPS(value) {
-  const fps = Math.max(1, Math.min(60, Number(value) || 12));
-  timeline.fps = fps;
-  timeline.frames.forEach(frame => { frame.durationMs = 1000 / fps; });
+  if (playbackActive && playbackTickPosition !== null) {
+    playbackStartTick = playbackTickPosition;
+    playbackStartedAt = performance.now();
+  }
+  const fps = applyTimelineFps(timeline, value);
   document.getElementById('fpsOut').value = fps + ' FPS';
 }
 
@@ -1987,29 +2066,67 @@ function stepFrame(offset) {
 function bindTimelineScrub() {
   const strip = document.getElementById('frameStrip');
   let scrubbing = false;
-  const frameUnder = event => {
-    const rect = strip.getBoundingClientRect();
-    return document.elementFromPoint(event.clientX, rect.top + rect.height / 2)?.closest('.frame-cell');
+  let holdDrag = null;
+  const tickFromEvent = event => {
+    const lane = strip.querySelector('.lane');
+    if (!lane) return 0;
+    return Math.floor((event.clientX - lane.getBoundingClientRect().left) / timelineTickWidth());
   };
   strip.addEventListener('pointerdown', event => {
-    // Fingers scroll the strip natively; pen and mouse drags scrub frames.
-    const cell = event.target.closest('.frame-cell');
-    if (event.pointerType === 'touch' || !cell) return;
+    const grip = event.target.closest('.hold-grip');
+    if (grip) {
+      // Drag the active drawing's right edge to change how long it is held.
+      event.stopPropagation();
+      event.preventDefault();
+      const frame = activeFrame(timeline);
+      const cell = grip.closest('.frame-cell');
+      holdDrag = { pointerId: event.pointerId, startX: event.clientX, startHold: frameHold(frame), hold: frameHold(frame), cell, moved: false };
+      strip.setPointerCapture(event.pointerId);
+      if (playbackActive) setPlaybackEnabled(false);
+      return;
+    }
+    // Fingers scroll the strip natively (a tap still seeks via click); pen and
+    // mouse drags scrub the playhead.
+    if (event.pointerType === 'touch' || !event.target.closest('.lane')) return;
     scrubbing = true;
-    // Pointer capture retargets the following click to the strip, so select
-    // the pressed frame here instead of relying on the cell's click handler.
     strip.setPointerCapture(event.pointerId);
-    if (playbackActive) setPlaybackEnabled(false);
-    if (!loadingFrame && cell.dataset.frameId !== timeline.activeFrameId) loadTimelineFrame(cell.dataset.frameId);
+    seekToTick(tickFromEvent(event));
   });
   strip.addEventListener('pointermove', event => {
+    if (holdDrag?.pointerId === event.pointerId) {
+      const hold = Math.max(1, holdDrag.startHold + Math.round((event.clientX - holdDrag.startX) / timelineTickWidth()));
+      holdDrag.moved = holdDrag.moved || Math.abs(event.clientX - holdDrag.startX) > 3;
+      if (hold !== holdDrag.hold) {
+        holdDrag.hold = hold;
+        holdDrag.cell.style.width = (hold * timelineTickWidth() - 3) + 'px';
+        holdDrag.cell.querySelector('span').textContent = hold + '프레임';
+      }
+      return;
+    }
     if (!scrubbing || loadingFrame) return;
-    const cell = frameUnder(event);
-    if (cell && cell.dataset.frameId !== timeline.activeFrameId) loadTimelineFrame(cell.dataset.frameId);
+    const tick = tickFromEvent(event);
+    if (tick !== timeline.playhead) seekToTick(tick);
   });
-  const stop = () => { scrubbing = false; };
+  const stop = event => {
+    if (holdDrag?.pointerId === event.pointerId) {
+      const drag = holdDrag;
+      holdDrag = null;
+      // Swallow the click that follows a grip drag.
+      strip.dataset.suppressClick = '1';
+      setTimeout(() => { delete strip.dataset.suppressClick; }, 0);
+      if (event.type === 'pointerup' && drag.hold !== drag.startHold) changeActiveHold(drag.hold);
+      else render();
+      return;
+    }
+    scrubbing = false;
+  };
   strip.addEventListener('pointerup', stop);
   strip.addEventListener('pointercancel', stop);
+  strip.addEventListener('click', event => {
+    if (strip.dataset.suppressClick || event.target.closest('.hold-grip') || !event.target.closest('.lane')) return;
+    const tick = tickFromEvent(event);
+    if (tick !== timeline.playhead || playbackActive) seekToTick(tick);
+  });
 }
 
 function bindWorkspaceUi() {
@@ -2073,6 +2190,8 @@ function bindWorkspaceUi() {
 
   document.getElementById('eyedropper').onclick = () => setEyedropperArmed(!eyedropperArmed);
   document.getElementById('zoomLevel').onclick = () => document.getElementById('resetViewport').click();
+  document.getElementById('holdMinus').onclick = () => changeActiveHold(frameHold(activeFrame(timeline)) - 1);
+  document.getElementById('holdPlus').onclick = () => changeActiveHold(frameHold(activeFrame(timeline)) + 1);
   document.getElementById('framePrev').onclick = () => stepFrame(-1);
   document.getElementById('frameNext').onclick = () => stepFrame(1);
   bindTimelineScrub();
@@ -2096,12 +2215,8 @@ const MOTION_FIELDS = [
   { id: 'motionOpacity', key: 'opacity', toInput: value => value * 100, fromInput: value => value / 100, format: value => Math.round(value * 100) + '%' },
 ];
 
-function activeFrameIndex() {
-  return Math.max(0, timeline.frames.findIndex(frame => frame.id === timeline.activeFrameId));
-}
-
 function currentLayerMotion(layer = layers[active]) {
-  return evaluateMotionTrack(layer?.motionTrack, timeline.frames.map(frame => frame.id), activeFrameIndex());
+  return evaluateMotionTrack(layer?.motionTrack, timeline.playhead);
 }
 
 function pushMotionHistory(layer, before, after) {
@@ -2149,8 +2264,8 @@ function syncMotionUi() {
     document.getElementById(field.id).value = String(field.toInput(motion[field.key]));
     document.getElementById(field.id + 'Out').textContent = field.format(motion[field.key]);
   }
-  const keyframe = keyframeAt(layer.motionTrack, timeline.activeFrameId);
-  const keyCount = timeline.frames.filter(frame => keyframeAt(layer.motionTrack, frame.id)).length;
+  const keyframe = keyframeAt(layer.motionTrack, timeline.playhead);
+  const keyCount = layer.motionTrack?.length || 0;
   document.getElementById('motionEasing').value = keyframe?.easing || 'easeInOut';
   document.getElementById('motionEasing').disabled = !keyframe;
   document.getElementById('motionKeyDelete').disabled = !keyframe;
@@ -2170,7 +2285,7 @@ function bindMotionControls() {
       const layer = layers[active];
       if (!motionSliderEdit) motionSliderEdit = { id: field.id, layer, before: layer.motionTrack || [] };
       const value = field.fromInput(Number(input.value));
-      layer.motionTrack = setKeyframe(motionSliderEdit.before, timeline.activeFrameId, { ...currentLayerMotionFrom(motionSliderEdit.before), [field.key]: value });
+      layer.motionTrack = setKeyframe(motionSliderEdit.before, timeline.playhead, { ...currentLayerMotionFrom(motionSliderEdit.before), [field.key]: value });
       document.getElementById(field.id + 'Out').textContent = field.format(value);
       render();
     });
@@ -2183,16 +2298,16 @@ function bindMotionControls() {
   }
   document.getElementById('motionEasing').onchange = event => {
     const layer = layers[active];
-    if (!keyframeAt(layer.motionTrack, timeline.activeFrameId)) return;
-    commitMotionTrack(layer, setKeyframe(layer.motionTrack, timeline.activeFrameId, {}, event.target.value));
+    if (!keyframeAt(layer.motionTrack, timeline.playhead)) return;
+    commitMotionTrack(layer, setKeyframe(layer.motionTrack, timeline.playhead, {}, event.target.value));
   };
   document.getElementById('motionKeyAdd').onclick = () => {
     const layer = layers[active];
-    commitMotionTrack(layer, setKeyframe(layer.motionTrack, timeline.activeFrameId, currentLayerMotion(layer)));
+    commitMotionTrack(layer, setKeyframe(layer.motionTrack, timeline.playhead, currentLayerMotion(layer)));
   };
   document.getElementById('motionKeyDelete').onclick = () => {
     const layer = layers[active];
-    commitMotionTrack(layer, removeKeyframe(layer.motionTrack, timeline.activeFrameId));
+    commitMotionTrack(layer, removeKeyframe(layer.motionTrack, timeline.playhead));
   };
   document.getElementById('motionClear').onclick = () => {
     commitMotionTrack(layers[active], []);
@@ -2200,7 +2315,7 @@ function bindMotionControls() {
 }
 
 function currentLayerMotionFrom(track) {
-  return evaluateMotionTrack(track, timeline.frames.map(frame => frame.id), activeFrameIndex());
+  return evaluateMotionTrack(track, timeline.playhead);
 }
 
 function createShapePoints(kind, start, end) {
@@ -2315,7 +2430,7 @@ function bindCanvasEvents() {
       const dy = point.y - motionDrag.start.y;
       if (!motionDrag.moved && Math.hypot(dx, dy) < 1) return;
       motionDrag.moved = true;
-      motionDrag.layer.motionTrack = setKeyframe(motionDrag.before, timeline.activeFrameId, {
+      motionDrag.layer.motionTrack = setKeyframe(motionDrag.before, timeline.playhead, {
         ...motionDrag.motion, x: motionDrag.motion.x + dx, y: motionDrag.motion.y + dy,
       });
       render();
@@ -3163,6 +3278,10 @@ function bindKeyboardShortcuts() {
     }
     if (event.key === 'Escape' && motionEditing) {
       setMotionEditing(false);
+      return;
+    }
+    if ((event.key === ',' || event.key === '.') && !down) {
+      seekToTick(timeline.playhead + (event.key === '.' ? 1 : -1));
       return;
     }
     if (key === 'm' && !down) {

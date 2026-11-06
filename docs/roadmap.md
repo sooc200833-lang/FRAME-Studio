@@ -87,13 +87,19 @@ The browser drawing engine uses perfect-freehand 1.2.3 to generate pressure-awar
 - [ ] Physical iPad/Apple Pencil validation of gestures and palm handling.
 
 ## Movement keyframes — v1.2
-- [x] Per-layer movement track: position, rotation, scale, opacity keyframes attached to frame IDs.
+- [x] Per-layer movement track: position, rotation, scale, opacity keyframes (absolute ticks since v1.3).
 - [x] Easing per segment (부드럽게, 일정하게, 점점 빠르게, 점점 느리게, 멈췄다 바뀜); geometric scale interpolation.
 - [x] Applied as a presentation transform in PixiJS, export/composite, and painting input (pen/eraser/smudge map through the inverse transform).
 - [x] 움직임 panel, canvas drag in movement-edit mode, timeline keyframe markers, separate undo/redo while editing movement.
 - [ ] Fill, selection transforms and masks editing on moved layers still work in canvas space (fill is blocked with a message).
 - [ ] Vector lines are not on layers yet, so they do not follow layer movement.
-- [ ] Held cels / clip durations so one drawing can span many frames without duplicating it.
+- [x] Held drawings (see v1.3).
+
+## Drawing holds and tick timeline — v1.3
+- [x] Each drawing has a hold (1–96 frames); playback, frame counter and timeline use frame ticks.
+- [x] Timeline lane with tick ruler, playhead, drawings sized by hold, drag the active drawing's right edge or use − ＋ to change its hold.
+- [x] Movement keyframes live at absolute ticks, so a held drawing keeps moving; playback evaluates movement at fractional ticks for smooth motion.
+- [ ] Multiple tracks (one per layer) with independent drawing timing.
 
 ## Current next action
 
