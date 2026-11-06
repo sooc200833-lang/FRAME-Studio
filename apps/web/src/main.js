@@ -10,7 +10,7 @@ import { normalizeRasterCels, normalizeRasterTransformCels } from './animation/f
 import { cloneRasterTransformRecords, composeRasterTransformStack, createTranslationMatrix, createRotationMatrix, rasterizeRasterTransformStack } from './selection/raster-transform.js';
 import { containsSelectionPoint, hitTestSelectionHandle, moveSelectionRect, normalizeSelectionRect, lineStrokeIntersectsPolygon, pointInPolygon, resizeSelectionRectFromHandle, resolveSelectionTargets, transformLineStrokes, transformLineStrokesByMatrix, transformPolygon, translatePolygon, getSelectionPreviewTransform, getPolygonBounds, getPolygonCentroid, hitTestPolygonTransformHandle, resizePolygonFromHandle } from './selection/selection.js';
 import { convertLegacyPointsToBezierPath } from './line/legacy-bezier-bridge.js';
-import { moveBezierHandle, sampleBezierPath } from './line/bezier-path.js';
+import { moveBezierAnchor, moveBezierHandle, sampleBezierPath } from './line/bezier-path.js';
 
 import {
   createLineStroke,
@@ -147,7 +147,9 @@ let nodeMoveSnapshot = null;
 let nodeDragChanged = false;
 let nodeEditEnabled = false;
 let selectedBezierHandle = null;
+let selectedBezierAnchor = null;
 let bezierHandleDrag = null;
+let bezierAnchorDrag = null;
 
 function rasterizeActiveLayerTransforms() {
   const layer = layers[active];
@@ -445,7 +447,7 @@ function render(dirtyIndices = [], displayStrokes = vectorStrokes) {
   }
   applyGroupState();
   if (!loadingFrame) updateFrameStrokes(timeline, timeline.activeFrameId, vectorStrokes);
-  renderer.sync(layers, dirtyIndices, displayStrokes, selectedStrokeId, onionEnabled ? getOnionSkin(timeline) : [], selectionRect, selectionPolygon, selectedNodeIndex, nodeEditEnabled, selectedBezierHandle);
+  renderer.sync(layers, dirtyIndices, displayStrokes, selectedStrokeId, onionEnabled ? getOnionSkin(timeline) : [], selectionRect, selectionPolygon, selectedNodeIndex, nodeEditEnabled, selectedBezierHandle, selectedBezierAnchor);
   document.getElementById('status').textContent = tool.toUpperCase();
   drawLayers();
   updateLayerInspector();
@@ -1463,6 +1465,7 @@ function bindControls() {
     nodeEditEnabled = event.target.checked;
     selectedNodeIndex = null;
     selectedBezierHandle = null;
+    selectedBezierAnchor = null;
     const stroke = selectedStroke();
     if (nodeEditEnabled && stroke && !stroke.bezierPath) {
       commitLineHistory(lineSnapshot());
@@ -1603,6 +1606,24 @@ function bindCanvasEvents() {
       if (nodeMode && selectedStroke() && selectedStrokeId && (hit?.id === selectedStrokeId || (!hit && selectedStroke().bezierPath))) {
         const stroke = selectedStroke();
         const path = stroke.bezierPath || convertLegacyPointsToBezierPath(stroke.points, stroke.id);
+        let nearestAnchor = -1, anchorDistance = 15;
+        path.anchors.forEach((anchor, anchorIndex) => {
+          const nextDistance = Math.hypot(point.x - anchor.x, point.y - anchor.y);
+          if (nextDistance < anchorDistance) { anchorDistance = nextDistance; nearestAnchor = anchorIndex; }
+        });
+        if (nearestAnchor >= 0) {
+          nodeMoveSnapshot = lineSnapshot();
+          nodeDragChanged = !stroke.bezierPath;
+          const index = vectorStrokes.findIndex(item => item.id === selectedStrokeId);
+          vectorStrokes[index] = { ...stroke, bezierPath: path };
+          selectedBezierAnchor = nearestAnchor;
+          selectedBezierHandle = null;
+          bezierAnchorDrag = { anchorIndex: nearestAnchor };
+          nodeDragging = true;
+          down = false;
+          render();
+          return;
+        }
         let nearest = null, distance = 17;
         path.segments.forEach((segment, segmentIndex) => {
           [['out', segment.control1], ['in', segment.control2]].forEach(([handle, control]) => {
@@ -1652,6 +1673,7 @@ function bindCanvasEvents() {
       selectedStrokeId = hit?.id || null;
       selectedNodeIndex = null;
       selectedBezierHandle = null;
+      selectedBezierAnchor = null;
       const newlySelected = selectedStroke();
       if (nodeEditEnabled && newlySelected && !newlySelected.bezierPath) {
         commitLineHistory(lineSnapshot());
@@ -1686,13 +1708,27 @@ function bindCanvasEvents() {
   inputSurface.addEventListener('pointermove', event => {
     const point = position(event);
 
+    if (tool === 'select' && bezierAnchorDrag) {
+      const stroke = selectedStroke();
+      if (stroke?.bezierPath) {
+        const index = vectorStrokes.findIndex(item => item.id === selectedStrokeId);
+        vectorStrokes[index] = {
+          ...stroke,
+          bezierPath: moveBezierAnchor(stroke.bezierPath, bezierAnchorDrag.anchorIndex, point),
+        };
+        nodeDragChanged = true;
+        render();
+      }
+      return;
+    }
+
     if (tool === 'select' && bezierHandleDrag) {
       const stroke = selectedStroke();
       if (stroke?.bezierPath) {
         const index = vectorStrokes.findIndex(item => item.id === selectedStrokeId);
         vectorStrokes[index] = {
           ...stroke,
-          bezierPath: moveBezierHandle(stroke.bezierPath, bezierHandleDrag.segmentIndex, bezierHandleDrag.handle, point, { mirrorOpposite: Boolean(event.shiftKey) }),
+          bezierPath: moveBezierHandle(stroke.bezierPath, bezierHandleDrag.segmentIndex, bezierHandleDrag.handle, point, { mirrorOpposite: Boolean(event.shiftKey || document.getElementById('linkBezierHandles')?.checked) }),
         };
         nodeDragChanged = true;
         render();
@@ -1944,14 +1980,16 @@ function bindCanvasEvents() {
       return;
     }
 
-    if (tool === 'select' && bezierHandleDrag && nodeMoveSnapshot) {
+    if (tool === 'select' && (bezierHandleDrag || bezierAnchorDrag) && nodeMoveSnapshot) {
       if (event.type === 'pointercancel') {
         restoreLineStrokeSnapshot(vectorStrokes, nodeMoveSnapshot);
         selectedBezierHandle = null;
+        selectedBezierAnchor = null;
       } else if (nodeDragChanged && lineStrokeSnapshotChanged(vectorStrokes, nodeMoveSnapshot)) {
         commitLineHistory(nodeMoveSnapshot);
       }
       bezierHandleDrag = null;
+      bezierAnchorDrag = null;
       nodeDragging = false;
       nodeMoveSnapshot = null;
       nodeDragChanged = false;
