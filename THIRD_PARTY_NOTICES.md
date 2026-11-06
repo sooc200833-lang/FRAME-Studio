@@ -82,7 +82,47 @@ See [Open-source components and reference projects](./docs/open-source.md).
 
 Evaluated candidates include Paper.js (MIT), Three.js (MIT), libmypaint (ISC), miniPaint (MIT), Pencil2D (GPL-2.0), and MyPaint (GPL family). Klecks, Quickdraw, and Graphite are also architecture references. Listing a project here is not a claim that it is included in a build.
 
-## Evaluated upstream projects (not bundled)\n\n### Klecks\n\n- Repository: https://github.com/bitbof/klecks\n- License: MIT (upstream `LICENSE`)\n- Usage: architecture and workflow reference only; no Klecks source files are copied or bundled.\n\n### Quickdraw\n\n- Repository: https://github.com/quickdrawjs/quickdraw\n- License: MIT (upstream `LICENSE`)\n- Usage: input/interaction reference. FRAME Studio independently adapts velocity-derived pressure for mouse vector strokes; no Quickdraw source files are copied or bundled.\n\n### Graphite\n\n- Repository: https://github.com/GraphiteEditor/Graphite\n- License: repository contains Apache-2.0 and MIT components; each component requires separate review.\n- Usage: architecture reference only; not bundled.\n\n### Additional reviewed projects (not bundled)\n\n- [miniPaint](https://github.com/viliusle/miniPaint) — MIT; browser editor workflow reference only.\n- [Pencil2D](https://github.com/pencil2d/pencil) — GPL-2.0; animation workflow reference only, no source copied.\n- [MyPaint](https://github.com/mypaint/mypaint) — GPL family; brush workflow reference only, no source copied.\n\n## Required process when adopting a dependency
+## Reviewed upstream projects (not bundled)
+
+The following projects informed architecture and interaction research. Their source code is not included in FRAME Studio, so their licenses are recorded here for provenance rather than as runtime dependency notices.
+
+### Klecks
+- Repository: https://github.com/bitbof/klecks
+- License: MIT
+- Reviewed: smudge brush, blend brush, and browser painting interaction.
+- Decision: reference only. The brush implementations rely on Klecks-specific history, tile, mask, and canvas abstractions; no upstream code is copied.
+
+### libmypaint
+- Repository: https://github.com/mypaint/libmypaint
+- License: ISC
+- Reviewed: dab-based brush model, color pickup, smudge behavior, and brush dynamics.
+- Decision: future WebAssembly adapter candidate. The native C library and its build dependencies are not bundled.
+
+### Quickdraw
+- Repository: https://github.com/quickdrawjs/quickdraw
+- License: MIT
+- Reviewed: stylus/finger input separation and velocity-sensitive ink.
+- Decision: reference only; FRAME Studio's mouse velocity pressure is an independent implementation.
+
+### Graphite
+- Repository: https://github.com/GraphiteEditor/Graphite
+- License: mixed Apache-2.0 / MIT components
+- Reviewed: non-destructive vector/raster architecture.
+- Decision: architecture reference only; each component would need a separate license review before reuse.
+
+### miniPaint
+- Repository: https://github.com/viliusle/miniPaint
+- License: MIT
+- Reviewed: browser editor workflow, layers, editable shapes, and import/export ideas.
+- Decision: reference only; no source copied.
+
+### Pencil2D and MyPaint
+- Repositories: https://github.com/pencil2d/pencil and https://github.com/mypaint/mypaint
+- Licenses: GPL-family
+- Reviewed: animation timeline and tablet brush workflow.
+- Decision: workflow references only; no source copied.
+
+## Required process when adopting a dependency
 
 For each dependency added to a release:
 - Record exact package name, version, source repository, and license identifier.
