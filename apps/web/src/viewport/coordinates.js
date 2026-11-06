@@ -52,3 +52,15 @@ export function clientToCanvasPoint(event, {
     y: Math.max(0, Math.min(canvasHeight - 1, Math.floor(localY * canvasHeight / height + 1e-6))),
   };
 }
+
+
+/**
+ * Convert a desired CSS-pixel interaction size into logical canvas units.
+ * This keeps handles and hit targets visually stable at every zoom level.
+ */
+export function canvasUnitsPerCssPixel(elementWidth, canvasWidth, zoom = 1) {
+  const width = Math.max(1, Number(elementWidth) || Number(canvasWidth) || 1);
+  const logicalWidth = Math.max(1, Number(canvasWidth) || 1);
+  const scale = Math.max(0.01, Number(zoom) || 1);
+  return width * scale / logicalWidth;
+}
