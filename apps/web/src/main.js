@@ -10,7 +10,7 @@ import { normalizeRasterCels, normalizeRasterTransformCels } from './animation/f
 import { cloneRasterTransformRecords, composeRasterTransformStack, createTranslationMatrix, createRotationMatrix, rasterizeRasterTransformStack } from './selection/raster-transform.js';
 import { containsSelectionPoint, hitTestSelectionHandle, moveSelectionRect, normalizeSelectionRect, lineStrokeIntersectsPolygon, pointInPolygon, resizeSelectionRectFromHandle, resolveSelectionTargets, transformLineStrokes, transformLineStrokesByMatrix, transformPolygon, translatePolygon, getSelectionPreviewTransform, getPolygonBounds, getPolygonCentroid, hitTestPolygonTransformHandle, resizePolygonFromHandle } from './selection/selection.js';
 import { convertLegacyPointsToBezierPath } from './line/legacy-bezier-bridge.js';
-import { moveBezierHandle, sampleBezierPath } from './line/bezier-path.js';
+import { moveBezierAnchor, moveBezierHandle, sampleBezierPath } from './line/bezier-path.js';
 
 import {
   createLineStroke,
@@ -147,7 +147,9 @@ let nodeMoveSnapshot = null;
 let nodeDragChanged = false;
 let nodeEditEnabled = false;
 let selectedBezierHandle = null;
+let selectedBezierAnchor = null;
 let bezierHandleDrag = null;
+let bezierAnchorDrag = null;
 
 function rasterizeActiveLayerTransforms() {
   const layer = layers[active];
@@ -445,7 +447,7 @@ function render(dirtyIndices = [], displayStrokes = vectorStrokes) {
   }
   applyGroupState();
   if (!loadingFrame) updateFrameStrokes(timeline, timeline.activeFrameId, vectorStrokes);
-  renderer.sync(layers, dirtyIndices, displayStrokes, selectedStrokeId, onionEnabled ? getOnionSkin(timeline) : [], selectionRect, selectionPolygon, selectedNodeIndex, nodeEditEnabled, selectedBezierHandle);
+  renderer.sync(layers, dirtyIndices, displayStrokes, selectedStrokeId, onionEnabled ? getOnionSkin(timeline) : [], selectionRect, selectionPolygon, selectedNodeIndex, nodeEditEnabled, selectedBezierHandle, selectedBezierAnchor);
   document.getElementById('status').textContent = tool.toUpperCase();
   drawLayers();
   updateLayerInspector();
@@ -1463,6 +1465,7 @@ function bindControls() {
     nodeEditEnabled = event.target.checked;
     selectedNodeIndex = null;
     selectedBezierHandle = null;
+    selectedBezierAnchor = null;
     const stroke = selectedStroke();
     if (nodeEditEnabled && stroke && !stroke.bezierPath) {
       commitLineHistory(lineSnapshot());
@@ -1652,6 +1655,7 @@ function bindCanvasEvents() {
       selectedStrokeId = hit?.id || null;
       selectedNodeIndex = null;
       selectedBezierHandle = null;
+      selectedBezierAnchor = null;
       const newlySelected = selectedStroke();
       if (nodeEditEnabled && newlySelected && !newlySelected.bezierPath) {
         commitLineHistory(lineSnapshot());
