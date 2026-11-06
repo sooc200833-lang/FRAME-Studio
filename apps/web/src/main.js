@@ -1956,10 +1956,14 @@ function bindTimelineScrub() {
   };
   strip.addEventListener('pointerdown', event => {
     // Fingers scroll the strip natively; pen and mouse drags scrub frames.
-    if (event.pointerType === 'touch' || !event.target.closest('.frame-cell')) return;
+    const cell = event.target.closest('.frame-cell');
+    if (event.pointerType === 'touch' || !cell) return;
     scrubbing = true;
+    // Pointer capture retargets the following click to the strip, so select
+    // the pressed frame here instead of relying on the cell's click handler.
     strip.setPointerCapture(event.pointerId);
     if (playbackActive) setPlaybackEnabled(false);
+    if (!loadingFrame && cell.dataset.frameId !== timeline.activeFrameId) loadTimelineFrame(cell.dataset.frameId);
   });
   strip.addEventListener('pointermove', event => {
     if (!scrubbing || loadingFrame) return;
