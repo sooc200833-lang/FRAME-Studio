@@ -1,7 +1,7 @@
 import './styles.css';
 import { PixiStageRenderer } from './renderer.js';
 import { applyScreentoneToCanvas } from './tone/screentone.js';
-import { clientToCanvasPoint, parseCssTransformMatrix } from './viewport/coordinates.js';
+import { clientToCanvasPoint, parseCssTransformMatrix, canvasUnitsPerCssPixel } from './viewport/coordinates.js';
 import { applyBrushTexture, coalescedPointerEvents, createBrushOutline, createFrameScheduler, getBrushPreset, normalizePointerPressure, resolveBrushStrokeOptions, stabilizePoint } from './brush/brush-engine.js';
 import { expandRegionMask, findConnectedRegion } from './fill/flood-fill.js';
 import { animateLineStrokes, lineBoilPhase } from './line/line-boil.js';
@@ -573,7 +573,7 @@ function position(event) {
 // Keep vector-node controls a consistent physical size while the canvas zooms.
 function canvasUnitsPerCssPixel() {
   const width = inputSurface?.clientWidth || W;
-  return Math.max(0.01, (width * viewport.scale) / W);
+  return canvasUnitsPerCssPixel(width, W, viewport.scale);
 }
 
 function nodeHandleRadius() {
