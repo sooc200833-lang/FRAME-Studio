@@ -82,7 +82,7 @@ See [Open-source components and reference projects](./docs/open-source.md).
 
 Evaluated candidates include Paper.js (MIT), Three.js (MIT), and libmypaint (ISC). Listing a project here is not a claim that it is included in a build.
 
-## Required process when adopting a dependency
+## Evaluated upstream projects (not bundled)\n\n### Klecks\n\n- Repository: https://github.com/bitbof/klecks\n- License: MIT (upstream `LICENSE`)\n- Usage: architecture and workflow reference only; no Klecks source files are copied or bundled.\n\n### Quickdraw\n\n- Repository: https://github.com/quickdrawjs/quickdraw\n- License: MIT (upstream `LICENSE`)\n- Usage: input/interaction reference. FRAME Studio independently adapts velocity-derived pressure for mouse vector strokes; no Quickdraw source files are copied or bundled.\n\n### Graphite\n\n- Repository: https://github.com/GraphiteEditor/Graphite\n- License: repository contains Apache-2.0 and MIT components; each component requires separate review.\n- Usage: architecture reference only; not bundled.\n\n## Required process when adopting a dependency
 
 For each dependency added to a release:
 - Record exact package name, version, source repository, and license identifier.
