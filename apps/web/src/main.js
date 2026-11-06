@@ -2424,6 +2424,15 @@ async function start() {
 
 start().catch(error => {
   console.error('FRAME Studio renderer failed to initialize:', error);
-  host.textContent = '렌더러를 시작하지 못했습니다. WebGL을 지원하는 최신 브라우저에서 다시 시도해 주세요.';
+  const message = error instanceof Error ? error.message : String(error);
+  host.replaceChildren();
+  const heading = document.createElement('strong');
+  heading.textContent = '캔버스를 시작하지 못했습니다.';
+  const detail = document.createElement('p');
+  detail.textContent = '이 브라우저에서 사용 가능한 그래픽 렌더러를 초기화하지 못했습니다.';
+  const diagnostic = document.createElement('code');
+  diagnostic.textContent = message.slice(0, 240);
+  host.append(heading, detail, diagnostic);
+  host.title = message;
   host.classList.add('error');
 });
