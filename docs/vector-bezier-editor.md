@@ -10,7 +10,7 @@ Vector strokes can carry an optional `bezierPath` alongside their legacy `points
 4. Drag an anchor dot to move the anchor and its adjacent handles together.
 5. Enable **핸들 연결 · 부드러운 곡선** to keep the opposite handle mirrored while dragging. Hold Shift to temporarily enable linking when the option is off.
 
-Anchor dots are shown as fixed references in this first UI pass. The control handles are directly draggable.
+Anchor dots and control handles are both directly draggable.
 
 ## Persistence and compatibility
 
