@@ -1888,7 +1888,21 @@ function bindCanvasEvents() {
     }
 
     if (tool === 'select' && nodeDragging && nodeMoveSnapshot) {
-      commitLineHistory(nodeMoveSnapshot);
+      if (event.type === 'pointercancel') {
+        vectorStrokes.splice(0, vectorStrokes.length, ...JSON.parse(nodeMoveSnapshot));
+        if (!selectedStroke()) selectedStrokeId = null;
+      } else {
+        // Pointer-up can carry a newer coordinate than the last pointer-move.
+        const finalPoint = position(event);
+        const stroke = selectedStroke();
+        if (stroke?.points[selectedNodeIndex]) {
+          const points = stroke.points.map(node => ({ x: node.x, y: node.y }));
+          points[selectedNodeIndex] = { x: finalPoint.x, y: finalPoint.y };
+          const index = vectorStrokes.findIndex(item => item.id === selectedStrokeId);
+          if (index >= 0) vectorStrokes[index] = { ...stroke, points };
+        }
+        commitLineHistory(nodeMoveSnapshot);
+      }
       nodeDragging = false;
       nodeMoveSnapshot = null;
       down = false;
