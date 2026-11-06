@@ -91,16 +91,18 @@ function splitCubic(p0, p1, p2, p3) {
   ];
 }
 
-function sampleCubicAdaptive(points, tolerance, maxDepth, output, depth = 0) {
+function sampleCubicAdaptive(points, tolerance, maxDepth, output, ranges, t0 = 0, t1 = 1, depth = 0) {
   const [p0, p1, p2, p3] = points;
   const flatness = Math.max(distanceToChord(p1, p0, p3), distanceToChord(p2, p0, p3));
   if (flatness <= tolerance || depth >= maxDepth) {
     output.push({ x: p3.x, y: p3.y });
+    ranges.push({ t0, t1 });
     return;
   }
   const [left, right] = splitCubic(p0, p1, p2, p3);
-  sampleCubicAdaptive(left, tolerance, maxDepth, output, depth + 1);
-  sampleCubicAdaptive(right, tolerance, maxDepth, output, depth + 1);
+  const middle = (t0 + t1) / 2;
+  sampleCubicAdaptive(left, tolerance, maxDepth, output, ranges, t0, middle, depth + 1);
+  sampleCubicAdaptive(right, tolerance, maxDepth, output, ranges, middle, t1, depth + 1);
 }
 
 /**
@@ -115,6 +117,7 @@ export function sampleBezierPath(path, { tolerance = 0.75, maxDepth = 10 } = {})
   const depthLimit = Math.max(1, Math.min(16, Math.floor(Number(maxDepth) || 10)));
   const points = [copyPoint(path.anchors[0])];
   const segmentIndices = [];
+  const segmentRanges = [];
   path.segments.forEach((segment, index) => {
     const before = points.length;
     sampleCubicAdaptive([
@@ -122,10 +125,67 @@ export function sampleBezierPath(path, { tolerance = 0.75, maxDepth = 10 } = {})
       segment.control1,
       segment.control2,
       path.anchors[index + 1],
-    ], flatness, depthLimit, points);
+    ], flatness, depthLimit, points, segmentRanges);
     for (let edge = before - 1; edge < points.length - 1; edge++) segmentIndices.push(index);
   });
-  return { points, segmentIndices };
+  return { points, segmentIndices, segmentRanges };
+}
+
+/** Project a document point onto the sampled visible cubic path. */
+export function projectPointToBezierPath(path, point, options = {}) {
+  const sampled = sampleBezierPath(path, options);
+  let best = { distance: Infinity, segmentIndex: -1, t: 0, point: null, edgeIndex: -1 };
+  for (let index = 0; index < sampled.points.length - 1; index++) {
+    const start = sampled.points[index];
+    const end = sampled.points[index + 1];
+    const dx = end.x - start.x;
+    const dy = end.y - start.y;
+    const lengthSquared = dx * dx + dy * dy;
+    const edgeT = lengthSquared > Number.EPSILON
+      ? Math.max(0, Math.min(1, ((point.x - start.x) * dx + (point.y - start.y) * dy) / lengthSquared))
+      : 0;
+    const projected = { x: start.x + dx * edgeT, y: start.y + dy * edgeT };
+    const distance = Math.hypot(point.x - projected.x, point.y - projected.y);
+    if (distance < best.distance) {
+      const range = sampled.segmentRanges[index];
+      best = {
+        distance,
+        segmentIndex: sampled.segmentIndices[index],
+        t: range.t0 + (range.t1 - range.t0) * edgeT,
+        point: projected,
+        edgeIndex: index,
+      };
+    }
+  }
+  return best.segmentIndex < 0 ? null : best;
+}
+
+/** Split one cubic segment at t, preserving the original curve exactly. */
+export function insertBezierAnchor(path, segmentIndex, t) {
+  if (!path?.segments || !Number.isInteger(segmentIndex) || !path.segments[segmentIndex]) return path;
+  const amount = Math.max(0.001, Math.min(0.999, Number(t)));
+  if (!Number.isFinite(amount)) throw new TypeError('A finite split parameter is required.');
+  const next = cloneBezierPath(path);
+  const start = next.anchors[segmentIndex];
+  const end = next.anchors[segmentIndex + 1];
+  const segment = next.segments[segmentIndex];
+  const lerp = (a, b) => ({
+    x: a.x + (b.x - a.x) * amount,
+    y: a.y + (b.y - a.y) * amount,
+  });
+  const p01 = lerp(start, segment.control1);
+  const p12 = lerp(segment.control1, segment.control2);
+  const p23 = lerp(segment.control2, end);
+  const p012 = lerp(p01, p12);
+  const p123 = lerp(p12, p23);
+  const anchor = lerp(p012, p123);
+  next.anchors.splice(segmentIndex + 1, 0, anchor);
+  next.anchorModes.splice(segmentIndex + 1, 0, 'smooth');
+  next.segments.splice(segmentIndex, 1,
+    { control1: p01, control2: p012 },
+    { control1: p123, control2: p23 },
+  );
+  return next;
 }
 
 /** Move one control handle. Optionally mirror the opposite handle at its anchor. */

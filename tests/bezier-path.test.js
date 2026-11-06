@@ -4,6 +4,8 @@ import {
   createBezierPath,
   createBezierPathFromAnchors,
   cloneBezierPath,
+  insertBezierAnchor,
+  projectPointToBezierPath,
   sampleBezierPath,
   moveBezierHandle,
   moveBezierAnchor,
@@ -156,4 +158,50 @@ test('anchor modes survive cloning and affine transforms', () => {
   const corner = setBezierAnchorMode(path, 1, 'corner');
   assert.deepEqual(cloneBezierPath(corner).anchorModes, ['corner', 'corner', 'corner']);
   assert.deepEqual(transformBezierPath(corner, [1, 0, 0, 1, 5, 8]).anchorModes, corner.anchorModes);
+});
+
+
+function evaluateCubic(start, control1, control2, end, t) {
+  const inverse = 1 - t;
+  return {
+    x: inverse ** 3 * start.x + 3 * inverse ** 2 * t * control1.x + 3 * inverse * t ** 2 * control2.x + t ** 3 * end.x,
+    y: inverse ** 3 * start.y + 3 * inverse ** 2 * t * control1.y + 3 * inverse * t ** 2 * control2.y + t ** 3 * end.y,
+  };
+}
+
+test('adaptive samples expose parameter ranges for every rendered edge', () => {
+  const sampled = sampleBezierPath(curvedPath());
+  assert.equal(sampled.segmentRanges.length, sampled.points.length - 1);
+  assert.equal(sampled.segmentRanges[0].t0, 0);
+  assert.equal(sampled.segmentRanges.at(-1).t1, 1);
+  sampled.segmentRanges.slice(1).forEach((range, index) => {
+    assert.equal(range.t0, sampled.segmentRanges[index].t1);
+  });
+});
+
+test('projects onto the visible curve and reports its source segment parameter', () => {
+  const projection = projectPointToBezierPath(curvedPath(), { x: 60, y: 67.5 });
+  assert.equal(projection.segmentIndex, 0);
+  assert.ok(Math.abs(projection.t - 0.5) < 0.01);
+  assert.ok(projection.distance < 0.1);
+});
+
+test('inserting an anchor splits a cubic without changing its shape', () => {
+  const original = curvedPath();
+  const inserted = insertBezierAnchor(original, 0, 0.4);
+  assert.equal(inserted.anchors.length, 3);
+  assert.equal(inserted.segments.length, 2);
+  assert.equal(inserted.anchorModes[1], 'smooth');
+  const expected = evaluateCubic(original.anchors[0], original.segments[0].control1, original.segments[0].control2, original.anchors[1], 0.4);
+  assert.ok(Math.abs(inserted.anchors[1].x - expected.x) < 1e-9);
+  assert.ok(Math.abs(inserted.anchors[1].y - expected.y) < 1e-9);
+  const leftAtHalf = evaluateCubic(inserted.anchors[0], inserted.segments[0].control1, inserted.segments[0].control2, inserted.anchors[1], 0.5);
+  const originalAtPointTwo = evaluateCubic(original.anchors[0], original.segments[0].control1, original.segments[0].control2, original.anchors[1], 0.2);
+  assert.ok(Math.abs(leftAtHalf.x - originalAtPointTwo.x) < 1e-9);
+  assert.ok(Math.abs(leftAtHalf.y - originalAtPointTwo.y) < 1e-9);
+  assert.equal(original.anchors.length, 2);
+});
+
+test('rejects non-finite Bézier split parameters', () => {
+  assert.throws(() => insertBezierAnchor(curvedPath(), 0, NaN), TypeError);
 });
