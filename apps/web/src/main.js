@@ -1926,14 +1926,6 @@ function bindCanvasEvents() {
       return;
     }
 
-    if (tool === 'shape') {
-      const points = createShapePoints(shapeKind, lineStartPoint, point);
-      commitLineHistory(lineSnapshot());
-      const created = createLineStroke({ id: 'line-' + nextLineId++, points: points.map(p => ({ ...p, pressure: 0.5 })), color, width: size, brushPreset: vectorBrushPreset, pressureCurve: vectorPressureCurve, motionStyle: vectorMotionStyle, motionStrength: vectorMotionStrength });
-      vectorStrokes.push(created);
-      selectedStrokeId = created.id;
-      selectedStrokeIds.clear(); selectedStrokeIds.add(created.id);
-      renderer.clearPreview(); drawingPoints = null; down = false; render(); return;
     }
 
     if (tool === 'vector') {
@@ -2141,6 +2133,16 @@ function bindCanvasEvents() {
     if (tool === 'pen' || tool === 'eraser') brushPreviewScheduler.cancel();
     if (!down) return;
     const point = position(event);
+
+    if (tool === 'shape') {
+      const points = createShapePoints(shapeKind, lineStartPoint, point);
+      commitLineHistory(lineSnapshot());
+      const created = createLineStroke({ id: 'line-' + nextLineId++, points: points.map(p => ({ ...p, pressure: 0.5 })), color, width: size, brushPreset: vectorBrushPreset, pressureCurve: vectorPressureCurve, motionStyle: vectorMotionStyle, motionStrength: vectorMotionStrength });
+      vectorStrokes.push(created);
+      selectedStrokeId = created.id;
+      selectedStrokeIds.clear(); selectedStrokeIds.add(created.id);
+      renderer.clearPreview(); drawingPoints = null; down = false; render(); return;
+    }
 
     if (tool === 'vector') {
       const previous = drawingPoints[drawingPoints.length - 1];
