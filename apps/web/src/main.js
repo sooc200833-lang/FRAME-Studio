@@ -1587,7 +1587,7 @@ function bindCanvasEvents() {
     if (tool === 'select') {
       const hit = hitTestLineStrokes(vectorStrokes, point, 9);
       const nodeMode = nodeEditEnabled;
-      if (nodeMode && selectedStroke() && selectedStrokeId && (hit?.id === selectedStrokeId || selectedStroke().bezierPath)) {
+      if (nodeMode && selectedStroke() && selectedStrokeId) {
         const stroke = selectedStroke();
         const path = stroke.bezierPath || convertLegacyPointsToBezierPath(stroke.points, stroke.id);
         let nearest = null, distance = 17;
