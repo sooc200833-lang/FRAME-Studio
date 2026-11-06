@@ -130,25 +130,31 @@ export function lineStrokeIntersectsPolygon(stroke, polygon) {
 
 export function transformLineStrokes(strokes, polygon, angleDegrees = 0, scale = 1) {
   const selectedIds = new Set(strokes.filter(stroke => lineStrokeIntersectsPolygon(stroke, polygon)).map(stroke => stroke.id));
-  if (!selectedIds.size) return strokes.map(stroke => ({ ...stroke, points: stroke.points.map(point => ({ ...point })) }));
   const center = polygon.reduce((sum, point) => ({
     x: sum.x + point.x / polygon.length,
     y: sum.y + point.y / polygon.length,
   }), { x: 0, y: 0 });
   const radians = angleDegrees * Math.PI / 180;
   const cos = Math.cos(radians), sin = Math.sin(radians);
-  return strokes.map(stroke => selectedIds.has(stroke.id) ? ({
-    ...stroke,
-    width: stroke.width * scale,
-    points: stroke.points.map(point => {
-      const x = (point.x - center.x) * scale;
-      const y = (point.y - center.y) * scale;
-      return {
-        x: center.x + x * cos - y * sin,
-        y: center.y + x * sin + y * cos,
-      };
-    }),
-  }) : ({ ...stroke, points: stroke.points.map(point => ({ ...point })) }));
+  const matrix = [
+    scale * cos, scale * sin, -scale * sin, scale * cos,
+    center.x - scale * cos * center.x + scale * sin * center.y,
+    center.y - scale * sin * center.x - scale * cos * center.y,
+  ];
+  return strokes.map(stroke => {
+    const selected = selectedIds.has(stroke.id);
+    return {
+      ...stroke,
+      width: selected ? stroke.width * scale : stroke.width,
+      points: stroke.points.map(point => selected ? ({
+        x: matrix[0] * point.x + matrix[2] * point.y + matrix[4],
+        y: matrix[1] * point.x + matrix[3] * point.y + matrix[5],
+      }) : ({ ...point })),
+      ...(stroke.bezierPath ? {
+        bezierPath: transformBezierPath(stroke.bezierPath, selected ? matrix : [1, 0, 0, 1, 0, 0]),
+      } : {}),
+    };
+  });
 }
 
 export function getSelectionRectHandles(rect, rotationOffset = 36) {
