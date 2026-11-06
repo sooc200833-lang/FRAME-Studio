@@ -151,7 +151,7 @@ test('applies affine translation and non-uniform scale to intersecting vector st
   ];
   const result = transformLineStrokesByMatrix(strokes, polygon, [2, 0, 0, 0.5, 10, 3]);
   assert.deepEqual(result[0].points, [{ x: 14, y: 5 }, { x: 26, y: 8 }]);
-  assert.equal(result[0].width, 4);
+  assert.ok(Math.abs(result[0].width - 4 * Math.sqrt(2.125)) < 1e-9);
   assert.deepEqual(result[1].points, strokes[1].points);
   assert.equal(result[1].width, strokes[1].width);
   assert.deepEqual(strokes[0].points, [{ x: 2, y: 4 }, { x: 8, y: 10 }]);
