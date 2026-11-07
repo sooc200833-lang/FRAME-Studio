@@ -57,3 +57,16 @@ test('singular transform falls back safely and coordinates stay inside canvas', 
   });
   assert.deepEqual(point, { x: 0, y: 899 });
 });
+
+test('converts screen-space control sizes to canvas units across zoom levels', async () => {
+  const { canvasUnitsPerCssPixel } = await import('../apps/web/src/viewport/coordinates.js');
+  assert.equal(canvasUnitsPerCssPixel(600, 1200, 1), 2);
+  assert.equal(canvasUnitsPerCssPixel(600, 1200, 2), 1);
+  assert.equal(canvasUnitsPerCssPixel(1200, 1200, 0.5), 2);
+});
+
+test('guards invalid dimensions and zoom from producing unusable scales', async () => {
+  const { canvasUnitsPerCssPixel } = await import('../apps/web/src/viewport/coordinates.js');
+  assert.equal(canvasUnitsPerCssPixel(0, 0, 0), 1);
+  assert.equal(canvasUnitsPerCssPixel(600, 1200, -2), 2);
+});

@@ -61,6 +61,7 @@ Always distinguish code-level tests from visual browser checks and physical iPad
 - Raster pixels, cels and transform records are never modified by movement.
 
 ### Drawing and input
+- Vector node/Bezier handles and their hit targets are sized in CSS pixels (`canvasUnitsPerCssPixel`, `cssToCanvasUnits`, `renderer.setHandleScale`) so they stay the same physical size at every zoom (ported from #29).
 - Raster pen and eraser on Canvas-backed layers.
 - Brush profiles: pencil, ink, marker, and brush.
 - perfect-freehand variable-width stroke polygons.
