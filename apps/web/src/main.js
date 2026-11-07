@@ -2,7 +2,7 @@ import './styles.css';
 import { PixiStageRenderer } from './renderer.js';
 import { applyScreentoneToCanvas } from './tone/screentone.js';
 import { canvasUnitsPerCssPixel, clientToCanvasPoint, parseCssTransformMatrix } from './viewport/coordinates.js';
-import { classifyMultiTouchTap, pinchViewport, snapViewportRotation } from './viewport/gestures.js';
+import { classifyMultiTouchTap, classifyTouchStart, pinchViewport, snapViewportRotation } from './viewport/gestures.js';
 import { hexToHsv, hsvToHex, sampleImageDataColor } from './color/color-utils.js';
 import { coalescedPointerEvents, createFrameScheduler, normalizePointerPressure, stabilizePoint } from './brush/brush-engine.js';
 import { createRasterStroke, getRasterBrush } from './brush/raster-brush.js';
@@ -543,6 +543,9 @@ function drawVectorStrokes(context, strokes = vectorStrokes) {
 }
 function refreshLayerPresentation(layer) {
   if (!layer?.canvas || !layer?.presentationCanvas) return;
+  // Every visible pixel change goes through here, so it marks the layer's
+  // clip as needing a fresh PNG encode on the next save.
+  layer.celDirty = true;
   composeRasterTransformStack(layer.canvas, layer.transformRecords || [], layer.presentationCanvas);
 }
 
@@ -701,7 +704,13 @@ function saveActiveFrame() {
       loadedClips.set(layer.id, found.clip.id);
       clip = found.clip;
     }
-    clip.cel = layer.canvas.toDataURL('image/png');
+    // Re-encode only when the pixels changed since this clip was last saved
+    // or loaded; PNG encoding is the most expensive part of saving.
+    if (layer.celDirty !== false || layer.celClipId !== clip.id) {
+      clip.cel = layer.canvas.toDataURL('image/png');
+      layer.celDirty = false;
+      layer.celClipId = clip.id;
+    }
     clip.transformCel = cloneRasterTransformRecords(layer.transformRecords || []);
   }
   persistVectorClip();
@@ -762,6 +771,9 @@ async function syncClipsToPlayhead({ save = true } = {}) {
       sourceCanvas: decoded[index].transformSources[recordIndex] || null,
     })).filter(record => record.sourceCanvas);
     refreshLayerPresentation(layer);
+    // Freshly loaded pixels equal the clip's stored image.
+    layer.celDirty = !clip;
+    layer.celClipId = clip?.id || null;
     // Pixel undo snapshots belong to the previous clip; never replay them here.
     layer.undo = [];
     layer.redo = [];
@@ -2214,6 +2226,31 @@ const TOOL_HOST_BUTTONS = { pen: 'paintTool', vector: 'paintTool', marquee: 'sel
 const TOOL_LABELS = { vector: '벡터 브러시', pen: '래스터 브러시', smudge: '스머지', eraser: '지우개', marquee: '사각형 선택', lasso: '올가미 선택', select: '벡터 변형', fill: '채우기', line: '직선', shape: '도형', hand: '손 도구' };
 let openPopoverId = null;
 let eyedropperArmed = false;
+const PENCIL_ONLY_KEY = 'frame-studio:pencil-only';
+const PENCIL_HINT_KEY = 'frame-studio:pencil-hint-shown';
+let pencilOnly = readStoredFlag(PENCIL_ONLY_KEY);
+
+function readStoredFlag(key) {
+  try { return localStorage.getItem(key) === '1'; } catch { return false; }
+}
+
+function writeStoredFlag(key, value) {
+  try { localStorage.setItem(key, value ? '1' : '0'); } catch { /* storage unavailable */ }
+}
+
+function setPencilOnly(enabled, { announce = true } = {}) {
+  pencilOnly = enabled;
+  writeStoredFlag(PENCIL_ONLY_KEY, enabled);
+  const toggle = document.getElementById('pencilOnlyToggle');
+  if (toggle) toggle.checked = enabled;
+  if (announce) showToast(enabled ? '펜으로만 그려요 · 손가락은 화면 이동' : '손가락으로도 그릴 수 있어요');
+}
+
+function suggestPencilOnly() {
+  if (pencilOnly || readStoredFlag(PENCIL_HINT_KEY)) return;
+  writeStoredFlag(PENCIL_HINT_KEY, true);
+  showToast('Apple Pencil이 감지됐어요. 손가락은 화면 이동에만 쓸까요?', { label: '켜기', run: () => setPencilOnly(true) });
+}
 let toastTimer = 0;
 
 function showToast(message, action = null) {
@@ -2604,6 +2641,9 @@ function bindWorkspaceUi() {
   document.getElementById('vectorBrushPreset').addEventListener('change', () => syncBrushUi());
 
   document.getElementById('eyedropper').onclick = () => setEyedropperArmed(!eyedropperArmed);
+  const pencilToggle = document.getElementById('pencilOnlyToggle');
+  pencilToggle.checked = pencilOnly;
+  pencilToggle.addEventListener('change', () => setPencilOnly(pencilToggle.checked));
   document.getElementById('zoomLevel').onclick = () => document.getElementById('resetViewport').click();
   const currentHold = () => normalizeHold(clipAt(currentTrack(), timeline.playhead)?.clip.hold);
   document.getElementById('holdMinus').onclick = () => changeActiveHold(currentHold() - 1);
@@ -2804,6 +2844,11 @@ function bindCanvasEvents() {
     render();
   };
   let pendingTouchFill = null;
+  // Pencil-only mode: the pen pointer currently drawing, a one-finger canvas
+  // pan, and touches rejected as palm contact while the pen is down.
+  let penPointerId = null;
+  let fingerPan = null;
+  const ignoredTouches = new Set();
   const firstTwoTouches = () => [...touches.values()].slice(0, 2).map(touch => ({ x: touch.x, y: touch.y }));
   const cancelActiveInput = event => {
     if (!down && !panDrag) return;
@@ -2816,26 +2861,50 @@ function bindCanvasEvents() {
       setEyedropperArmed(false);
       return;
     }
+    if (event.pointerType === 'pen') {
+      penPointerId = event.pointerId;
+      fingerPan = null;
+      if (pencilOnly && gesture) gesture = null;
+      suggestPencilOnly();
+    }
     if (motionEditing && event.button === 0 && event.pointerType !== 'touch' && !loadingFrame) {
       event.stopImmediatePropagation();
       startMotionDrag(event);
       return;
     }
     if (event.pointerType !== 'touch') return;
+    const role = classifyTouchStart({
+      pencilOnly,
+      penActive: penPointerId !== null,
+      touchCount: touches.size + 1,
+      motionEditing: motionEditing && !loadingFrame,
+      tool,
+    });
+    if (role === 'ignore') {
+      ignoredTouches.add(event.pointerId);
+      event.stopImmediatePropagation();
+      return;
+    }
     touches.set(event.pointerId, { x: event.clientX, y: event.clientY, startX: event.clientX, startY: event.clientY });
-    if (motionEditing && touches.size === 1 && !loadingFrame) {
+    if (role === 'motion') {
       event.stopImmediatePropagation();
       startMotionDrag(event);
       return;
     }
-    if (touches.size === 1 && tool === 'fill') {
+    if (role === 'pan') {
+      fingerPan = { pointerId: event.pointerId, x: event.clientX, y: event.clientY };
+      event.stopImmediatePropagation();
+      return;
+    }
+    if (role === 'deferred-fill') {
       // Defer touch fills until release so the first finger of a two-finger
       // undo tap does not fill a region first.
       pendingTouchFill = { pointerId: event.pointerId, point: position(event) };
       event.stopImmediatePropagation();
       return;
     }
-    if (touches.size < 2) return;
+    if (role !== 'gesture') return;
+    fingerPan = null;
     event.stopImmediatePropagation();
     pendingTouchFill = null;
     try { inputSurface.setPointerCapture(event.pointerId); } catch { /* pointer already released */ }
@@ -2852,6 +2921,18 @@ function bindCanvasEvents() {
     }
   });
   inputSurface.addEventListener('pointermove', event => {
+    if (ignoredTouches.has(event.pointerId)) {
+      event.stopImmediatePropagation();
+      return;
+    }
+    if (fingerPan?.pointerId === event.pointerId && !gesture) {
+      event.stopImmediatePropagation();
+      viewport.x += event.clientX - fingerPan.x;
+      viewport.y += event.clientY - fingerPan.y;
+      fingerPan.x = event.clientX;
+      fingerPan.y = event.clientY;
+      applyViewport();
+    }
     if (motionDrag?.pointerId === event.pointerId && !gesture) {
       event.stopImmediatePropagation();
       const point = stagePosition(event);
@@ -2881,6 +2962,17 @@ function bindCanvasEvents() {
     gesture.last = current;
   });
   const releaseTouch = event => {
+    if (event.pointerId === penPointerId) penPointerId = null;
+    if (ignoredTouches.delete(event.pointerId)) {
+      event.stopImmediatePropagation();
+      return;
+    }
+    if (fingerPan?.pointerId === event.pointerId) {
+      fingerPan = null;
+      touches.delete(event.pointerId);
+      event.stopImmediatePropagation();
+      return;
+    }
     if (motionDrag?.pointerId === event.pointerId) {
       event.stopImmediatePropagation();
       if (event.type === 'pointercancel') revertMotionDrag();
@@ -3635,6 +3727,11 @@ function bindKeyboardShortcuts() {
       target.isContentEditable
       || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName)
     );
+    // Escape still closes panels while a slider, checkbox or text field has focus.
+    if (event.key === 'Escape' && openPopoverId) {
+      closePopovers();
+      return;
+    }
     if (isTextEntry) return;
     if ((event.ctrlKey || event.metaKey) && !event.altKey && event.key.toLowerCase() === 'z') {
       event.preventDefault();

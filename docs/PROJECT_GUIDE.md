@@ -66,7 +66,7 @@ Always distinguish code-level tests from visual browser checks and physical iPad
 ### Multi-track timeline (v1.4)
 - `animation/tracks.js` (pure) replaces the old single frame list. `timeline.tracks[trackId].clips` — one track per raster layer (`layer.id`, stable `layer-N`) plus the shared vector-line track (`'vector'`). Clips lie end to end from tick 0; each has `hold` (1–240 ticks), raster `cel`/`transformCel` or vector `strokes`. Tracks are independent: a background clip can hold 24 frames while a character track changes every 2.
 - `timeline.playhead` is the current tick; timeline length is the longest track. Past a track's end that layer shows nothing; drawing there creates a clip (`ensureEditableClip` → `ensureClipAt`).
-- `loadedClips` maps track → clip currently held by the live layer canvas / `vectorStrokes`. `saveActiveFrame()` writes the live canvases back into those clips; `syncClipsToPlayhead()` loads only tracks whose clip changed (decoded images cached per clip). New layers adopt their blank clip on the next save.
+- `loadedClips` maps track → clip currently held by the live layer canvas / `vectorStrokes`. `saveActiveFrame()` writes the live canvases back into those clips, re-encoding PNG only for layers marked `celDirty` (set by `refreshLayerPresentation`, cleared after encode or clip load); `syncClipsToPlayhead()` loads only tracks whose clip changed (decoded images cached per clip). New layers adopt their blank clip on the next save.
 - Layer pixel undo stacks and vector line undo are cleared when that track's clip changes (snapshots belong to one clip).
 - Timeline UI (`drawTimeline`): ruler, one row per track (vector first, then layers top-first), clip cells sized by hold with thumbnails, playhead. Selecting a row (or drawing on it) makes it the current track; ＋ / 복제 / 삭제 / − ＋ / grip / prev-next act on the current track only.
 - Playback advances a fractional tick and loads clips without re-saving; layer movement transforms update every animation frame.
@@ -80,6 +80,7 @@ Always distinguish code-level tests from visual browser checks and physical iPad
 - Raster pixels, cels and transform records are never modified by movement.
 
 ### Drawing and input
+- Pencil-only mode (작업 → 입력, stored in `localStorage` `frame-studio:pencil-only`): one finger pans the canvas instead of drawing, two/three-finger gestures still work, and touches that land while the pen is drawing are ignored (palm rejection). The first pen contact offers to turn it on. Role decision is the pure `classifyTouchStart` in `viewport/gestures.js`.
 - Vector node/Bezier handles and their hit targets are sized in CSS pixels (`canvasUnitsPerCssPixel`, `cssToCanvasUnits`, `renderer.setHandleScale`) so they stay the same physical size at every zoom (ported from #29).
 - Raster pen and eraser on Canvas-backed layers.
 - Brush profiles: pencil, ink, marker, and brush.
