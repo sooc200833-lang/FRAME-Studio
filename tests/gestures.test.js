@@ -72,3 +72,15 @@ test('quick multi-finger taps map to undo and redo', () => {
   assert.equal(classifyMultiTouchTap({ fingers: 2, durationMs: 100, maxTravel: 40 }), null);
   assert.equal(classifyMultiTouchTap({ fingers: 4, durationMs: 100, maxTravel: 0 }), null);
 });
+
+test('touch roles: palm rejection, pencil-only panning, gestures and fills', async () => {
+  const { classifyTouchStart } = await import('../apps/web/src/viewport/gestures.js');
+  assert.equal(classifyTouchStart({ pencilOnly: true, penActive: true, touchCount: 2 }), 'ignore');
+  assert.equal(classifyTouchStart({ pencilOnly: false, penActive: true, touchCount: 1, tool: 'pen' }), 'draw');
+  assert.equal(classifyTouchStart({ touchCount: 2, tool: 'pen' }), 'gesture');
+  assert.equal(classifyTouchStart({ pencilOnly: true, touchCount: 2 }), 'gesture');
+  assert.equal(classifyTouchStart({ motionEditing: true, pencilOnly: true }), 'motion');
+  assert.equal(classifyTouchStart({ pencilOnly: true, tool: 'fill' }), 'pan');
+  assert.equal(classifyTouchStart({ tool: 'fill' }), 'deferred-fill');
+  assert.equal(classifyTouchStart({ tool: 'vector' }), 'draw');
+});
