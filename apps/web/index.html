@@ -76,12 +76,16 @@
       <button id="redo" class="side-round" title="다시 실행 · 세 손가락 탭" aria-label="다시 실행"><svg><use href="#i-redo"/></svg></button>
     </aside>
 
-    <div class="hud" aria-live="polite"><span id="status">VECTOR</span><button id="zoomLevel" class="hud-zoom" title="눌러서 화면에 맞춤">100%</button></div>
+    <div class="hud" aria-live="polite"><span id="saveStatus" data-state="idle">자동 저장 준비 중</span><span id="status">VECTOR</span><button id="zoomLevel" class="hud-zoom" title="눌러서 화면에 맞춤">100%</button></div>
     <div class="toast" id="toast" role="status" hidden></div>
 
     <!-- ───────── Popovers ───────── -->
     <section class="popover" id="actionsPopover" data-side="left" hidden aria-label="작업">
-      <h3>작업</h3>
+      <h3>작품</h3>
+      <div class="field project-name-field"><label for="projectName">이름</label><input id="projectName" type="text" maxlength="60" value="제목 없음" autocomplete="off" spellcheck="false"></div>
+      <button id="newProject" class="menu-row">새 작품 시작<small>지금 작품은 자동 저장돼요</small></button>
+      <div id="projectList" class="project-list" aria-label="저장된 작품"></div>
+      <h4>내보내기</h4>
       <button id="export" class="menu-row">PNG로 내보내기<small>현재 프레임</small></button>
       <h4>보기</h4>
       <div class="viewport-controls" role="group" aria-label="캔버스 보기 조절">

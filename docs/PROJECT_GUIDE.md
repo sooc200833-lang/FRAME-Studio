@@ -44,6 +44,12 @@ Always distinguish code-level tests from visual browser checks and physical iPad
 - Freehand vector strokes are no longer left selected after drawing, so brush/color changes apply to the next stroke rather than restyling the previous one.
 - Verified in headless Chrome (layout at 1180×820 and 390×844, synthetic touch pinch/undo, eyedropper). Not yet verified on a physical iPad.
 
+### Project saving (v1.5)
+- `document/project-format.js` (pure, tested): project JSON v1 — layers (id, name, visibility, opacity, blend, group, mask flag, movement keyframes), groups, tracks/clips (hold, transform records, vector strokes), fps, playhead, id counters, thumbnail. Clip cels and layer masks are stored separately by image key (`<projectId>/clip/<clipId>`, `<projectId>/mask/<layerId>`). `parseProjectDocument` validates, drops broken parts and keeps id counters above saved ids; `migrateProjectDocument` is the hook for future versions.
+- `document/project-store.js` (browser): IndexedDB `frame-studio` with `projects`, `images` (Blobs), `meta` (`lastProjectId`). One transaction per save writes the document, changed images and deletes unreferenced images. Requests persistent storage.
+- `main.js`: autosave 1.5 s after the last render, never mid-stroke/clip load/playback; also on `visibilitychange: hidden` and `pagehide`. Only images whose data URL changed since the last save are written. Startup restores the last project. 작업 popover: project name, 새 작품 시작, list of saved projects to open. HUD shows save state.
+- Not yet: deleting/duplicating projects, import/export of project files, thumbnails of non-visited clips after reload.
+
 ### Multi-track timeline (v1.4)
 - `animation/tracks.js` (pure) replaces the old single frame list. `timeline.tracks[trackId].clips` — one track per raster layer (`layer.id`, stable `layer-N`) plus the shared vector-line track (`'vector'`). Clips lie end to end from tick 0; each has `hold` (1–240 ticks), raster `cel`/`transformCel` or vector `strokes`. Tracks are independent: a background clip can hold 24 frames while a character track changes every 2.
 - `timeline.playhead` is the current tick; timeline length is the longest track. Past a track's end that layer shows nothing; drawing there creates a clip (`ensureEditableClip` → `ensureClipAt`).
@@ -131,6 +137,8 @@ Always distinguish code-level tests from visual browser checks and physical iPad
 | `apps/web/src/line/line-boil.js` | Deterministic line deformation |
 | `apps/web/src/tone/screentone.js` | Screentone normalization and Canvas application |
 | `apps/web/src/selection/selection.js` | Selection geometry and transforms |
+| `apps/web/src/document/project-format.js` | Project document format, validation, migration |
+| `apps/web/src/document/project-store.js` | IndexedDB project storage |
 | `apps/web/src/animation/tracks.js` | Multi-track timeline: tracks, clips, holds |
 | `apps/web/src/animation/motion.js` | Layer movement keyframes and matrices |
 | `apps/web/src/animation/frame-cels.js` | Raster cel normalization |

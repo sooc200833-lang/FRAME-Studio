@@ -9,6 +9,8 @@ import { createSmudgeSession } from './brush/smudge-engine.js';
 import { normalizeBrushBlendMode } from './brush/blend-modes.js';
 import { expandRegionMask, findConnectedRegion } from './fill/flood-fill.js';
 import { animateLineStrokes, lineBoilPhase } from './line/line-boil.js';
+import { buildProjectDocument, parseProjectDocument, referencedImageKeys } from './document/project-format.js';
+import { isProjectStorageAvailable, listProjects, loadImageDataUrls, loadProjectRecord, getMeta, requestPersistentStorage, saveProjectRecord, setMeta } from './document/project-store.js';
 import { clipAt, createTimelineDocument, deleteClip, duplicateTrack, ensureClipAt, ensureTrack, insertClipAfter, neighborClipStart, normalizeHold, setClipHold, timelineLength } from './animation/tracks.js';
 import { applyMatrix, evaluateMotionTrack, invertMatrix, isIdentityMotion, keyframeAt, motionMatrix, removeKeyframe, setKeyframe } from './animation/motion.js';
 import { cloneRasterTransformRecords, composeRasterTransformStack, createTranslationMatrix, createRotationMatrix, rasterizeRasterTransformStack } from './selection/raster-transform.js';
@@ -495,6 +497,7 @@ function render(dirtyIndices = [], displayStrokes = vectorStrokes) {
   updateLineInspector();
   drawTimeline();
   scheduleFrameThumbnail();
+  scheduleAutosave();
 }
 
 function cloneLineStroke(stroke) {
@@ -3576,6 +3579,286 @@ function bindKeyboardShortcuts() {
   });
 }
 
+// ───────────────────────── Project saving (IndexedDB) ─────────────────────────
+
+const AUTOSAVE_DELAY_MS = 1500;
+let project = { id: newProjectId(), name: '제목 없음', createdAt: new Date().toISOString() };
+let savedImageRefs = new Map();
+let autosaveTimer = 0;
+let saveInFlight = null;
+let saveQueued = false;
+let storageReady = false;
+let projectBusy = false;
+
+function newProjectId() {
+  return 'project-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 7);
+}
+
+function setSaveStatus(text, state = 'idle') {
+  const status = document.getElementById('saveStatus');
+  if (!status) return;
+  status.textContent = text;
+  status.dataset.state = state;
+}
+
+function scheduleAutosave() {
+  if (!storageReady || projectBusy) return;
+  clearTimeout(autosaveTimer);
+  setSaveStatus('저장 대기 중', 'pending');
+  autosaveTimer = setTimeout(() => saveProjectNow(), AUTOSAVE_DELAY_MS);
+}
+
+function projectThumbnail() {
+  const thumbnail = document.createElement('canvas');
+  thumbnail.width = 160;
+  thumbnail.height = 120;
+  thumbnail.getContext('2d').drawImage(composite().canvas, 0, 0, 160, 120);
+  return thumbnail.toDataURL('image/jpeg', 0.7);
+}
+
+async function saveProjectNow() {
+  if (!storageReady || projectBusy) return;
+  clearTimeout(autosaveTimer);
+  if (saveInFlight) {
+    saveQueued = true;
+    return saveInFlight;
+  }
+  // Never snapshot in the middle of a stroke, a clip load or playback.
+  if (loadingFrame || down || playbackActive) {
+    autosaveTimer = setTimeout(() => saveProjectNow(), AUTOSAVE_DELAY_MS);
+    return;
+  }
+  saveActiveFrame();
+  const { doc, images } = buildProjectDocument({
+    id: project.id,
+    name: project.name,
+    createdAt: project.createdAt,
+    width: W,
+    height: H,
+    layers: layers.map(layer => ({ ...layer, maskDataUrl: layer.maskEnabled ? layer.maskCanvas.toDataURL('image/png') : null })),
+    groups: layerGroups,
+    timeline,
+    active,
+    activeTrackId,
+    nextLayerId,
+    thumbnail: projectThumbnail(),
+  });
+  const writeImages = images.filter(image => savedImageRefs.get(image.key) !== image.dataUrl);
+  const referenced = referencedImageKeys(doc);
+  const deleteKeys = [...savedImageRefs.keys()].filter(key => !referenced.has(key));
+  setSaveStatus('저장 중…', 'saving');
+  saveInFlight = saveProjectRecord(doc, { writeImages, deleteKeys })
+    .then(() => {
+      writeImages.forEach(image => savedImageRefs.set(image.key, image.dataUrl));
+      deleteKeys.forEach(key => savedImageRefs.delete(key));
+      const time = new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' });
+      setSaveStatus(`자동 저장됨 · ${time}`, 'saved');
+    })
+    .catch(error => {
+      console.error('Project save failed:', error);
+      const quota = error?.name === 'QuotaExceededError';
+      setSaveStatus(quota ? '저장 공간이 부족해요' : '저장하지 못했어요', 'error');
+      showToast(quota ? '저장 공간이 부족해서 저장하지 못했어요' : '작품을 저장하지 못했어요. 잠시 후 다시 시도해요');
+    })
+    .finally(() => {
+      saveInFlight = null;
+      if (saveQueued) {
+        saveQueued = false;
+        scheduleAutosave();
+      }
+    });
+  return saveInFlight;
+}
+
+function freshLayerState() {
+  return [
+    { id: 'layer-1', name: '면 / 톤', visible: true, opacity: 1, blendMode: 'normal', groupId: null, maskEnabled: false, maskImage: null, motionTrack: [] },
+    { id: 'layer-2', name: '선화', visible: true, opacity: 1, blendMode: 'normal', groupId: null, maskEnabled: false, maskImage: null, motionTrack: [] },
+  ];
+}
+
+/** Replaces the whole editing state with a parsed project (or a blank one). */
+async function applyProjectState(parsed, imageData = new Map()) {
+  if (playbackActive) setPlaybackEnabled(false);
+  if (boilEnabled) setBoilEnabled(false);
+  frameLoadToken++;
+  loadingFrame = false;
+  const masks = await Promise.all(parsed.layers.map(saved => (saved.maskEnabled && saved.maskImage && imageData.get(saved.maskImage)
+    ? decodeImage(imageData.get(saved.maskImage))
+    : Promise.resolve(null))));
+  layers.splice(0, layers.length, ...parsed.layers.map((saved, index) => {
+    const layer = makeLayer(saved.name);
+    Object.assign(layer, {
+      id: saved.id,
+      visible: saved.visible,
+      opacity: saved.opacity,
+      blendMode: saved.blendMode,
+      groupId: saved.groupId,
+      maskEnabled: saved.maskEnabled,
+      motionTrack: saved.motionTrack.map(keyframe => ({ ...keyframe })),
+    });
+    if (masks[index]) {
+      const context = layer.maskCanvas.getContext('2d');
+      context.clearRect(0, 0, W, H);
+      context.drawImage(masks[index], 0, 0, W, H);
+    }
+    return layer;
+  }));
+  nextLayerId = parsed.nextLayerId;
+  layerGroups.splice(0, layerGroups.length, ...parsed.groups.map(group => ({ ...group })));
+  timeline.tracks = {};
+  for (const [trackId, track] of Object.entries(parsed.tracks)) {
+    timeline.tracks[trackId] = {
+      id: trackId,
+      clips: track.clips.map(clip => ({
+        id: clip.id,
+        hold: clip.hold,
+        cel: clip.celImage ? imageData.get(clip.celImage) || null : null,
+        transformCel: clip.transformCel,
+        ...(clip.strokes ? { strokes: clip.strokes } : {}),
+      })),
+    };
+  }
+  timeline.fps = parsed.fps;
+  timeline.nextClipId = parsed.nextClipId;
+  timeline.playhead = parsed.playhead;
+  active = parsed.active;
+  activeTrackId = parsed.activeTrackId;
+  activeGroupId = null;
+  maskEditing = false;
+  selectedStrokeId = null;
+  selectedStrokeIds.clear();
+  selectedTransformLayers.clear();
+  lineUndo.length = 0;
+  lineRedo.length = 0;
+  motionUndo = [];
+  motionRedo = [];
+  clipThumbnails.clear();
+  loadedClips.clear();
+  vectorStrokes.length = 0;
+  document.getElementById('fps').value = String(parsed.fps);
+  updateTimelineFPS(parsed.fps);
+  savedImageRefs = new Map();
+  for (const [key, dataUrl] of imageData) if (dataUrl) savedImageRefs.set(key, dataUrl);
+  vectorTrack();
+  for (const layer of layers) layerTrack(layer);
+  await syncClipsToPlayhead({ save: false });
+  updateProjectUi();
+}
+
+async function openProject(id) {
+  const record = await loadProjectRecord(id);
+  if (!record?.doc) throw new Error('작품을 찾지 못했어요');
+  const parsed = parseProjectDocument(record.doc, { width: W, height: H });
+  const imageData = await loadImageDataUrls(referencedImageKeys(parsed));
+  project = { id: parsed.id || id, name: parsed.name, createdAt: parsed.createdAt || new Date().toISOString() };
+  await applyProjectState(parsed, imageData);
+  await setMeta('lastProjectId', project.id);
+}
+
+async function switchProject(task) {
+  if (projectBusy) return;
+  await saveProjectNow();
+  projectBusy = true;
+  try {
+    await task();
+  } catch (error) {
+    console.error(error);
+    showToast(error instanceof Error ? error.message : '작품을 열지 못했어요');
+  } finally {
+    projectBusy = false;
+    render(layers.map((_, index) => index));
+    await saveProjectNow();
+  }
+}
+
+async function startNewProject() {
+  await switchProject(async () => {
+    project = { id: newProjectId(), name: '제목 없음', createdAt: new Date().toISOString() };
+    await applyProjectState({
+      fps: 12, playhead: 0, nextClipId: 1, nextLayerId: 3, active: 0, activeTrackId: null,
+      groups: [], layers: freshLayerState(), tracks: {},
+    });
+    showToast('새 작품을 시작했어요');
+  });
+}
+
+function updateProjectUi() {
+  const nameInput = document.getElementById('projectName');
+  if (nameInput && document.activeElement !== nameInput) nameInput.value = project.name;
+}
+
+async function refreshProjectList() {
+  const list = document.getElementById('projectList');
+  if (!list || !storageReady) return;
+  const projects = await listProjects().catch(() => []);
+  list.replaceChildren(...projects.map(item => {
+    const button = document.createElement('button');
+    button.className = 'project-item' + (item.id === project.id ? ' current' : '');
+    button.disabled = item.id === project.id;
+    const thumb = document.createElement('span');
+    thumb.className = 'project-thumb';
+    if (item.thumbnail) thumb.style.backgroundImage = `url("${item.thumbnail}")`;
+    const label = document.createElement('span');
+    label.className = 'project-label';
+    const name = document.createElement('strong');
+    name.textContent = item.name || '제목 없음';
+    const time = document.createElement('small');
+    time.textContent = item.id === project.id ? '지금 작업 중' : new Date(item.updatedAt).toLocaleString('ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+    label.append(name, time);
+    button.append(thumb, label);
+    button.onclick = () => switchProject(async () => {
+      await openProject(item.id);
+      closePopovers();
+      showToast(`'${project.name}' 작품을 열었어요`);
+    });
+    return button;
+  }));
+}
+
+function bindProjectControls() {
+  const nameInput = document.getElementById('projectName');
+  nameInput.addEventListener('input', () => {
+    project.name = nameInput.value.trim() || '제목 없음';
+    scheduleAutosave();
+  });
+  document.getElementById('newProject').onclick = () => {
+    startNewProject().then(() => refreshProjectList());
+  };
+  document.querySelector('[data-popover="actionsPopover"]')?.addEventListener('click', () => refreshProjectList());
+  // iPad Safari may kill a background tab without unload events; hidden is the last reliable moment.
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') saveProjectNow();
+  });
+  window.addEventListener('pagehide', () => saveProjectNow());
+}
+
+async function restoreOrCreateProject() {
+  if (!isProjectStorageAvailable()) {
+    setSaveStatus('이 브라우저에서는 자동 저장을 쓸 수 없어요', 'error');
+    return false;
+  }
+  try {
+    const lastId = await getMeta('lastProjectId');
+    storageReady = true;
+    requestPersistentStorage();
+    if (!lastId) return false;
+    projectBusy = true;
+    await openProject(lastId);
+    setSaveStatus('저장된 작업을 불러왔어요', 'saved');
+    showToast(`'${project.name}' 작업을 이어서 해요`);
+    return true;
+  } catch (error) {
+    console.error('Project restore failed:', error);
+    storageReady = isProjectStorageAvailable();
+    showToast('지난 작업을 불러오지 못해서 새 작품으로 시작해요');
+    project = { id: newProjectId(), name: '제목 없음', createdAt: new Date().toISOString() };
+    return false;
+  } finally {
+    projectBusy = false;
+  }
+}
+
 async function start() {
   inputSurface = await renderer.init(host);
   bindControls();
@@ -3583,12 +3866,16 @@ async function start() {
   bindViewportControls();
   bindCanvasEvents();
   bindKeyboardShortcuts();
+  bindProjectControls();
 
   vectorTrack();
   for (const layer of layers) loadedClips.set(layer.id, clipAt(layerTrack(layer), 0).clip.id);
   loadedClips.set(VECTOR_TRACK, clipAt(vectorTrack(), 0).clip.id);
   saveActiveFrame();
   render(layers.map((_, index) => index));
+  updateProjectUi();
+  const restored = await restoreOrCreateProject();
+  if (!restored) render(layers.map((_, index) => index));
 }
 
 start().catch(error => {

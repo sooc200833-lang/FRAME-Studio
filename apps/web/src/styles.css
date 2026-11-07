@@ -63,6 +63,10 @@ svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.7;stroke
 .toast.has-action button{padding:5px 10px;border-radius:999px;font-size:12px;background:var(--accent-soft);border-color:var(--accent);color:var(--accent-text)}
 @keyframes toast{0%{opacity:0;transform:translate(-50%,-6px)}15%,70%{opacity:1;transform:translate(-50%,0)}100%{opacity:0}}
 
+#saveStatus{padding:5px 9px;border-radius:999px;background:var(--glass);letter-spacing:0}
+#saveStatus[data-state=error]{color:var(--danger)}
+#saveStatus[data-state=saved]{color:#9fc79f}
+
 /* ── Popovers ── */
 .popover{position:absolute;top:8px;width:340px;max-height:calc(100% - 16px);overflow:auto;padding:14px 16px 16px;background:rgba(30,30,35,.97);border:1px solid #ffffff14;border-radius:var(--radius);box-shadow:0 18px 50px #000b;z-index:25;-webkit-user-select:auto;user-select:auto;overscroll-behavior:contain}
 .popover[data-side=right]{right:10px}
@@ -103,6 +107,17 @@ output{color:var(--accent);min-width:38px;text-align:right;font-size:12px;font-v
 .settings summary::after{content:"▾";float:right;color:var(--muted)}
 .settings:not([open]) summary::after{content:"▸"}
 #brushPopover[data-mode=vector] .raster-settings,#brushPopover[data-mode=raster] .vector-settings{display:none}
+
+/* Projects */
+.project-name-field input{flex:1;min-width:0;max-width:70%;padding:7px 9px;border:1px solid var(--line);border-radius:8px;background:var(--surface-2);-webkit-user-select:text;user-select:text}
+.project-list{display:flex;flex-direction:column;gap:6px;max-height:220px;overflow:auto;margin-top:6px}
+.project-list:empty{display:none}
+.project-item{display:flex;align-items:center;gap:10px;padding:6px;text-align:left}
+.project-item.current{border-color:var(--accent);opacity:1}
+.project-thumb{flex:0 0 64px;height:48px;border-radius:6px;background:#f4f0e8 center/cover no-repeat;border:1px solid #ffffff20}
+.project-label{display:flex;flex-direction:column;gap:2px;min-width:0}
+.project-label strong{font-size:12px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.project-label small{font-size:10px;color:var(--muted)}
 
 /* Movement keyframes */
 .popover.from-bottom{top:auto;bottom:8px}
