@@ -340,6 +340,13 @@ export class PixiStageRenderer {
     this.drawPath(this.preview, points, color, width, 0.85);
   }
 
+  /** Live preview of a vector stroke with the same pressure widths as the committed line. */
+  previewVectorStroke(stroke) {
+    if (!this.preview || !stroke?.points?.length) return;
+    this.clearPreview();
+    this.drawVectorStroke(this.preview, stroke);
+  }
+
   previewLine(from, to, color, width) {
     this.previewStroke([from, to], color, width);
   }
