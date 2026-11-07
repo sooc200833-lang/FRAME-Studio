@@ -44,6 +44,13 @@ Always distinguish code-level tests from visual browser checks and physical iPad
 - Freehand vector strokes are no longer left selected after drawing, so brush/color changes apply to the next stroke rather than restyling the previous one.
 - Verified in headless Chrome (layout at 1180×820 and 390×844, synthetic touch pinch/undo, eyedropper). Not yet verified on a physical iPad.
 
+### Movement keyframes (v1.2)
+- `animation/motion.js` (pure): keyframes `{frameId, x, y, rotation, scale, opacity, easing}` stored on `layer.motionTrack`, evaluated at the active frame index; holds before the first/after the last keyframe; keyframes on deleted frames are ignored.
+- `applyGroupState()` sets `layer.renderMotion`, `layer.renderMatrix` (null when identity) and multiplies motion opacity into `renderOpacity`. The renderer applies `renderMatrix` to layer sprites; `composite()` applies it for export, thumbnails, eyedropper.
+- Pen/eraser/smudge input maps through the inverse matrix (`position()`); `stagePosition()` is the raw canvas point. The live preview container follows the active layer matrix. Fill is blocked on moved layers.
+- 움직임 panel (timeline 움직임 button, shortcut M): sliders create/update the keyframe at the current frame, canvas drag in movement-edit mode moves the layer, undo/redo act on movement history while editing movement.
+- Raster pixels, cels and transform records are never modified by movement.
+
 ### Drawing and input
 - Raster pen and eraser on Canvas-backed layers.
 - Brush profiles: pencil, ink, marker, and brush.

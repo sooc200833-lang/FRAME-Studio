@@ -31,6 +31,7 @@
     <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
     <symbol id="i-copy" viewBox="0 0 24 24"><rect x="8" y="8" width="11" height="11" rx="2"/><path d="M5 15V6a1 1 0 011-1h9"/></symbol>
     <symbol id="i-trash" viewBox="0 0 24 24"><path d="M5 7h14M10 7V5h4v2M7 7l1 12.5h8L17 7"/></symbol>
+    <symbol id="i-motion" viewBox="0 0 24 24"><path d="M4 17c3-7 6-9 9-6s5 1 7-4"/><rect x="3" y="15.5" width="3.5" height="3.5" rx=".6" transform="rotate(45 4.75 17.25)"/><rect x="18.5" y="5.2" width="3.5" height="3.5" rx=".6" transform="rotate(45 20.25 6.95)"/></symbol>
     <symbol id="i-onion" viewBox="0 0 24 24"><circle cx="9" cy="12" r="5.5"/><circle cx="15" cy="12" r="5.5"/></symbol>
   </defs>
 </svg>
@@ -265,12 +266,27 @@
       <h4>최근 사용</h4>
       <div class="swatches" id="recentPalette"></div>
     </section>
+    <section class="popover from-bottom" id="motionPopover" data-side="right" hidden aria-label="움직임 키프레임">
+      <div class="popover-head"><h3>움직임</h3><span id="motionLayerName" class="popover-sub">레이어</span></div>
+      <button id="motionEditToggle" class="wide-btn">캔버스에서 끌어 움직이기</button>
+      <div class="field"><label for="motionX">가로 위치</label><input id="motionX" type="range" min="-1200" max="1200" value="0"><output id="motionXOut">0px</output></div>
+      <div class="field"><label for="motionY">세로 위치</label><input id="motionY" type="range" min="-900" max="900" value="0"><output id="motionYOut">0px</output></div>
+      <div class="field"><label for="motionRotation">회전</label><input id="motionRotation" type="range" min="-360" max="360" value="0"><output id="motionRotationOut">0°</output></div>
+      <div class="field"><label for="motionScale">크기</label><input id="motionScale" type="range" min="10" max="400" value="100"><output id="motionScaleOut">100%</output></div>
+      <div class="field"><label for="motionOpacity">불투명도</label><input id="motionOpacity" type="range" min="0" max="100" value="100"><output id="motionOpacityOut">100%</output></div>
+      <div class="field"><label for="motionEasing">다음 키까지 곡선</label><select id="motionEasing"><option value="easeInOut">부드럽게</option><option value="linear">일정하게</option><option value="easeIn">점점 빠르게</option><option value="easeOut">점점 느리게</option><option value="hold">멈췄다 바뀜</option></select></div>
+      <div class="button-row"><button id="motionKeyAdd" class="primary">키프레임 추가</button><button id="motionKeyDelete">키프레임 삭제</button></div>
+      <button id="motionClear" class="wide-btn danger">이 레이어 움직임 모두 지우기</button>
+      <p id="motionKeyInfo" class="note">값을 바꾸거나 캔버스를 끌면 현재 프레임에 키프레임이 생겨요</p>
+      <p class="note">선택한 래스터 레이어 전체가 움직여요. 키프레임 사이 프레임은 자동으로 이어지고, 움직임 편집 중에는 실행 취소가 움직임에만 적용돼요. 단축키 M.</p>
+    </section>
   </main>
 
   <section class="timeline" aria-label="애니메이션 타임라인">
     <div class="timeline-bar">
       <div class="tl-side">
         <button id="onionToggle" class="pill active" title="어니언 스킨"><svg><use href="#i-onion"/></svg><span>어니언 ON</span></button>
+        <button id="motionButton" class="pill" data-popover="motionPopover" title="움직임 키프레임"><svg><use href="#i-motion"/></svg><span>움직임</span></button>
         <label class="fps-control" for="fps"><input id="fps" type="range" min="1" max="30" value="12"><output id="fpsOut">12 FPS</output></label>
       </div>
       <div class="transport">

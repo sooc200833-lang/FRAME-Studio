@@ -102,6 +102,16 @@ output{color:var(--accent);min-width:38px;text-align:right;font-size:12px;font-v
 .settings:not([open]) summary::after{content:"▸"}
 #brushPopover[data-mode=vector] .raster-settings,#brushPopover[data-mode=raster] .vector-settings{display:none}
 
+/* Movement keyframes */
+.popover.from-bottom{top:auto;bottom:8px}
+#motionPopover .field label{min-width:92px}
+.popover-sub{font-size:12px;color:var(--muted);max-width:60%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#motionEditToggle{margin:0 0 6px}
+#motionEditToggle.active,#motionButton.active{background:var(--accent-soft);border-color:var(--accent);color:var(--accent-text)}
+.stage.motion-editing .canvaswrap{cursor:move}
+.stage.motion-editing #pixiHost canvas{outline:2px dashed var(--accent);outline-offset:4px}
+.key-diamond{position:absolute;right:5px;top:5px;width:9px;height:9px;background:var(--accent);transform:rotate(45deg);border-radius:1.5px;box-shadow:0 0 0 1.5px #1b1b1f}
+
 /* Brush library cards */
 .brush-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}
 .brush-card{display:grid;grid-template-columns:54px 1fr;grid-template-rows:auto auto;align-items:center;column-gap:10px;text-align:left;padding:8px 10px;font-size:12px;background:var(--surface-2);border-radius:10px}
