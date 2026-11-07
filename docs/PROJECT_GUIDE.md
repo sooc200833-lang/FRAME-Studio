@@ -67,6 +67,7 @@ Always distinguish code-level tests from visual browser checks and physical iPad
 - Raster pixels, cels and transform records are never modified by movement.
 
 ### Drawing and input
+- Pencil-only mode (작업 → 입력, stored in `localStorage` `frame-studio:pencil-only`): one finger pans the canvas instead of drawing, two/three-finger gestures still work, and touches that land while the pen is drawing are ignored (palm rejection). The first pen contact offers to turn it on. Role decision is the pure `classifyTouchStart` in `viewport/gestures.js`.
 - Vector node/Bezier handles and their hit targets are sized in CSS pixels (`canvasUnitsPerCssPixel`, `cssToCanvasUnits`, `renderer.setHandleScale`) so they stay the same physical size at every zoom (ported from #29).
 - Raster pen and eraser on Canvas-backed layers.
 - Brush profiles: pencil, ink, marker, and brush.
