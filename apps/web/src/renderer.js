@@ -1,11 +1,9 @@
 import { sampleLineStrokePath } from './line/line-engine.js';
 import { buildVectorStrokeSegments } from './line/vector-rendering.js';
 import { AlphaFilter, Application, Container, Graphics, Matrix, Sprite, Texture } from 'pixi.js';
-import { applyBrushTexture } from './brush/brush-engine.js';
 import { getVectorGraphicsCacheEntry, pruneVectorGraphicsCache } from './renderer/vector-graphics-cache.js';
 import { getPolygonBounds, getPolygonTransformHandles } from './selection/selection.js';
 import { createRendererInitOptions, initializeWithBackendFallback } from './renderer/renderer-options.js';
-import { toPixiBrushBlendMode } from './brush/blend-modes.js';
 
 export class PixiStageRenderer {
   constructor(width, height) {
@@ -14,10 +12,6 @@ export class PixiStageRenderer {
     this.app = null;
     this.background = null;
     this.preview = null;
-    this.previewTextureCanvas = null;
-    this.previewTextureContext = null;
-    this.previewTexture = null;
-    this.previewTextureSprite = null;
     this.entries = new Map();
     this.layerPreviews = new Map();
     this.strokeGraphics = [];
@@ -58,17 +52,10 @@ export class PixiStageRenderer {
 
     this.background = new Graphics().rect(0, 0, this.width, this.height).fill(0xf4f0e8);
     this.preview = new Graphics();
-    this.previewTextureCanvas = document.createElement('canvas');
-    this.previewTextureCanvas.width = 1;
-    this.previewTextureCanvas.height = 1;
-    this.previewTextureContext = this.previewTextureCanvas.getContext('2d');
-    this.previewTexture = Texture.from(this.previewTextureCanvas);
-    this.previewTextureSprite = new Sprite(this.previewTexture);
-    this.previewTextureSprite.visible = false;
     // Live stroke previews share one container so they can follow the active
     // layer's movement transform while painting on a moved layer.
     this.previewContainer = new Container();
-    this.previewContainer.addChild(this.preview, this.previewTextureSprite);
+    this.previewContainer.addChild(this.preview);
     app.stage.addChild(this.background, this.previewContainer);
     return app.canvas;
   }
@@ -380,67 +367,6 @@ export class PixiStageRenderer {
     this.previewStroke([from, to], color, width);
   }
 
-  previewPolygon(points, color, alpha = 1) {
-    if (!this.preview) return;
-    this.clearPreview();
-    this.preview.clear();
-    if (!points || points.length < 3) return;
-    this.preview.moveTo(points[0][0], points[0][1]);
-    for (let index = 1; index < points.length; index++) {
-      this.preview.lineTo(points[index][0], points[index][1]);
-    }
-    this.preview.closePath();
-    this.preview.fill({ color, alpha });
-  }
-
-  previewBrush(outline, color, alpha, samples, options = {}) {
-    if (!this.previewTextureContext || !this.previewTexture) return;
-    this.preview?.clear();
-    const context = this.previewTextureContext;
-    if (!Array.isArray(outline) || outline.length < 3) {
-      this.previewTextureSprite.visible = false;
-      return;
-    }
-
-    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-    for (const point of outline) {
-      if (point[0] < minX) minX = point[0];
-      if (point[0] > maxX) maxX = point[0];
-      if (point[1] < minY) minY = point[1];
-      if (point[1] > maxY) maxY = point[1];
-    }
-    const padding = 3;
-    const left = Math.max(0, Math.floor(minX - padding));
-    const top = Math.max(0, Math.floor(minY - padding));
-    const right = Math.min(this.width, Math.ceil(maxX + padding));
-    const bottom = Math.min(this.height, Math.ceil(maxY + padding));
-    const canvasWidth = Math.max(1, right - left);
-    const canvasHeight = Math.max(1, bottom - top);
-
-    if (this.previewTextureCanvas.width !== canvasWidth) this.previewTextureCanvas.width = canvasWidth;
-    if (this.previewTextureCanvas.height !== canvasHeight) this.previewTextureCanvas.height = canvasHeight;
-    context.clearRect(0, 0, canvasWidth, canvasHeight);
-    context.save();
-    context.translate(-left, -top);
-    context.globalAlpha = alpha;
-    context.fillStyle = color;
-    context.beginPath();
-    context.moveTo(outline[0][0], outline[0][1]);
-    for (let index = 1; index < outline.length; index++) context.lineTo(outline[index][0], outline[index][1]);
-    context.closePath();
-    context.fill();
-    applyBrushTexture(context, outline, samples, options);
-    context.restore();
-
-    this.previewTextureSprite.blendMode = toPixiBrushBlendMode(options.blendMode);
-    this.previewTextureSprite.x = left;
-    this.previewTextureSprite.y = top;
-    this.previewTextureSprite.width = canvasWidth;
-    this.previewTextureSprite.height = canvasHeight;
-    this.previewTexture.source.update();
-    this.previewTextureSprite.visible = true;
-  }
-
   /** Cheap per-frame update of layer movement during playback (no texture work). */
   updateLayerTransforms(layers) {
     for (const layer of layers) {
@@ -462,12 +388,6 @@ export class PixiStageRenderer {
 
   clearPreview() {
     this.preview?.clear();
-    if (this.previewTextureContext && this.previewTextureSprite) {
-      this.previewTextureContext.clearRect(0, 0, this.previewTextureCanvas.width, this.previewTextureCanvas.height);
-      this.previewTexture.source.update();
-      this.previewTextureSprite.visible = false;
-      this.previewTextureSprite.blendMode = 'normal';
-    }
   }
 
   destroy() {
@@ -480,10 +400,6 @@ export class PixiStageRenderer {
     this.strokeGraphics = [];
     for (const graphics of this.graphicsPool) graphics.destroy();
     this.graphicsPool = [];
-    this.previewTexture = null;
-    this.previewTextureCanvas = null;
-    this.previewTextureContext = null;
-    this.previewTextureSprite = null;
     this.app = null;
   }
 }

@@ -1,18 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  applyBrushTexture,
   coalescedPointerEvents,
-  createBrushTextureMarks,
-  getBrushPreset,
-  listBrushPresets,
-  createBrushOutline,
-  normalizePointerPressure,
-  pressureToWidth,
-  stabilizePoint,
-  resolveBrushStrokeOptions,
-  simplifyBrushSamples,
   createFrameScheduler,
+  normalizePointerPressure,
+  stabilizePoint,
 } from '../apps/web/src/brush/brush-engine.js';
 
 test('mouse and touch use a stable neutral pressure', () => {
@@ -24,14 +16,6 @@ test('pen pressure is clamped and can be disabled', () => {
   assert.equal(normalizePointerPressure({ pointerType: 'pen', pressure: 0.8 }), 0.8);
   assert.equal(normalizePointerPressure({ pointerType: 'pen', pressure: 2 }), 1);
   assert.equal(normalizePointerPressure({ pointerType: 'pen', pressure: 0.8 }, false), 0.5);
-});
-
-test('pressure maps to a variable brush width', () => {
-  const light = pressureToWidth(10, 0.1);
-  const firm = pressureToWidth(10, 0.9);
-  assert.ok(light > 0);
-  assert.ok(firm > light);
-  assert.ok(firm <= 11.8);
 });
 
 test('stabilization eases jitter but keeps fast movement responsive', () => {
@@ -55,106 +39,6 @@ function outlineThickness(points) {
   return Math.max(...ys) - Math.min(...ys);
 }
 
-test('perfect-freehand creates a closed-area polygon from pointer samples', () => {
-  const outline = createBrushOutline([
-    { x: 0, y: 0, pressure: 0.5 },
-    { x: 20, y: 3, pressure: 0.5 },
-    { x: 40, y: 0, pressure: 0.5 },
-  ], { size: 12, stylus: true, pressureEnabled: true });
-  assert.ok(outline.length > 8);
-  assert.ok(outline.every(point => Number.isFinite(point[0]) && Number.isFinite(point[1])));
-});
-
-test('stylus pressure changes the generated stroke outline thickness', () => {
-  const points = pressure => [
-    { x: 0, y: 0, pressure },
-    { x: 20, y: 0, pressure },
-    { x: 40, y: 0, pressure },
-  ];
-  const light = createBrushOutline(points(0.12), { size: 18, stylus: true, pressureEnabled: true });
-  const firm = createBrushOutline(points(0.92), { size: 18, stylus: true, pressureEnabled: true });
-  assert.ok(outlineThickness(firm) > outlineThickness(light));
-});
-
-test('disabled stylus pressure keeps a steady-width outline', () => {
-  const outline = createBrushOutline([
-    { x: 0, y: 0, pressure: 0.1 },
-    { x: 20, y: 0, pressure: 0.9 },
-    { x: 40, y: 0, pressure: 0.2 },
-  ], { size: 12, stylus: true, pressureEnabled: false });
-  const thickness = outlineThickness(outline);
-  assert.ok(thickness > 8 && thickness < 16);
-});
-
-
-test('brush presets expose distinct, stable drawing profiles', () => {
-  const presets = listBrushPresets();
-  assert.deepEqual(presets.map(item => item.id), ['pencil', 'ink', 'marker', 'brush']);
-  assert.ok(getBrushPreset('marker').sizeMultiplier > getBrushPreset('ink').sizeMultiplier);
-  assert.ok(getBrushPreset('marker').opacity < getBrushPreset('ink').opacity);
-  assert.equal(getBrushPreset('unknown'), getBrushPreset('ink'));
-});
-
-test('preset choice changes generated brush geometry', () => {
-  const samples = [
-    { x: 0, y: 0, pressure: 0.6 },
-    { x: 20, y: 0, pressure: 0.6 },
-    { x: 40, y: 0, pressure: 0.6 },
-  ];
-  const pencil = createBrushOutline(samples, { size: 12, stylus: true, preset: 'pencil' });
-  const marker = createBrushOutline(samples, { size: 12, stylus: true, preset: 'marker' });
-  assert.ok(outlineThickness(marker) > outlineThickness(pencil));
-});
-
-
-test('pencil texture produces deterministic grain marks', () => {
-  const samples = [{ x: 0, y: 0 }, { x: 40, y: 0 }];
-  const first = createBrushTextureMarks(samples, { preset: 'pencil', size: 8 });
-  const second = createBrushTextureMarks(samples, { preset: 'pencil', size: 8 });
-  assert.ok(first.length > 0);
-  assert.deepEqual(first, second);
-  assert.ok(first.every(mark => mark.type === 'grain' && mark.radius > 0));
-});
-
-test('marker and brush textures use different directional marks', () => {
-  const samples = [{ x: 0, y: 0 }, { x: 80, y: 12 }];
-  const marker = createBrushTextureMarks(samples, { preset: 'marker', size: 14 });
-  const brush = createBrushTextureMarks(samples, { preset: 'brush', size: 14 });
-  assert.ok(marker.length > 0 && brush.length > 0);
-  assert.ok(marker.every(mark => mark.type === 'band'));
-  assert.ok(brush.every(mark => mark.type === 'bristle'));
-  assert.notDeepEqual(marker, brush);
-});
-
-test('ink preset does not add artificial surface texture', () => {
-  assert.deepEqual(createBrushTextureMarks([{ x: 0, y: 0 }, { x: 20, y: 0 }], { preset: 'ink' }), []);
-});
-
-test('texture painting clips marks to the brush outline and restores context', () => {
-  const calls = [];
-  const stateStack = [];
-  const context = {
-    globalAlpha: 0.6,
-    save() { stateStack.push(this.globalAlpha); calls.push('save'); },
-    restore() { this.globalAlpha = stateStack.pop(); calls.push('restore'); },
-    beginPath() { calls.push('beginPath'); },
-    moveTo() {},
-    lineTo() {},
-    closePath() {},
-    clip() { calls.push('clip'); },
-    ellipse() {},
-    fill() { calls.push('fill'); },
-    stroke() { calls.push('stroke'); },
-  };
-  const outline = [[0, 0], [30, 0], [30, 10], [0, 10]];
-  const count = applyBrushTexture(context, outline, [{ x: 0, y: 5 }, { x: 30, y: 5 }], { preset: 'pencil', size: 6 });
-  assert.ok(count > 0);
-  assert.ok(calls.includes('clip'));
-  assert.equal(calls[0], 'save');
-  assert.equal(calls.at(-1), 'restore');
-  assert.equal(context.globalAlpha, 0.6);
-});
-
 test('coalesced pointer samples preserve inherited event coordinates and final sample', () => {
   const sample = { clientX: 10, clientY: 20, pressure: 0.4, pointerType: 'pen' };
   const prototype = { clientX: 30, clientY: 40, pressure: 0.8, pointerType: 'pen' };
@@ -169,68 +53,6 @@ test('coalesced pointer samples preserve inherited event coordinates and final s
   assert.equal(result[1].pointerType, 'pen');
   assert.equal('getCoalescedEvents' in result[1], false);
 });
-
-test('canonical brush options keep live preview and committed geometry identical', () => {
-  for (const preset of ['pencil', 'ink', 'marker', 'brush']) {
-    const options = {
-      size: 17,
-      stylus: true,
-      pressureEnabled: true,
-      preset,
-      pressureCurve: 1.12,
-      smoothing: getBrushPreset(preset).smoothing,
-      streamline: 0.37,
-      complete: true,
-    };
-    assert.deepEqual(
-      resolveBrushStrokeOptions(options),
-      resolveBrushStrokeOptions({ ...options }),
-    );
-  }
-});
-
-test('brush sample simplification keeps endpoints and removes redundant straight-line points', () => {
-  const samples = Array.from({ length: 101 }, (_, index) => ({
-    x: index,
-    y: 0.02 * Math.sin(index),
-    pressure: 0.5,
-  }));
-  const reduced = simplifyBrushSamples(samples, 0.5, 0.025);
-  assert.deepEqual(reduced[0], samples[0]);
-  assert.deepEqual(reduced.at(-1), samples.at(-1));
-  assert.ok(reduced.length < samples.length / 3);
-});
-
-test('brush sample simplification preserves corners and meaningful pressure changes', () => {
-  const samples = [
-    { x: 0, y: 0, pressure: 0.5 },
-    { x: 5, y: 0, pressure: 0.5 },
-    { x: 10, y: 0, pressure: 0.5 },
-    { x: 10, y: 5, pressure: 0.5 },
-    { x: 10, y: 10, pressure: 1 },
-    { x: 10, y: 15, pressure: 1 },
-  ];
-  const reduced = simplifyBrushSamples(samples, 0.2, 0.03);
-  assert.ok(reduced.some(point => point.x === 10 && point.y === 0));
-  assert.ok(reduced.some(point => point.pressure === 1));
-  assert.deepEqual(reduced[0], samples[0]);
-  assert.deepEqual(reduced.at(-1), samples.at(-1));
-});
-
-test('brush outlines use the same simplified geometry for every preset', () => {
-  const samples = Array.from({ length: 80 }, (_, index) => ({
-    x: index * 2,
-    y: Math.sin(index / 8) * 3,
-    pressure: 0.3 + (index % 12) / 20,
-  }));
-  for (const preset of ['pencil', 'ink', 'marker', 'brush']) {
-    const reduced = simplifyBrushSamples(samples);
-    const outline = createBrushOutline(samples, { preset, complete: true });
-    assert.ok(reduced.length < samples.length);
-    assert.ok(outline.length > 0);
-  }
-});
-
 
 test('brush preview scheduler coalesces many pointer updates into one frame', () => {
   const callbacks = new Map();

@@ -29,11 +29,13 @@ test('canvas interaction connects smudge sessions and frame-scheduled texture up
   assert.match(main, /event\.type === 'pointercancel'/);
 });
 
-test('raster brush preview uses the same blend-mode adapter as commit', async () => {
+test('raster brush preview and commit share one composite mode', async () => {
   const main = await read('apps/web/src/main.js');
-  const renderer = await read('apps/web/src/renderer.js');
-  assert.match(main, /normalizeBrushBlendMode\(brushBlendMode\)/);
-  assert.match(renderer, /toPixiBrushBlendMode\(options\.blendMode\)/);
+  // One function decides operation/alpha/selection; preview and commit both call it.
+  assert.match(main, /operation: normalizeBrushBlendMode\(brushBlendMode\)/);
+  assert.match(main, /const mode = rasterStrokeMode\(rasterStrokeTarget\);/);
+  assert.match(main, /strokeBuffer\.renderPreview\(base, mode\)/);
+  assert.match(main, /strokeBuffer\.compositeOnto\(layer\.canvas\.getContext\('2d'\), rasterStrokeMode\(rasterStrokeTarget\)\)/);
 });
 
 test('vector pressure profile canvas exists for its pointer event bindings', async () => {
