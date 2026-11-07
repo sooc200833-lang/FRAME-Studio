@@ -109,12 +109,12 @@ Always distinguish code-level tests from visual browser checks and physical iPad
 ### Manga screentone
 - Dedicated MANGA · SCREENTONE controls currently live inside the **도구 (Tools)** inspector panel.
 - Implemented patterns: dots, gradient dots, lines, crosshatch.
-- Controls: spacing, dot/line size, angle, opacity, selected color.
+- Controls: spacing (screen frequency), nominal mark-area coverage, angle, opacity, selected color. Dot radius is derived from spacing and coverage; opacity remains an independent alpha setting.
 - Apply writes pixels directly into the active raster layer.
 - If a selection polygon exists, the effect is clipped to it; otherwise it affects the whole active layer.
 - It participates in the raster layer's existing undo snapshot flow.
 - This is currently destructive raster application, not a live/non-destructive tone layer.
-- There is no independent tone coverage percentage or calibrated LPI control yet. Do not describe opacity as tone coverage: opacity and dot-area coverage are different concepts.
+- Independent nominal coverage percentage is available separately from spacing and opacity. Calibrated print LPI output and non-destructive tone layers are not implemented. Do not describe opacity as tone coverage: opacity and dot-area coverage are different concepts.
 
 ## 4. Code map
 
@@ -255,7 +255,7 @@ Tests use Node's built-in `node:test` runner. Keep tests deterministic and avoid
 - Some document concepts (nested/isolated groups, per-frame group/mask metadata) are incomplete.
 - Animation keyframes/interpolation are not implemented.
 - Tone is currently destructive raster output; no editable tone objects/layers.
-- Tone controls currently expose spacing, size, angle, opacity; no separate coverage percentage or calibrated LPI.
+- Tone controls expose spacing, nominal coverage percentage, angle, and opacity; calibrated LPI and editable tone objects/layers remain future work.
 - Selection feathering and some multi-layer/lasso workflows are incomplete.
 - AI provider integration is a roadmap item; do not expose API credentials in client code.
 - Review `docs/roadmap.md` and the source before assuming any unchecked item is complete.
