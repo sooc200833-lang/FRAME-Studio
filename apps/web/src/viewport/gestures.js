@@ -65,3 +65,21 @@ export function classifyMultiTouchTap({ fingers, durationMs, maxTravel }, { maxD
   if (fingers === 3) return 'redo';
   return null;
 }
+
+/**
+ * Decides what a new finger touch on the canvas does.
+ * - 'ignore': pencil-only mode while the pencil is drawing (palm rejection)
+ * - 'gesture': two or more fingers (pinch, pan, undo/redo taps)
+ * - 'motion': movement-edit drag
+ * - 'pan': pencil-only mode, one finger moves the canvas instead of drawing
+ * - 'deferred-fill': fill waits for release so a two-finger tap can't fill first
+ * - 'draw': the active tool handles the touch
+ */
+export function classifyTouchStart({ pencilOnly = false, penActive = false, touchCount = 1, motionEditing = false, tool = '' } = {}) {
+  if (pencilOnly && penActive) return 'ignore';
+  if (touchCount >= 2) return 'gesture';
+  if (motionEditing) return 'motion';
+  if (pencilOnly) return 'pan';
+  if (tool === 'fill') return 'deferred-fill';
+  return 'draw';
+}
