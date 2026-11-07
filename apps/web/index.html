@@ -97,7 +97,8 @@
         <li><b>두 손가락 탭</b> 실행 취소</li>
         <li><b>세 손가락 탭</b> 다시 실행</li>
         <li><b>그리기 도구 다시 누르기</b> 브러시 라이브러리</li>
-        <li><b>키보드</b> B 그리기 · S 스머지 · E 지우개 · I 스포이드 · [ ] 크기 · ⌘Z / ⇧⌘Z</li>
+        <li><b>키보드</b> B 그리기 · S 스머지 · E 지우개 · I 스포이드 · [ ] 크기 · , . 프레임 이동 · M 움직임 · ⌘Z / ⇧⌘Z</li>
+        <li><b>그림 길이</b> 타임라인에서 선택한 그림의 오른쪽 끝을 끌거나 − ＋ 버튼</li>
       </ul>
     </section>
 
@@ -290,15 +291,20 @@
         <label class="fps-control" for="fps"><input id="fps" type="range" min="1" max="30" value="12"><output id="fpsOut">12 FPS</output></label>
       </div>
       <div class="transport">
-        <button id="framePrev" class="icon-btn" title="이전 프레임" aria-label="이전 프레임"><svg><use href="#i-prev"/></svg></button>
+        <button id="framePrev" class="icon-btn" title="이전 그림" aria-label="이전 그림"><svg><use href="#i-prev"/></svg></button>
         <button id="playToggle" class="play-btn" title="재생" aria-label="재생"><svg><use href="#i-play"/></svg></button>
-        <button id="frameNext" class="icon-btn" title="다음 프레임" aria-label="다음 프레임"><svg><use href="#i-next"/></svg></button>
+        <button id="frameNext" class="icon-btn" title="다음 그림" aria-label="다음 그림"><svg><use href="#i-next"/></svg></button>
       </div>
       <div class="tl-side tl-right">
-        <span id="frameCounter" class="frame-counter">1 / 1</span>
-        <button id="frameAdd" class="icon-btn" title="빈 프레임 추가" aria-label="빈 프레임 추가"><svg><use href="#i-plus"/></svg></button>
-        <button id="frameDuplicate" class="icon-btn" title="프레임 복제" aria-label="프레임 복제"><svg><use href="#i-copy"/></svg></button>
-        <button id="frameDelete" class="icon-btn" title="프레임 삭제" aria-label="프레임 삭제"><svg><use href="#i-trash"/></svg></button>
+        <span id="frameCounter" class="frame-counter" title="재생 위치 / 전체 프레임">1 / 1</span>
+        <div class="hold-control" role="group" aria-label="선택한 그림의 길이">
+          <button id="holdMinus" title="그림 길이 줄이기" aria-label="그림 길이 줄이기">−</button>
+          <span id="holdOut" title="선택한 그림이 유지되는 프레임 수">1프레임</span>
+          <button id="holdPlus" title="그림 길이 늘리기" aria-label="그림 길이 늘리기">＋</button>
+        </div>
+        <button id="frameAdd" class="icon-btn" title="빈 그림 추가" aria-label="빈 그림 추가"><svg><use href="#i-plus"/></svg></button>
+        <button id="frameDuplicate" class="icon-btn" title="그림 복제" aria-label="그림 복제"><svg><use href="#i-copy"/></svg></button>
+        <button id="frameDelete" class="icon-btn" title="그림 삭제" aria-label="그림 삭제"><svg><use href="#i-trash"/></svg></button>
       </div>
     </div>
     <div class="track">

@@ -404,6 +404,16 @@ export class PixiStageRenderer {
     this.previewTextureSprite.visible = true;
   }
 
+  /** Cheap per-frame update of layer movement during playback (no texture work). */
+  updateLayerTransforms(layers) {
+    for (const layer of layers) {
+      const sprite = this.entries.get(layer)?.sprite;
+      if (!sprite) continue;
+      sprite.alpha = layer.renderOpacity ?? layer.opacity ?? 1;
+      setDisplayMatrix(sprite, layer.renderMatrix);
+    }
+  }
+
   setPreviewMatrix(matrix = null) {
     if (this.previewContainer) setDisplayMatrix(this.previewContainer, matrix);
   }

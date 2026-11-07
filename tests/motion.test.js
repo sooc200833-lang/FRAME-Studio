@@ -6,39 +6,46 @@ import {
 } from '../apps/web/src/animation/motion.js';
 
 const close = (actual, expected, epsilon = 1e-6) => assert.ok(Math.abs(actual - expected) < epsilon, `${actual} ≈ ${expected}`);
-const frames = ['f1', 'f2', 'f3', 'f4', 'f5'];
 
 test('an empty track evaluates to identity', () => {
-  assert.deepEqual(evaluateMotionTrack([], frames, 2), { ...IDENTITY_MOTION });
-  assert.ok(isIdentityMotion(evaluateMotionTrack(undefined, frames, 0)));
+  assert.deepEqual(evaluateMotionTrack([], 2), { ...IDENTITY_MOTION });
+  assert.ok(isIdentityMotion(evaluateMotionTrack(undefined, 0)));
 });
 
 test('setKeyframe creates, replaces and keeps easing; removeKeyframe deletes', () => {
-  let track = setKeyframe([], 'f1', { x: 10 });
+  let track = setKeyframe([], 0, { x: 10 });
   assert.equal(track.length, 1);
-  assert.equal(keyframeAt(track, 'f1').easing, 'easeInOut');
-  track = setKeyframe(track, 'f1', { y: 5 }, 'linear');
+  assert.equal(keyframeAt(track, 0).easing, 'easeInOut');
+  track = setKeyframe(track, 0, { y: 5 }, 'linear');
   assert.equal(track.length, 1);
-  assert.deepEqual({ x: keyframeAt(track, 'f1').x, y: keyframeAt(track, 'f1').y }, { x: 10, y: 5 });
-  track = setKeyframe(track, 'f1', { rotation: 30 });
-  assert.equal(keyframeAt(track, 'f1').easing, 'linear');
-  assert.equal(removeKeyframe(track, 'f1').length, 0);
+  assert.deepEqual({ x: keyframeAt(track, 0).x, y: keyframeAt(track, 0).y }, { x: 10, y: 5 });
+  track = setKeyframe(track, 0, { rotation: 30 });
+  assert.equal(keyframeAt(track, 0).easing, 'linear');
+  assert.equal(removeKeyframe(track, 0).length, 0);
+});
+
+test('ticks are normalized to non-negative integers', () => {
+  const track = setKeyframe([], 2.6, { x: 1 });
+  assert.equal(track[0].tick, 3);
+  assert.equal(setKeyframe([], -4, {})[0].tick, 0);
+  assert.deepEqual(orderedKeyframes(setKeyframe(setKeyframe([], 8, {}), 2, {})).map(key => key.tick), [2, 8]);
 });
 
 test('linear interpolation between keyframes, holding outside the range', () => {
-  let track = setKeyframe([], 'f2', { x: 0, opacity: 1 }, 'linear');
-  track = setKeyframe(track, 'f4', { x: 100, opacity: 0 });
-  assert.equal(evaluateMotionTrack(track, frames, 0).x, 0);
-  assert.equal(evaluateMotionTrack(track, frames, 2).x, 50);
-  close(evaluateMotionTrack(track, frames, 2).opacity, 0.5);
-  assert.equal(evaluateMotionTrack(track, frames, 4).x, 100);
+  let track = setKeyframe([], 1, { x: 0, opacity: 1 }, 'linear');
+  track = setKeyframe(track, 3, { x: 100, opacity: 0 });
+  assert.equal(evaluateMotionTrack(track, 0).x, 0);
+  assert.equal(evaluateMotionTrack(track, 2).x, 50);
+  close(evaluateMotionTrack(track, 2).opacity, 0.5);
+  assert.equal(evaluateMotionTrack(track, 2.5).x, 75, 'fractional ticks interpolate during playback');
+  assert.equal(evaluateMotionTrack(track, 9).x, 100);
 });
 
 test('hold easing steps and ease curves keep endpoints', () => {
-  let track = setKeyframe([], 'f1', { x: 0 }, 'hold');
-  track = setKeyframe(track, 'f3', { x: 80 });
-  assert.equal(evaluateMotionTrack(track, frames, 1.9).x, 0);
-  assert.equal(evaluateMotionTrack(track, frames, 2).x, 80);
+  let track = setKeyframe([], 0, { x: 0 }, 'hold');
+  track = setKeyframe(track, 2, { x: 80 });
+  assert.equal(evaluateMotionTrack(track, 1.9).x, 0);
+  assert.equal(evaluateMotionTrack(track, 2).x, 80);
   for (const easing of ['linear', 'easeIn', 'easeOut', 'easeInOut']) {
     close(ease(easing, 0), 0);
     close(ease(easing, 1), 1);
@@ -48,17 +55,9 @@ test('hold easing steps and ease curves keep endpoints', () => {
 });
 
 test('scale interpolates geometrically', () => {
-  let track = setKeyframe([], 'f1', { scale: 0.5 }, 'linear');
-  track = setKeyframe(track, 'f3', { scale: 2 });
-  close(evaluateMotionTrack(track, frames, 1).scale, 1);
-});
-
-test('keyframes follow their frame when frames are reordered or deleted', () => {
-  let track = setKeyframe([], 'f2', { x: 10 });
-  track = setKeyframe(track, 'f5', { x: 50 });
-  assert.deepEqual(orderedKeyframes(track, ['f5', 'f2']).map(key => key.frameId), ['f5', 'f2']);
-  // Deleting f5 leaves only the f2 keyframe, which is then held everywhere.
-  assert.equal(evaluateMotionTrack(track, ['f1', 'f2', 'f3'], 2).x, 10);
+  let track = setKeyframe([], 0, { scale: 0.5 }, 'linear');
+  track = setKeyframe(track, 2, { scale: 2 });
+  close(evaluateMotionTrack(track, 1).scale, 1);
 });
 
 test('motion matrix rotates and scales about the canvas center and inverts', () => {
@@ -72,5 +71,6 @@ test('motion matrix rotates and scales about the canvas center and inverts', () 
   const back = applyMatrix(invertMatrix(matrix), right);
   close(back.x, 110);
   close(back.y, 50);
-  assert.deepEqual(motionMatrix(IDENTITY_MOTION, 200, 100).map(value => Math.round(value * 1e9) / 1e9), [1, 0, -0, 1, 0, 0]);
+  const identity = motionMatrix(IDENTITY_MOTION, 200, 100);
+  [1, 0, 0, 1, 0, 0].forEach((value, index) => close(identity[index], value));
 });

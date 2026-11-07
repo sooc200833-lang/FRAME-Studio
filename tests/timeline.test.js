@@ -121,3 +121,46 @@ test('frame snapshots deep-clone editable Bézier geometry', () => {
   assert.equal(timeline.frames[0].strokes[0].bezierPath.segments[0].control1.x, 5);
   assert.equal(timeline.frames[0].strokes[0].bezierPath.anchorModes[1], 'smooth');
 });
+
+test('holds extend drawings across ticks and drive playback duration', async () => {
+  const { setFrameHold, totalTicks, frameAtTick, frameStartTick, seekTick, applyTimelineFps } = await import('../apps/web/src/animation/timeline.js');
+  const timeline = createTimeline({ fps: 10 });
+  const first = timeline.frames[0];
+  const second = addFrame(timeline);
+  assert.equal(timeline.playhead, 1);
+  setFrameHold(timeline, first.id, 3);
+  assert.equal(totalTicks(timeline), 4);
+  assert.equal(frameStartTick(timeline, second.id), 3);
+  assert.equal(frameAtTick(timeline, 2).id, first.id);
+  assert.equal(frameAtTick(timeline, 3).id, second.id);
+  assert.equal(frameAtTick(timeline, 4).id, first.id, 'ticks wrap');
+  assert.equal(first.durationMs, 300);
+  assert.equal(frameAtTime(timeline, 250).id, first.id);
+  assert.equal(frameAtTime(timeline, 310).id, second.id);
+  applyTimelineFps(timeline, 20);
+  assert.equal(first.durationMs, 150);
+  assert.equal(seekTick(timeline, 1).id, first.id);
+  assert.equal(timeline.activeFrameId, first.id);
+  assert.equal(timeline.playhead, 1);
+  assert.equal(seekTick(timeline, 99).id, second.id, 'seek clamps to the last tick');
+  assert.equal(timeline.playhead, 3);
+});
+
+test('hold is clamped, selectFrame keeps an in-hold playhead, duplicate keeps hold', async () => {
+  const { setFrameHold, MAX_FRAME_HOLD, frameHold } = await import('../apps/web/src/animation/timeline.js');
+  const timeline = createTimeline();
+  const first = timeline.frames[0];
+  setFrameHold(timeline, first.id, 0);
+  assert.equal(frameHold(first), 1);
+  setFrameHold(timeline, first.id, 500);
+  assert.equal(frameHold(first), MAX_FRAME_HOLD);
+  setFrameHold(timeline, first.id, 4);
+  timeline.playhead = 2;
+  selectFrame(timeline, first.id);
+  assert.equal(timeline.playhead, 2);
+  const copy = addFrame(timeline, { duplicate: true });
+  assert.equal(frameHold(copy), 4);
+  assert.equal(timeline.playhead, 4);
+  deleteFrame(timeline, copy.id);
+  assert.equal(timeline.playhead, 0);
+});

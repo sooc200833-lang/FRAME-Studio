@@ -1,9 +1,8 @@
 // Layer movement keyframes ("움직임"). Pure data + math, no DOM or PixiJS.
 //
-// A layer's motion track is a list of keyframes attached to timeline frame IDs.
-// Attaching to IDs (not indices) keeps keyframes on the right drawing when
-// frames are inserted or deleted. Evaluation resolves IDs against the current
-// frame order; keyframes whose frame no longer exists are ignored.
+// A layer's motion track is a list of keyframes placed at absolute timeline
+// ticks (frame times), independent of which drawing is exposed there. A held
+// drawing therefore keeps moving smoothly while it stays on screen.
 
 export const IDENTITY_MOTION = Object.freeze({ x: 0, y: 0, rotation: 0, scale: 1, opacity: 1 });
 export const MOTION_EASINGS = ['linear', 'easeIn', 'easeOut', 'easeInOut', 'hold'];
@@ -21,9 +20,11 @@ export function normalizeMotion(motion = {}) {
   };
 }
 
+const normalizeTick = tick => Math.max(0, Math.round(finite(tick, 0)));
+
 export function normalizeKeyframe(keyframe) {
   return {
-    frameId: String(keyframe.frameId),
+    tick: normalizeTick(keyframe.tick),
     ...normalizeMotion(keyframe),
     easing: MOTION_EASINGS.includes(keyframe.easing) ? keyframe.easing : 'easeInOut',
   };
@@ -48,51 +49,50 @@ export function ease(easing, t) {
   }
 }
 
-/** Returns a new track with the keyframe at `frameId` created or replaced. */
-export function setKeyframe(track = [], frameId, values, easing) {
-  const existing = track.find(keyframe => keyframe.frameId === frameId);
+/** Returns a new track with the keyframe at `tick` created or replaced. */
+export function setKeyframe(track = [], tick, values, easing) {
+  const at = normalizeTick(tick);
+  const existing = track.find(keyframe => keyframe.tick === at);
   const next = normalizeKeyframe({
     ...(existing || {}),
     ...values,
-    frameId,
+    tick: at,
     easing: easing ?? existing?.easing,
   });
-  return [...track.filter(keyframe => keyframe.frameId !== frameId), next];
+  return [...track.filter(keyframe => keyframe.tick !== at), next];
 }
 
-export function removeKeyframe(track = [], frameId) {
-  return track.filter(keyframe => keyframe.frameId !== frameId);
+export function removeKeyframe(track = [], tick) {
+  const at = normalizeTick(tick);
+  return track.filter(keyframe => keyframe.tick !== at);
 }
 
-export function keyframeAt(track = [], frameId) {
-  return track.find(keyframe => keyframe.frameId === frameId) || null;
+export function keyframeAt(track = [], tick) {
+  const at = normalizeTick(tick);
+  return track?.find(keyframe => keyframe.tick === at) || null;
 }
 
-/** Keyframes that still have a frame, sorted by frame position, with their index. */
-export function orderedKeyframes(track = [], frameIds = []) {
-  const indexOf = new Map(frameIds.map((id, index) => [id, index]));
-  return track
-    .filter(keyframe => indexOf.has(keyframe.frameId))
-    .map(keyframe => ({ ...keyframe, index: indexOf.get(keyframe.frameId) }))
-    .sort((a, b) => a.index - b.index);
+export function orderedKeyframes(track = []) {
+  return [...(track || [])].sort((a, b) => a.tick - b.tick);
 }
 
 /**
- * Motion at `frameIndex` (may be fractional). Before the first keyframe and
- * after the last one the nearest keyframe is held. Between two keyframes the
- * earlier keyframe's easing shapes the segment.
+ * Motion at `tick` (may be fractional during playback). Before the first
+ * keyframe and after the last one the nearest keyframe is held. Between two
+ * keyframes the earlier keyframe's easing shapes the segment.
  */
-export function evaluateMotionTrack(track, frameIds, frameIndex) {
-  const keys = orderedKeyframes(track, frameIds);
+export function evaluateMotionTrack(track, tick) {
+  const keys = orderedKeyframes(track);
   if (!keys.length) return { ...IDENTITY_MOTION };
-  if (frameIndex <= keys[0].index) return normalizeMotion(keys[0]);
+  const time = finite(tick, 0);
+  if (time <= keys[0].tick) return normalizeMotion(keys[0]);
   const last = keys[keys.length - 1];
-  if (frameIndex >= last.index) return normalizeMotion(last);
+  if (time >= last.tick) return normalizeMotion(last);
   let segment = 0;
-  while (segment < keys.length - 2 && frameIndex >= keys[segment + 1].index) segment++;
+  while (segment < keys.length - 2 && time >= keys[segment + 1].tick) segment++;
   const from = keys[segment];
   const to = keys[segment + 1];
-  const t = ease(from.easing, (frameIndex - from.index) / (to.index - from.index));
+  const t = ease(from.easing, (time - from.tick) / (to.tick - from.tick));
   const mix = (a, b) => a + (b - a) * t;
   return normalizeMotion({
     x: mix(from.x, to.x),
