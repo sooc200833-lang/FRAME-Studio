@@ -1053,6 +1053,27 @@ function drawLayers() {
   }
 }
 
+// Swaps a layer with its nearest neighbour in the same group (or among
+// ungrouped layers). Animation drawings follow automatically because tracks
+// are keyed by layer id, not by stack position.
+function neighbourLayerIndex(index, direction) {
+  const groupId = layers[index]?.groupId || null;
+  for (let target = index + direction; target >= 0 && target < layers.length; target += direction) {
+    if ((layers[target].groupId || null) === groupId) return target;
+  }
+  return -1;
+}
+
+function moveLayer(index, direction) {
+  const target = neighbourLayerIndex(index, direction);
+  if (target < 0) return;
+  if (playbackActive) setPlaybackEnabled(false);
+  [layers[index], layers[target]] = [layers[target], layers[index]];
+  if (active === index) active = target;
+  else if (active === target) active = index;
+  render(layers.map((_, layerIndex) => layerIndex));
+}
+
 function appendLayerRow(list, layer, index, nested) {
     const item = document.createElement('div');
     item.className = 'layer' + (index === active ? ' selected' : '') + (nested ? ' nested' : '');
@@ -1077,9 +1098,35 @@ function appendLayerRow(list, layer, index, nested) {
       else selectedTransformLayers.delete(layer);
     };
 
+    const thumbnail = document.createElement('canvas');
+    thumbnail.className = 'layer-thumbnail';
+    thumbnail.width = 48;
+    thumbnail.height = 36;
+    thumbnail.setAttribute('aria-hidden', 'true');
+    const thumbnailContext = thumbnail.getContext('2d');
+    thumbnailContext.fillStyle = '#f4f0e8';
+    thumbnailContext.fillRect(0, 0, 48, 36);
+    thumbnailContext.drawImage(layer.presentationCanvas || layer.canvas, 0, 0, 48, 36);
+
     const name = document.createElement('span');
+    name.className = 'layer-name';
     name.textContent = layer.name + (layer.maskEnabled ? ' · MASK' : '');
-    item.append(visibility, target, name);
+
+    const order = document.createElement('span');
+    order.className = 'layer-order';
+    const makeOrderButton = (label, title, direction) => {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.textContent = label;
+      button.title = title;
+      button.setAttribute('aria-label', `${layer.name} ${title}`);
+      button.disabled = neighbourLayerIndex(index, direction) < 0;
+      button.onclick = event => { event.stopPropagation(); moveLayer(index, direction); };
+      return button;
+    };
+    // The list shows the top layer first, so "up" means a higher stack index.
+    order.append(makeOrderButton('↑', '위로 이동', 1), makeOrderButton('↓', '아래로 이동', -1));
+    item.append(visibility, target, thumbnail, name, order);
     item.onclick = event => {
       if (event.target !== visibility && event.target !== target) {
         active = index;
