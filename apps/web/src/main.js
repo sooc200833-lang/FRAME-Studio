@@ -990,7 +990,7 @@ function applyMangaTone() {
   const settings = {
     pattern: document.getElementById('tonePattern').value,
     spacing: Number(document.getElementById('toneSpacing').value),
-    dotSize: Number(document.getElementById('toneDotSize').value),
+    coverage: Number(document.getElementById('toneCoverage').value),
     angle: Number(document.getElementById('toneAngle').value),
     opacity: Number(document.getElementById('toneOpacity').value),
     color,
@@ -1004,7 +1004,7 @@ function applyMangaTone() {
 function updateToneControls() {
   const values = [
     ['toneSpacing', 'toneSpacingOut', value => value + 'px'],
-    ['toneDotSize', 'toneDotSizeOut', value => value + 'px'],
+    ['toneCoverage', 'toneCoverageOut', value => value + '%'],
     ['toneAngle', 'toneAngleOut', value => value + '°'],
     ['toneOpacity', 'toneOpacityOut', value => value + '%'],
   ];
@@ -1551,7 +1551,7 @@ function bindControls() {
   motionStrengthInput.addEventListener('change', finishLineStyleEdit);
   motionStrengthInput.oninput = event => { vectorMotionStrength = Number(event.target.value); document.getElementById('vectorMotionStrengthOut').value = vectorMotionStrength + 'px'; if (selectedStrokeIds.size || selectedStrokeId) { beginLineStyleEdit(); applySelectedStyle({ motionStrength: vectorMotionStrength }, false); } };
   document.getElementById('selectedOutlineToggle').onchange = event => { showSelectedVectorHighlight = event.target.checked; render(); };
-  ['toneSpacing', 'toneDotSize', 'toneAngle', 'toneOpacity'].forEach(id => {
+  ['toneSpacing', 'toneCoverage', 'toneAngle', 'toneOpacity'].forEach(id => {
     document.getElementById(id).oninput = updateToneControls;
   });
   document.getElementById('tonePattern').onchange = updateToneControls;

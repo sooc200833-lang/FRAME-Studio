@@ -4,18 +4,22 @@ export function normalizeScreentoneSettings(settings = {}) {
   return {
     pattern: ['dots', 'gradient', 'lines', 'crosshatch'].includes(settings.pattern) ? settings.pattern : 'dots',
     spacing: clamp(Number(settings.spacing) || 12, 4, 48),
-    dotSize: clamp(Number(settings.dotSize) || 2, 0.5, 8),
+    coverage: clamp(Number(settings.coverage ?? 25) || 1, 1, 70),
     angle: ((Number(settings.angle) || 0) % 180 + 180) % 180,
     opacity: clamp(Number(settings.opacity ?? 100) / 100, 0, 1),
     color: /^#[0-9a-f]{6}$/i.test(settings.color) ? settings.color : '#24242a',
   };
 }
 
-export function getScreentoneDotRadius({ pattern = 'dots', dotSize = 2, x = 0, y = 0, width = 1200, height = 900 } = {}) {
-  if (pattern !== 'gradient') return dotSize;
+/** Convert nominal dot-area coverage into a radius for a square screen cell. */
+export function getScreentoneDotRadius({ spacing = 12, coverage = 25, x = 0, y = 0, width = 1200, height = 900, gradient = false } = {}) {
+  const safeSpacing = clamp(Number(spacing) || 12, 4, 48);
+  const safeCoverage = clamp(Number(coverage) || 1, 1, 70);
+  const baseRadius = Math.min(safeSpacing * Math.sqrt(safeCoverage / (100 * Math.PI)), safeSpacing * 0.48);
+  if (!gradient) return baseRadius;
   const distance = Math.hypot(x - width / 2, y - height / 2);
   const reach = Math.hypot(width, height) * 0.5;
-  return dotSize * clamp(1 - distance / reach, 0, 1);
+  return baseRadius * clamp(1 - distance / reach, 0, 1);
 }
 
 export function getScreentoneAngles(pattern, angle = 0) {
@@ -54,7 +58,7 @@ export function applyScreentoneToCanvas(canvas, rawSettings = {}, selection = nu
     context.rotate(angle * Math.PI / 180);
 
     if (settings.pattern === 'lines' || settings.pattern === 'crosshatch') {
-      context.lineWidth = Math.max(0.6, settings.dotSize * 0.55);
+      context.lineWidth = Math.max(0.6, spacing * settings.coverage / 100);
       context.beginPath();
       for (let offset = -diagonal; offset <= diagonal; offset += spacing) {
         context.moveTo(-diagonal, offset);
@@ -64,9 +68,15 @@ export function applyScreentoneToCanvas(canvas, rawSettings = {}, selection = nu
     } else {
       for (let y = -diagonal; y <= diagonal; y += spacing) {
         for (let x = -diagonal; x <= diagonal; x += spacing) {
-          const radius = settings.pattern === 'gradient'
-            ? getScreentoneDotRadius({ pattern: 'gradient', dotSize: settings.dotSize, x: x + centerX, y: y + centerY, width, height })
-            : settings.dotSize;
+          const radius = getScreentoneDotRadius({
+            spacing,
+            coverage: settings.coverage,
+            x: x + centerX,
+            y: y + centerY,
+            width,
+            height,
+            gradient: settings.pattern === 'gradient',
+          });
           if (radius < 0.25) continue;
           context.beginPath();
           context.arc(x, y, radius, 0, Math.PI * 2);
