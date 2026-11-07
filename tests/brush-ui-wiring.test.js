@@ -7,7 +7,9 @@ const read = path => readFile(new URL(path, root), 'utf8');
 
 test('raster brush and smudge tools are reachable from the toolbar', async () => {
   const html = await read('apps/web/index.html');
-  assert.match(html, /data-tool="pen"/);
+  // Raster painting is chosen from the brush library behind the paint tool.
+  assert.match(html, /id="paintTool" data-tool="vector" data-popover="brushPopover"/);
+  assert.match(html, /data-brush-kind="raster"/);
   assert.match(html, /data-tool="smudge"/);
 });
 
@@ -45,14 +47,42 @@ test('vector pressure profile canvas exists for its pointer event bindings', asy
 test('every statically referenced DOM id exists exactly once in the app HTML', async () => {
   const html = await read('apps/web/index.html');
   const main = await read('apps/web/src/main.js');
-  const declaredIds = [...html.matchAll(/\\bid=["']([^"']+)["']/g)].map(match => match[1]);
+  const declaredIds = [...html.matchAll(/\bid=["']([^"']+)["']/g)].map(match => match[1]);
   const declaredSet = new Set(declaredIds);
   const duplicateIds = [...new Set(declaredIds.filter((id, index) => declaredIds.indexOf(id) !== index))];
   const referencedIds = [...new Set(
-    [...main.matchAll(/getElementById\\(\\s*['"]([^'"]+)['"]\\s*\\)/g)].map(match => match[1]),
+    [...main.matchAll(/getElementById\(\s*['"]([^'"]+)['"]\s*\)/g)].map(match => match[1]),
   )];
   const missingIds = referencedIds.filter(id => !declaredSet.has(id));
 
   assert.deepEqual(duplicateIds, [], `duplicate HTML ids: ${duplicateIds.join(', ')}`);
   assert.deepEqual(missingIds, [], `missing HTML elements: ${missingIds.join(', ')}`);
+});
+
+test('the id check really sees the app ids (guards against a vacuous regex)', async () => {
+  const html = await read('apps/web/index.html');
+  const ids = [...html.matchAll(/\bid=["']([^"']+)["']/g)].map(match => match[1]);
+  assert.ok(ids.includes('pixiHost'));
+  assert.ok(ids.length > 100);
+});
+
+test('every popover trigger and tool-mode host points at an existing element', async () => {
+  const html = await read('apps/web/index.html');
+  const ids = new Set([...html.matchAll(/\bid=["']([^"']+)["']/g)].map(match => match[1]));
+  const popovers = [...html.matchAll(/data-popover="([^"]+)"/g)].map(match => match[1]);
+  const hosts = [...html.matchAll(/data-host="([^"]+)"/g)].map(match => match[1]);
+  assert.ok(popovers.length >= 10);
+  for (const id of [...popovers, ...hosts]) assert.ok(ids.has(id), `missing #${id}`);
+  for (const id of new Set(popovers)) assert.match(html, new RegExp(`class="popover" id="${id}"`));
+});
+
+test('brush library cards cover every raster and vector preset option', async () => {
+  const html = await read('apps/web/index.html');
+  const optionValues = id => {
+    const select = html.match(new RegExp(`<select id="${id}">([\\s\\S]*?)</select>`))[1];
+    return [...select.matchAll(/value="([^"]+)"/g)].map(match => match[1]).sort();
+  };
+  const cards = kind => [...new Set([...html.matchAll(new RegExp(`data-brush-kind="${kind}" data-brush="([^"]+)"`, 'g'))].map(match => match[1]))].sort();
+  assert.deepEqual(cards('vector'), optionValues('vectorBrushPreset'));
+  assert.deepEqual(cards('raster'), optionValues('brushPreset'));
 });
