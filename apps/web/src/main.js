@@ -123,9 +123,7 @@ const lineRedo = [];
 // track. `loadedClips` remembers which clip each live layer canvas (and the
 // live vectorStrokes array) currently holds.
 const timeline = createTimelineDocument({ fps: 12 });
-const VECTOR_TRACK = 'vector';
 const loadedClips = new Map();
-let activeTrackId = null;
 let nextLayerId = 1;
 let onionEnabled = true;
 let loadingFrame = false;
@@ -475,9 +473,10 @@ function composite() {
     } else {
       context.drawImage(layer.presentationCanvas || layer.canvas, 0, 0);
     }
+    // The layer's vector lines share its transform, opacity and blend mode.
+    drawVectorStrokes(context, strokesOfLayer(layer.id));
     context.restore();
   });
-  drawVectorStrokes(context);
   return context;
 }
 
@@ -489,7 +488,12 @@ function boiledStrokes(timestamp = performance.now()) {
   });
 }
 
-function render(dirtyIndices = [], displayStrokes = boilEnabled ? boiledStrokes() : vectorStrokes) {
+function render(dirtyIndices = [], displayStrokes = null) {
+  // Lines without a layer (older data) join the active layer.
+  for (const stroke of vectorStrokes) {
+    if (!stroke.layerId || !layers.some(layer => layer.id === stroke.layerId)) stroke.layerId = layers[active]?.id;
+  }
+  displayStrokes ||= boilEnabled ? boiledStrokes() : vectorStrokes;
   for (const index of dirtyIndices) {
     if (layers[index]) refreshLayerPresentation(layers[index]);
   }
@@ -522,24 +526,23 @@ function cloneLineStroke(stroke) {
   };
 }
 
+// Every layer track holds both raster pixels (`cel`) and the layer's vector
+// lines (`strokes`). Live vector lines of all layers share `vectorStrokes`;
+// each line carries the id of the layer it belongs to.
 function layerTrack(layer) {
-  return ensureTrack(timeline, layer.id);
-}
-
-function vectorTrack() {
-  return ensureTrack(timeline, VECTOR_TRACK, { vector: true });
+  return ensureTrack(timeline, layer.id, { vector: true });
 }
 
 function currentTrackId() {
-  return activeTrackId === VECTOR_TRACK ? VECTOR_TRACK : layers[active]?.id;
+  return layers[active]?.id;
 }
 
 function currentTrack() {
-  return currentTrackId() === VECTOR_TRACK ? vectorTrack() : layerTrack(layers[active]);
+  return layerTrack(layers[active]);
 }
 
 function trackLabel(trackId) {
-  return trackId === VECTOR_TRACK ? '벡터 선' : (layers.find(layer => layer.id === trackId)?.name || '레이어');
+  return layers.find(layer => layer.id === trackId)?.name || '레이어';
 }
 
 function loadedClip(trackId) {
@@ -547,23 +550,47 @@ function loadedClip(trackId) {
   return timeline.tracks[trackId]?.clips.find(clip => clip.id === clipId) || null;
 }
 
+function strokesOfLayer(layerId, strokes = vectorStrokes) {
+  return strokes.filter(stroke => stroke.layerId === layerId);
+}
+
+/** Lines on hidden layers can't be picked or edited. */
+function isStrokeEditable(stroke) {
+  const layer = layers.find(item => item.id === stroke.layerId);
+  return Boolean(layer && (layer.renderVisible ?? layer.visible));
+}
+
+/** Visible lines ordered bottom layer → top layer (hit tests scan from the end). */
+function editableStrokesInStackOrder() {
+  const order = new Map(layers.map((layer, index) => [layer.id, index]));
+  return vectorStrokes.filter(isStrokeEditable)
+    .map((stroke, index) => ({ stroke, index }))
+    .sort((a, b) => (order.get(a.stroke.layerId) - order.get(b.stroke.layerId)) || (a.index - b.index))
+    .map(item => item.stroke);
+}
+
+/** Tags a newly created vector line with the active layer. */
+function assignStrokeToActiveLayer(stroke) {
+  stroke.layerId = layers[active]?.id;
+  return stroke;
+}
+
 function persistVectorClip() {
-  const clip = loadedClip(VECTOR_TRACK);
-  if (clip) clip.strokes = vectorStrokes.map(cloneLineStroke);
+  for (const layer of layers) {
+    const clip = loadedClip(layer.id);
+    if (clip) clip.strokes = strokesOfLayer(layer.id).map(cloneLineStroke);
+  }
 }
 
 /**
- * Called before an edit: makes sure the edited track has a clip at the
- * playhead (creating one past the track end) and that it is the loaded clip.
+ * Called before an edit: makes sure the active layer's track has a clip at
+ * the playhead (creating one past the track end) and that it is loaded.
  */
-function ensureEditableClip(kind) {
-  const isVector = kind === 'vector';
-  const track = isVector ? vectorTrack() : layerTrack(layers[active]);
-  const trackId = isVector ? VECTOR_TRACK : layers[active].id;
-  activeTrackId = isVector ? VECTOR_TRACK : null;
-  if (loadedClip(trackId)) return;
-  const found = ensureClipAt(timeline, track, timeline.playhead, isVector ? { strokes: [] } : {});
-  loadedClips.set(trackId, found.clip.id);
+function ensureEditableClip() {
+  const layer = layers[active];
+  if (!layer || loadedClip(layer.id)) return;
+  const found = ensureClipAt(timeline, layerTrack(layer), timeline.playhead, { strokes: [] });
+  loadedClips.set(layer.id, found.clip.id);
 }
 
 function saveActiveFrame() {
@@ -572,7 +599,7 @@ function saveActiveFrame() {
     if (!clip) {
       // A newly created layer adopts its blank clip at the playhead.
       const found = clipAt(layerTrack(layer), timeline.playhead);
-      if (!found || found.clip.cel) continue;
+      if (!found || found.clip.cel || found.clip.strokes?.length) continue;
       loadedClips.set(layer.id, found.clip.id);
       clip = found.clip;
     }
@@ -618,9 +645,7 @@ async function syncClipsToPlayhead({ save = true } = {}) {
     if (loadedClips.has(layer.id) && loadedClips.get(layer.id) === (clip?.id || null)) continue;
     changes.push({ layer, clip });
   }
-  const vectorClip = clipAt(vectorTrack(), tick)?.clip || null;
-  const vectorChanged = !loadedClips.has(VECTOR_TRACK) || loadedClips.get(VECTOR_TRACK) !== (vectorClip?.id || null);
-  if (!changes.length && !vectorChanged) {
+  if (!changes.length) {
     render();
     return;
   }
@@ -644,27 +669,34 @@ async function syncClipsToPlayhead({ save = true } = {}) {
     layer.redo = [];
     loadedClips.set(layer.id, clip?.id || null);
   });
-  if (vectorChanged) {
-    vectorStrokes.splice(0, vectorStrokes.length, ...(vectorClip?.strokes || []).map(cloneLineStroke));
-    loadedClips.set(VECTOR_TRACK, vectorClip?.id || null);
-    lineUndo.length = 0;
-    lineRedo.length = 0;
-    selectedStrokeId = null;
-    selectedStrokeIds.clear();
-  }
+  // Swap in the vector lines of every layer whose clip changed, keeping the
+  // lines of other layers untouched.
+  const changedIds = new Set(changes.map(change => change.layer.id));
+  const kept = vectorStrokes.filter(stroke => !changedIds.has(stroke.layerId) && layers.some(layer => layer.id === stroke.layerId));
+  const loaded = changes.flatMap(({ layer, clip }) => (clip?.strokes || []).map(stroke => ({ ...cloneLineStroke(stroke), layerId: layer.id })));
+  vectorStrokes.splice(0, vectorStrokes.length, ...kept, ...loaded);
+  // Line undo snapshots span all layers; they no longer match after a swap.
+  lineUndo.length = 0;
+  lineRedo.length = 0;
+  selectedStrokeId = null;
+  selectedStrokeIds.clear();
   loadingFrame = false;
   render(changes.map(change => layers.indexOf(change.layer)));
 }
 
 function vectorOnionSkin(opacity = 0.22) {
-  const track = vectorTrack();
+  // Neighbouring drawings of the active layer, drawn in that layer.
+  const layer = layers[active];
+  if (!layer) return [];
+  const track = layerTrack(layer);
   const found = clipAt(track, timeline.playhead);
   if (!found) return [];
   const result = [];
   const previous = track.clips[found.index - 1];
   const next = track.clips[found.index + 1];
-  if (previous?.strokes?.length) result.push({ side: 'previous', tint: 0x55aaff, alpha: opacity, strokes: previous.strokes });
-  if (next?.strokes?.length) result.push({ side: 'next', tint: 0xff6b8a, alpha: opacity, strokes: next.strokes });
+  const tag = strokes => strokes.map(stroke => ({ ...stroke, layerId: layer.id }));
+  if (previous?.strokes?.length) result.push({ side: 'previous', tint: 0x55aaff, alpha: opacity, strokes: tag(previous.strokes) });
+  if (next?.strokes?.length) result.push({ side: 'next', tint: 0xff6b8a, alpha: opacity, strokes: tag(next.strokes) });
   return result;
 }
 
@@ -675,10 +707,8 @@ function timelineTickWidth() {
 const TRACK_LABEL_WIDTH = 86;
 
 function timelineRows() {
-  // Vector lines are drawn above every raster layer, so their track is first;
-  // raster tracks follow top layer first, like the layers panel.
-  return [{ trackId: VECTOR_TRACK, track: vectorTrack(), layerIndex: -1 }]
-    .concat(layers.map((layer, index) => ({ trackId: layer.id, track: layerTrack(layer), layerIndex: index })).reverse());
+  // Top layer first, like the layers panel.
+  return layers.map((layer, index) => ({ trackId: layer.id, track: layerTrack(layer), layerIndex: index })).reverse();
 }
 
 function drawTimeline() {
@@ -723,7 +753,7 @@ function drawTimeline() {
       const hold = normalizeHold(clip.hold);
       const cell = document.createElement('div');
       const isCurrent = trackId === currentId && timeline.playhead >= cursor && timeline.playhead < cursor + hold;
-      const empty = trackId === VECTOR_TRACK ? !clip.strokes?.length : !clip.cel;
+      const empty = !clip.strokes?.length && !clip.cel;
       cell.className = 'frame-cell' + (isCurrent ? ' active' : '') + (empty && !clipThumbnails.has(clip.id) ? ' empty' : '');
       cell.dataset.clipId = clip.id;
       cell.style.left = (TRACK_LABEL_WIDTH + cursor * tickWidth) + 'px';
@@ -772,7 +802,6 @@ function drawTimeline() {
 }
 
 function selectTrack(trackId) {
-  activeTrackId = trackId === VECTOR_TRACK ? VECTOR_TRACK : null;
   const index = layers.findIndex(layer => layer.id === trackId);
   if (index >= 0) active = index;
   render();
@@ -882,7 +911,7 @@ function cssToCanvasUnits(cssPixels) {
 }
 
 function paintsInLayerSpace() {
-  return ['pen', 'eraser', 'smudge'].includes(tool) && Boolean(layers[active]?.renderMatrix);
+  return ['pen', 'eraser', 'smudge', 'vector', 'line', 'shape'].includes(tool) && Boolean(layers[active]?.renderMatrix);
 }
 
 function position(event) {
@@ -1003,7 +1032,7 @@ function applyMangaTone() {
     return;
   }
   ensureEditableLayerAfterTransform();
-  ensureEditableClip('raster');
+  ensureEditableClip();
   const layer = layers[active];
   const selection = selectionOutlinePolygon();
   const settings = {
@@ -1140,7 +1169,6 @@ function appendLayerRow(list, layer, index, nested) {
     item.onclick = event => {
       if (event.target !== visibility && event.target !== target) {
         active = index;
-        activeTrackId = null;
         activeGroupId = layer.groupId || null;
         maskEditing = false;
         document.getElementById('maskEdit')?.classList.remove('active');
@@ -1452,7 +1480,11 @@ function updateSelectionDragPreview(drag) {
   const transform = getSelectionDragTransform(drag);
   if ((!sources.length && !drag?.vectorBefore) || !transform?.matrix) return;
   if (drag.vectorBefore) {
-    const previewStrokes = transformLineStrokesByMatrix(drag.vectorBefore, transform.clipPolygon, transform.matrix);
+    // Only lines on the layers being transformed move with the selection.
+    const targetIds = new Set(resolveSelectionTargets(layers, selectedTransformLayers, layers[active]).map(layer => layer.id));
+    const previewStrokes = drag.vectorBefore.map(stroke => (targetIds.has(stroke.layerId)
+      ? transformLineStrokesByMatrix([stroke], transform.clipPolygon, transform.matrix)[0]
+      : stroke));
     vectorStrokes.splice(0, vectorStrokes.length, ...previewStrokes);
   }
   for (const source of sources) {
@@ -1485,9 +1517,10 @@ function applySelectionTransform() {
 
   const transformedPolygon = transformPolygon(polygon, angle, scale);
   const vectorBefore = lineSnapshot();
-  const hasSelectedVectors = vectorStrokes.some(stroke => lineStrokeIntersectsPolygon(stroke, polygon));
+  const targetIds = new Set(targets.map(layer => layer.id));
+  const hasSelectedVectors = vectorStrokes.some(stroke => targetIds.has(stroke.layerId) && lineStrokeIntersectsPolygon(stroke, polygon));
   const transformedVectors = hasSelectedVectors
-    ? transformLineStrokes(vectorStrokes, polygon, angle, scale)
+    ? vectorStrokes.map(stroke => (targetIds.has(stroke.layerId) ? transformLineStrokes([stroke], polygon, angle, scale)[0] : stroke))
     : null;
   const center = getPolygonCentroid(polygon);
   const radians = angle * Math.PI / 180;
@@ -1727,8 +1760,16 @@ function bindControls() {
     // The copy gets its own track with the same drawings and timing.
     saveActiveFrame();
     const copyTrack = duplicateTrack(timeline, layerTrack(source), copy.id);
+    // Line ids must stay unique across layers (renderer caches and selection
+    // are keyed by id), so every copied line gets a new id.
+    for (const clip of copyTrack.clips) {
+      for (const stroke of clip.strokes || []) stroke.id = 'line-' + nextLineId++;
+    }
     const copyClip = clipAt(copyTrack, timeline.playhead)?.clip;
-    if (copyClip) loadedClips.set(copy.id, copyClip.id);
+    if (copyClip) {
+      loadedClips.set(copy.id, copyClip.id);
+      vectorStrokes.push(...(copyClip.strokes || []).map(stroke => ({ ...cloneLineStroke(stroke), layerId: copy.id })));
+    }
     layers.push(copy);
     active = layers.length - 1;
     saveActiveFrame();
@@ -1744,6 +1785,12 @@ function bindControls() {
     const [removed] = layers.splice(active, 1);
     delete timeline.tracks[removed.id];
     loadedClips.delete(removed.id);
+    // The layer's vector lines go with it.
+    vectorStrokes.splice(0, vectorStrokes.length, ...vectorStrokes.filter(stroke => stroke.layerId !== removed.id));
+    lineUndo.length = 0;
+    lineRedo.length = 0;
+    selectedStrokeId = null;
+    selectedStrokeIds.clear();
     active = Math.min(active, layers.length - 1);
     saveActiveFrame();
     render(layers.map((_, index) => index));
@@ -1922,7 +1969,7 @@ function bindControls() {
     const source = clipAt(track, timeline.playhead)?.clip;
     const { clip, start } = insertClipAfter(timeline, track, timeline.playhead, {
       duplicate,
-      blank: track.id === VECTOR_TRACK ? { strokes: [] } : {},
+      blank: { strokes: [] },
     });
     if (duplicate && source && clipThumbnails.has(source.id)) clipThumbnails.set(clip.id, clipThumbnails.get(source.id));
     timeline.playhead = start;
@@ -2298,10 +2345,13 @@ function scheduleFrameThumbnail() {
     };
     for (const layer of layers) {
       const clip = loadedClip(layer.id);
-      if (clip) clipThumbnails.set(clip.id, make(context => context.drawImage(layer.presentationCanvas || layer.canvas, 0, 0)));
+      if (clip) {
+        clipThumbnails.set(clip.id, make(context => {
+          context.drawImage(layer.presentationCanvas || layer.canvas, 0, 0);
+          drawVectorStrokes(context, strokesOfLayer(layer.id));
+        }));
+      }
     }
-    const vectorClip = loadedClip(VECTOR_TRACK);
-    if (vectorClip) clipThumbnails.set(vectorClip.id, make(context => drawVectorStrokes(context)));
     document.querySelectorAll('#frameStrip .frame-cell').forEach(cell => applyClipThumbnail(cell, cell.dataset.clipId));
   }, 380);
 }
@@ -2368,7 +2418,6 @@ function bindTimelineScrub() {
   const selectRowFromEvent = event => {
     const row = event.target.closest('.track-row');
     if (!row || row.dataset.trackId === currentTrackId()) return false;
-    activeTrackId = row.dataset.trackId === VECTOR_TRACK ? VECTOR_TRACK : null;
     const index = layers.findIndex(layer => layer.id === row.dataset.trackId);
     if (index >= 0) active = index;
     return true;
@@ -2622,7 +2671,7 @@ function selectVectorStrokesInPolygon(polygon) {
   selectedStrokeIds.clear();
   if (!polygon || polygon.length < 3) { selectedStrokeId = null; return; }
   for (const stroke of vectorStrokes) {
-    if (lineStrokeIntersectsPolygon(stroke, polygon)) selectedStrokeIds.add(stroke.id);
+    if (isStrokeEditable(stroke) && lineStrokeIntersectsPolygon(stroke, polygon)) selectedStrokeIds.add(stroke.id);
   }
   selectedStrokeId = [...selectedStrokeIds].at(-1) || null;
 }
@@ -2756,7 +2805,7 @@ function bindCanvasEvents() {
       if (event.type === 'pointerup' && !gesture && !loadingFrame) {
         if (playbackActive) setPlaybackEnabled(false);
         ensureEditableLayerAfterTransform();
-        ensureEditableClip('raster');
+        ensureEditableClip();
         floodFill(fill.point.x, fill.point.y);
         render([active]);
       }
@@ -2792,8 +2841,7 @@ function bindCanvasEvents() {
     if (boilEnabled) setBoilEnabled(false);
     try { inputSurface.setPointerCapture(event.pointerId); } catch { /* pointer already released */ }
     if (['pen', 'eraser', 'smudge', 'line', 'fill'].includes(tool)) ensureEditableLayerAfterTransform();
-    if (['pen', 'eraser', 'smudge', 'fill'].includes(tool)) ensureEditableClip('raster');
-    if (['vector', 'line', 'shape'].includes(tool)) ensureEditableClip('vector');
+    if (['pen', 'eraser', 'smudge', 'fill', 'vector', 'line', 'shape'].includes(tool)) ensureEditableClip();
     const point = position(event);
 
     if (tool === 'hand') {
@@ -2860,7 +2908,12 @@ function bindCanvasEvents() {
     }
 
     if (tool === 'select') {
-      const hit = hitTestLineStrokes(vectorStrokes, point, 9);
+      const hit = hitTestLineStrokes(editableStrokesInStackOrder(), point, 9);
+      // Picking a line makes its layer the active layer.
+      if (hit) {
+        const hitLayerIndex = layers.findIndex(layer => layer.id === hit.layerId);
+        if (hitLayerIndex >= 0 && hitLayerIndex !== active) active = hitLayerIndex;
+      }
       const nodeMode = nodeEditEnabled;
       if (nodeMode && selectedStroke() && selectedStrokeId && (hit?.id === selectedStrokeId || (!hit && selectedStroke().bezierPath))) {
         const stroke = selectedStroke();
@@ -3430,7 +3483,7 @@ function bindCanvasEvents() {
       const points = createShapePoints(shapeKind, lineStartPoint, point);
       commitLineHistory(lineSnapshot());
       const created = createLineStroke({ id: 'line-' + nextLineId++, points: points.map(p => ({ ...p, pressure: 0.5 })), color, width: size, brushPreset: vectorBrushPreset, pressureCurve: vectorPressureCurve, opacity: vectorBrushOpacity, pressureProfile: vectorPressureProfile, motionStyle: vectorMotionStyle, motionStrength: vectorMotionStrength });
-      vectorStrokes.push(created);
+      vectorStrokes.push(assignStrokeToActiveLayer(created));
       selectedStrokeId = created.id;
       selectedStrokeIds.clear(); selectedStrokeIds.add(created.id);
       renderer.clearPreview(); drawingPoints = null; down = false; render(); return;
@@ -3453,7 +3506,7 @@ function bindCanvasEvents() {
         motionStyle: vectorMotionStyle,
         motionStrength: vectorMotionStrength,
       });
-      vectorStrokes.push(created);
+      vectorStrokes.push(assignStrokeToActiveLayer(created));
       // Freehand drawing should not leave the new line selected; otherwise the
       // next brush/color change would silently restyle the line just drawn.
       selectedStrokeId = null;
@@ -3468,7 +3521,7 @@ function bindCanvasEvents() {
     if (tool === 'line') {
       commitLineHistory(lineSnapshot());
       const created = createLineStroke({ id: 'line-' + nextLineId++, points: [{ ...lineStartPoint, pressure: 0.5 }, { ...point, pressure: 0.5 }], color, width: size, brushPreset: vectorBrushPreset, pressureCurve: vectorPressureCurve, opacity: vectorBrushOpacity, pressureProfile: vectorPressureProfile, motionStyle: vectorMotionStyle, motionStrength: vectorMotionStrength });
-      vectorStrokes.push(created);
+      vectorStrokes.push(assignStrokeToActiveLayer(created));
       selectedStrokeId = created.id;
       selectedStrokeIds.clear(); selectedStrokeIds.add(created.id);
       renderer.clearPreview();
@@ -3657,7 +3710,7 @@ async function saveProjectNow() {
     groups: layerGroups,
     timeline,
     active,
-    activeTrackId,
+    activeTrackId: null,
     nextLayerId,
     thumbnail: projectThumbnail(),
   });
@@ -3741,7 +3794,6 @@ async function applyProjectState(parsed, imageData = new Map()) {
   timeline.nextClipId = parsed.nextClipId;
   timeline.playhead = parsed.playhead;
   active = parsed.active;
-  activeTrackId = parsed.activeTrackId;
   activeGroupId = null;
   maskEditing = false;
   selectedStrokeId = null;
@@ -3758,8 +3810,11 @@ async function applyProjectState(parsed, imageData = new Map()) {
   updateTimelineFPS(parsed.fps);
   savedImageRefs = new Map();
   for (const [key, dataUrl] of imageData) if (dataUrl) savedImageRefs.set(key, dataUrl);
-  vectorTrack();
   for (const layer of layers) layerTrack(layer);
+  // Keep new line ids above every saved one so ids never collide.
+  const savedLineIds = Object.values(timeline.tracks).flatMap(track => track.clips)
+    .flatMap(clip => clip.strokes || []).map(stroke => Number(/^line-(\d+)$/.exec(stroke.id)?.[1]) || 0);
+  nextLineId = Math.max(nextLineId, 1, ...savedLineIds.map(id => id + 1));
   await syncClipsToPlayhead({ save: false });
   updateProjectUi();
 }
@@ -3886,9 +3941,7 @@ async function start() {
   bindKeyboardShortcuts();
   bindProjectControls();
 
-  vectorTrack();
   for (const layer of layers) loadedClips.set(layer.id, clipAt(layerTrack(layer), 0).clip.id);
-  loadedClips.set(VECTOR_TRACK, clipAt(vectorTrack(), 0).clip.id);
   saveActiveFrame();
   render(layers.map((_, index) => index));
   updateProjectUi();
