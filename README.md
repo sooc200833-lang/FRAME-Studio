@@ -37,7 +37,7 @@ npm run build
 
 - App state and interaction: `apps/web/src/main.js`
 - PixiJS renderer: `apps/web/src/renderer.js`
-- Brush engine: `apps/web/src/brush/brush-engine.js`
+- Raster brush: `apps/web/src/brush/raster-brush.js`, `apps/web/src/brush/raster-brush-canvas.js`
 - Fill engine: `apps/web/src/fill/flood-fill.js`
 - Vector line engine: `apps/web/src/line/line-engine.js`
 - Screentone engine: `apps/web/src/tone/screentone.js`

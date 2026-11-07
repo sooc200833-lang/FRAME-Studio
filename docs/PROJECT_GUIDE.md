@@ -23,7 +23,7 @@ Use other creative apps only as broad workflow inspiration. Keep FRAME Studio's 
 - Canvas/document coordinates: 1200 × 900.
 - Stage presentation: PixiJS 8.20.1.
 - Raster paint buffers: HTML Canvas 2D.
-- Brush outline generation: perfect-freehand 1.2.3.
+- Raster brush: in-house stamp (dab) engine (`brush/raster-brush.js`, `brush/raster-brush-canvas.js`); perfect-freehand was removed in v1.8.
 - App entry point: `apps/web/src/main.js`.
 - Current project scripts: `npm run dev`, `npm test`, `npm run build`.
 - Node requirement from package metadata: Node.js 20.19+ or 22.12+.
@@ -43,6 +43,12 @@ Always distinguish code-level tests from visual browser checks and physical iPad
 - Keyboard: B/S/E/V/H/G tools, I eyedropper, [ ] size, Space play, ⌘Z/⇧⌘Z.
 - Freehand vector strokes are no longer left selected after drawing, so brush/color changes apply to the next stroke rather than restyling the previous one.
 - Verified in headless Chrome (layout at 1180×820 and 390×844, synthetic touch pinch/undo, eyedropper). Not yet verified on a physical iPad.
+
+### Raster brush v2 (v1.8)
+- Rebuilt from scratch at the user's request. `brush/raster-brush.js` (pure, tested) turns pointer samples into evenly spaced dabs: spacing is a fraction of the dab diameter and carries across samples (independent of pointer sample rate); streamline smoothing; pressure curve; pressure→size and pressure→flow per preset; mouse/finger use full pressure; the stroke ends exactly at the last pen sample (pen-up pressure 0 is ignored).
+- Presets: 연필 (grain tip, pressure→opacity), 잉크 펜 (hard, pressure→size), 마커 (flat opacity cap per stroke), 브러시 (soft). 획 안정화 adds to each preset's streamline.
+- `brush/raster-brush-canvas.js`: tinted tip cache, `StrokeBuffer` stamps dabs; `rasterStrokeMode()` in main.js is the single source of composite operation/alpha/selection clip used by both the live preview (`renderer.setLayerPreview`) and the commit, so the preview equals the result. Strokes are clipped to the active selection. Mask editing stamps into the mask live (paint hides, erase reveals). Cancelled strokes (palm/gesture) leave no pixels and no undo entry.
+- Removed: perfect-freehand dependency, polygon outline/texture code, renderer brush preview texture.
 
 ### Layers own their vector lines (v1.7)
 - Vector lines belong to a layer: each stroke has `layerId`, and every layer track clip stores both `cel` (pixels) and `strokes`. The shared vector track was removed; project format v2 migrates an old vector track into a new top layer "벡터 선" with the same timing.
@@ -77,7 +83,7 @@ Always distinguish code-level tests from visual browser checks and physical iPad
 - Vector node/Bezier handles and their hit targets are sized in CSS pixels (`canvasUnitsPerCssPixel`, `cssToCanvasUnits`, `renderer.setHandleScale`) so they stay the same physical size at every zoom (ported from #29).
 - Raster pen and eraser on Canvas-backed layers.
 - Brush profiles: pencil, ink, marker, and brush.
-- perfect-freehand variable-width stroke polygons.
+- Stamp-based raster brush: evenly spaced round dabs with hardness, grain, pressure→size/flow, streamline; one stroke buffer used for both live preview and commit.
 - Pointer pressure when the browser supplies pen pressure; fallback behavior for mouse/touch.
 - Coalesced pointer samples and configurable stroke stabilization.
 - Brush texture support and frame-scheduled preview rendering.
@@ -138,7 +144,9 @@ Always distinguish code-level tests from visual browser checks and physical iPad
 | `apps/web/src/main.js` | App state, input events, UI bindings, layer/frame operations, export |
 | `apps/web/src/renderer.js` | PixiJS stage and raster/vector presentation |
 | `apps/web/src/renderer/vector-graphics-cache.js` | Stable vector Graphics cache |
-| `apps/web/src/brush/brush-engine.js` | Brush presets, pressure, smoothing, pointer sampling |
+| `apps/web/src/brush/brush-engine.js` | Pointer helpers: pressure, smoothing, coalesced samples, frame scheduler |
+| `apps/web/src/brush/raster-brush.js` | Raster brush v2: presets and dab placement (pure) |
+| `apps/web/src/brush/raster-brush-canvas.js` | Raster brush v2: tips, stroke buffer, preview/commit compositing |
 | `apps/web/src/fill/flood-fill.js` | Renderer-independent fill algorithms |
 | `apps/web/src/line/line-engine.js` | Vector stroke geometry and editing helpers |
 | `apps/web/src/line/line-boil.js` | Deterministic line deformation |

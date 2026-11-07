@@ -4,7 +4,9 @@ import { applyScreentoneToCanvas } from './tone/screentone.js';
 import { canvasUnitsPerCssPixel, clientToCanvasPoint, parseCssTransformMatrix } from './viewport/coordinates.js';
 import { classifyMultiTouchTap, pinchViewport, snapViewportRotation } from './viewport/gestures.js';
 import { hexToHsv, hsvToHex, sampleImageDataColor } from './color/color-utils.js';
-import { applyBrushTexture, coalescedPointerEvents, createBrushOutline, createFrameScheduler, getBrushPreset, normalizePointerPressure, resolveBrushStrokeOptions, stabilizePoint } from './brush/brush-engine.js';
+import { coalescedPointerEvents, createFrameScheduler, normalizePointerPressure, stabilizePoint } from './brush/brush-engine.js';
+import { createRasterStroke, getRasterBrush } from './brush/raster-brush.js';
+import { StrokeBuffer } from './brush/raster-brush-canvas.js';
 import { createSmudgeSession } from './brush/smudge-engine.js';
 import { normalizeBrushBlendMode } from './brush/blend-modes.js';
 import { expandRegionMask, findConnectedRegion } from './fill/flood-fill.js';
@@ -57,7 +59,7 @@ let smudgeSession = null;
 let smudgeOriginalData = null;
 let smudgeUndoBefore = null;
 let smudgeRedoBefore = null;
-let pressureCurve = getBrushPreset('ink').pressureCurve;
+let pressureCurve = getRasterBrush('ink').pressureCurve;
 let maskEditing = false;
 let selectionRect = null;
 let selectionPolygon = null;
@@ -227,14 +229,110 @@ function ensureEditableLayerAfterTransform() {
   return true;
 }
 
-function currentBrushPreset() { return getBrushPreset(brushPreset); }
+function currentBrushPreset() { return getRasterBrush(brushPreset); }
 
-function currentStrokeOptions(complete = false) {
-  return resolveBrushStrokeOptions({
-    size, stylus: strokeIsStylus, pressureEnabled, preset: brushPreset,
-    pressureCurve, smoothing: currentBrushPreset().smoothing,
-    streamline: brushSmoothing, complete,
+// ── Raster brush v2 state (one stroke at a time) ──
+let rasterStroke = null;
+let strokeBuffer = null;
+let rasterStrokeTarget = null;
+let rasterStrokeSeed = 1;
+
+function currentSelectionClip() {
+  return { polygon: selectionPolygon, rect: selectionRect };
+}
+
+/** How the stroke buffer lands on its target, shared by preview and commit. */
+function rasterStrokeMode(target) {
+  if (target.mask) {
+    // Mask: painting hides (removes white), erasing reveals (adds white).
+    return { operation: tool === 'eraser' ? 'source-over' : 'destination-out', alpha: 1, selection: currentSelectionClip() };
+  }
+  if (tool === 'eraser') return { operation: 'destination-out', alpha: Math.max(0.05, brushOpacity), selection: currentSelectionClip() };
+  return {
+    operation: normalizeBrushBlendMode(brushBlendMode),
+    alpha: currentBrushPreset().opacity * brushOpacity,
+    selection: currentSelectionClip(),
+  };
+}
+
+function beginRasterStroke(event, point) {
+  const layer = layers[active];
+  const mask = Boolean(maskEditing && layer.maskEnabled && layer.maskCanvas);
+  strokeBuffer ||= new StrokeBuffer(W, H);
+  const brush = currentBrushPreset();
+  strokeBuffer.begin(brush, mask ? '#ffffff' : color);
+  const targetCanvas = mask ? layer.maskCanvas : (layer.presentationCanvas || layer.canvas);
+  const base = document.createElement('canvas');
+  base.width = W;
+  base.height = H;
+  base.getContext('2d').drawImage(targetCanvas, 0, 0);
+  if (mask) {
+    layer.maskUndo.push(layer.maskCanvas.toDataURL());
+    if (layer.maskUndo.length > 25) layer.maskUndo.shift();
+    layer.maskRedo = [];
+  }
+  rasterStrokeTarget = { layer, mask, base };
+  rasterStroke = createRasterStroke({
+    brush,
+    size,
+    stylus: event.pointerType === 'pen' && pressureEnabled,
+    pressureCurve,
+    streamline: Math.min(0.9, brush.streamline + brushSmoothing * 0.75),
+    seed: rasterStrokeSeed++,
   });
+  strokeBuffer.stamp(rasterStroke.add({ ...point, pressure: normalizePointerPressure(event, pressureEnabled) }));
+  showRasterStroke();
+}
+
+/** Shows base + stroke on screen without touching the layer pixels yet. */
+function showRasterStroke() {
+  if (!rasterStrokeTarget || !strokeBuffer) return;
+  const { layer, mask, base } = rasterStrokeTarget;
+  const mode = rasterStrokeMode(rasterStrokeTarget);
+  if (mask) {
+    const context = layer.maskCanvas.getContext('2d');
+    context.save();
+    context.globalCompositeOperation = 'copy';
+    context.drawImage(base, 0, 0);
+    context.restore();
+    strokeBuffer.compositeOnto(context, mode);
+    renderer.refreshLayerEntry(layer, layer.presentationCanvas || layer.canvas);
+    return;
+  }
+  renderer.setLayerPreview(layer, strokeBuffer.renderPreview(base, mode));
+  renderer.refreshLayerEntry(layer, strokeBuffer.preview);
+}
+
+function commitRasterStroke(event) {
+  if (!rasterStroke || !rasterStrokeTarget) return;
+  strokeBuffer.stamp(rasterStroke.finish());
+  const { layer, mask } = rasterStrokeTarget;
+  if (mask) {
+    showRasterStroke();
+  } else {
+    strokeBuffer.compositeOnto(layer.canvas.getContext('2d'), rasterStrokeMode(rasterStrokeTarget));
+    renderer.clearLayerPreview(layer);
+  }
+  rasterStroke = null;
+  rasterStrokeTarget = null;
+  render([layers.indexOf(layer)]);
+}
+
+function cancelRasterStroke() {
+  if (!rasterStrokeTarget) return;
+  const { layer, mask, base } = rasterStrokeTarget;
+  if (mask) {
+    const context = layer.maskCanvas.getContext('2d');
+    context.save();
+    context.globalCompositeOperation = 'copy';
+    context.drawImage(base, 0, 0);
+    context.restore();
+    layer.maskUndo.pop();
+  } else {
+    renderer.clearLayerPreview(layer);
+  }
+  rasterStroke = null;
+  rasterStrokeTarget = null;
 }
 
 function normalizeHex(value) {
@@ -2677,16 +2775,9 @@ function selectVectorStrokesInPolygon(polygon) {
 }
 
 function bindCanvasEvents() {
-  const drawBrushPreview = () => {
-    if (!strokeSamples.length) return;
-    const outline = createBrushOutline(strokeSamples, currentStrokeOptions(true));
-    if (!maskEditing && tool === 'pen') {
-      renderer.previewBrush(outline, color, currentBrushPreset().opacity * brushOpacity, strokeSamples, { preset: brushPreset, size, color, blendMode: brushBlendMode });
-    } else {
-      renderer.previewPolygon(outline, maskEditing ? (tool === 'eraser' ? 0xffffff : 0x171719) : 0xf4f0e8, 0.9);
-    }
-  };
-  const brushPreviewScheduler = createFrameScheduler(drawBrushPreview);
+  // New dabs are stamped as samples arrive; the screen refresh is batched to
+  // at most one per animation frame.
+  const brushPreviewScheduler = createFrameScheduler(showRasterStroke);
   const smudgeRenderScheduler = createFrameScheduler(() => {
     if (!smudgeSession) return;
     const context = layers[active].canvas.getContext('2d');
@@ -2751,7 +2842,10 @@ function bindCanvasEvents() {
     if (!gesture) {
       revertMotionDrag();
       cancelActiveInput(event);
-      gesture = { fingers: touches.size, startedAt: performance.now(), maxTravel: 0, last: firstTwoTouches() };
+      // A finger that was already drawing before the gesture started has
+      // travelled, so this can't be a quick undo/redo tap.
+      const travelledSoFar = Math.max(0, ...[...touches.values()].map(touch => Math.hypot(touch.x - touch.startX, touch.y - touch.startY)));
+      gesture = { fingers: touches.size, startedAt: performance.now(), maxTravel: travelledSoFar, last: firstTwoTouches() };
     } else {
       gesture.fingers = Math.max(gesture.fingers, touches.size);
       gesture.last = firstTwoTouches();
@@ -3062,11 +3156,9 @@ function bindCanvasEvents() {
     down = true;
     lineStartPoint = last = point;
     strokeIsStylus = event.pointerType === 'pen';
-    strokeSamples = (tool === 'pen' || tool === 'eraser')
-      ? [{ ...point, pressure: normalizePointerPressure(event, pressureEnabled) }]
-      : [];
+    strokeSamples = [];
     if (!maskEditing) save(layers[active]);
-    if (tool === 'pen' || tool === 'eraser') drawBrushPreview();
+    if (tool === 'pen' || tool === 'eraser') beginRasterStroke(event, point);
   });
 
   inputSurface.addEventListener('pointermove', event => {
@@ -3236,19 +3328,12 @@ function bindCanvasEvents() {
       return;
     }
 
-    if (tool === 'pen' || tool === 'eraser') {
-      const samples = coalescedPointerEvents(event);
-      for (const sample of samples) {
-        const rawPoint = position(sample);
-        const smoothPoint = stabilizePoint(last, rawPoint, brushSmoothing);
-        strokeSamples.push({
-          ...smoothPoint,
-          pressure: normalizePointerPressure(sample, pressureEnabled),
-        });
-        last = smoothPoint;
+    if ((tool === 'pen' || tool === 'eraser') && rasterStroke) {
+      // Every coalesced sample becomes dabs right away (cheap: only new dabs
+      // are stamped); the screen updates once per frame.
+      for (const sample of coalescedPointerEvents(event)) {
+        strokeBuffer.stamp(rasterStroke.add({ ...position(sample), pressure: normalizePointerPressure(sample, pressureEnabled) }));
       }
-      // Pointer events can arrive faster than the display refresh rate. Keep
-      // every coalesced sample, but rebuild the full outline only once per frame.
       brushPreviewScheduler.schedule();
     }
   });
@@ -3469,6 +3554,7 @@ function bindCanvasEvents() {
       // stroke: discard it instead of committing a partial line, and drop the
       // undo snapshot that pointerdown recorded for raster tools.
       if (tool !== 'vector' && !maskEditing) layers[active].undo.pop();
+      if (tool === 'pen' || tool === 'eraser') cancelRasterStroke();
       strokeSamples = [];
       strokeIsStylus = false;
       drawingPoints = null;
@@ -3528,45 +3614,12 @@ function bindCanvasEvents() {
       down = false;
       render();
     } else if (tool === 'pen' || tool === 'eraser') {
-      const finalPressure = strokeIsStylus && Number(event.pressure) > 0
-        ? normalizePointerPressure(event, pressureEnabled)
-        : (strokeSamples.at(-1)?.pressure ?? 0.5);
-      const finalPoint = strokeSamples.at(-1);
-      if (!finalPoint || Math.hypot(point.x - finalPoint.x, point.y - finalPoint.y) > 0.1) {
-        strokeSamples.push({ ...point, pressure: finalPressure });
-      }
-      const outline = createBrushOutline(strokeSamples, currentStrokeOptions(true));
-      if (outline.length >= 3) {
-        const targetLayer = layers[active];
-        const drawingMask = maskEditing && targetLayer.maskEnabled && targetLayer.maskCanvas;
-        const context = (drawingMask ? targetLayer.maskCanvas : targetLayer.canvas).getContext('2d');
-        if (drawingMask) {
-          targetLayer.maskUndo.push(targetLayer.maskCanvas.toDataURL());
-          if (targetLayer.maskUndo.length > 25) targetLayer.maskUndo.shift();
-          targetLayer.maskRedo = [];
-        }
-        context.save();
-        context.globalCompositeOperation = drawingMask
-          ? (tool === 'eraser' ? 'source-over' : 'destination-out')
-          : (tool === 'eraser' ? 'destination-out' : normalizeBrushBlendMode(brushBlendMode));
-        context.globalAlpha = drawingMask ? 1 : (tool === 'eraser' ? 1 : currentBrushPreset().opacity * brushOpacity);
-        context.fillStyle = drawingMask ? '#fff' : color;
-        context.beginPath();
-        context.moveTo(outline[0][0], outline[0][1]);
-        for (let index = 1; index < outline.length; index++) {
-          context.lineTo(outline[index][0], outline[index][1]);
-        }
-        context.closePath();
-        context.fill();
-        if (!drawingMask && tool === 'pen') {
-          applyBrushTexture(context, outline, strokeSamples, { preset: brushPreset, size, color, opacity: currentBrushPreset().opacity * brushOpacity });
-        }
-        context.restore();
-      }
+      // The pen-up event often reports pressure 0, so the stroke ends at the
+      // last move sample instead of adding a misleading final point.
+      if (rasterStroke) commitRasterStroke(event);
       strokeSamples = [];
       strokeIsStylus = false;
       renderer.clearPreview();
-      render([active]);
     }
     down = false;
   };

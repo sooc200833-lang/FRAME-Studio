@@ -43,7 +43,7 @@
 - The raster eraser currently affects raster paint layers only; vector deletion is performed through line selection.
 
 ## Raster brush engine
-- `perfect-freehand` converts sampled pointer positions and pressure into a closed polygon with variable width.
+- The raster brush is an in-house stamp engine: pointer samples become evenly spaced dabs (`brush/raster-brush.js`) stamped into a stroke buffer that is shown live and composited onto the layer on release (`brush/raster-brush-canvas.js`).
 - Apple Pencil-compatible Pointer Events pressure is passed through when available; mouse/touch input uses simulated pressure from movement speed.
 - Stabilized and coalesced pointer samples feed the brush engine. The outline is previewed with PixiJS and committed to the active raster layer on pointer release.
 - The brush geometry is renderer-independent; the current raster layer stores the final painted pixels. Brush presets, textured tips, wet-media simulation, and pressure response curves remain future work.
