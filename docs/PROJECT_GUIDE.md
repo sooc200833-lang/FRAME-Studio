@@ -44,6 +44,13 @@ Always distinguish code-level tests from visual browser checks and physical iPad
 - Freehand vector strokes are no longer left selected after drawing, so brush/color changes apply to the next stroke rather than restyling the previous one.
 - Verified in headless Chrome (layout at 1180×820 and 390×844, synthetic touch pinch/undo, eyedropper). Not yet verified on a physical iPad.
 
+### Layers own their vector lines (v1.7)
+- Vector lines belong to a layer: each stroke has `layerId`, and every layer track clip stores both `cel` (pixels) and `strokes`. The shared vector track was removed; project format v2 migrates an old vector track into a new top layer "벡터 선" with the same timing.
+- Renderer: one container per layer (raster sprite + that layer's lines), so visibility, opacity (applied to the whole layer via `AlphaFilter`), blend mode, stacking order and movement keyframes apply to lines too. Display objects of deleted layers are now removed (previously they stayed on screen).
+- Live state: `vectorStrokes` holds the loaded lines of all layers; `syncClipsToPlayhead` swaps only the lines of layers whose clip changed; `persistVectorClip` writes each layer's lines into its loaded clip. Line ids stay unique (duplicated layers re-id lines; `nextLineId` is raised above saved ids after loading).
+- Lines on hidden layers can't be picked; picking a line activates its layer; selection transforms only move lines on the target layers. Vector drawing on a moved layer is mapped into layer space.
+- Known gaps: picking/node-editing lines on a layer with movement keyframes uses canvas space; 비우기 clears pixels only.
+
 ### Project saving (v1.5)
 - `document/project-format.js` (pure, tested): project JSON v1 — layers (id, name, visibility, opacity, blend, group, mask flag, movement keyframes), groups, tracks/clips (hold, transform records, vector strokes), fps, playhead, id counters, thumbnail. Clip cels and layer masks are stored separately by image key (`<projectId>/clip/<clipId>`, `<projectId>/mask/<layerId>`). `parseProjectDocument` validates, drops broken parts and keeps id counters above saved ids; `migrateProjectDocument` is the hook for future versions.
 - `document/project-store.js` (browser): IndexedDB `frame-studio` with `projects`, `images` (Blobs), `meta` (`lastProjectId`). One transaction per save writes the document, changed images and deletes unreferenced images. Requests persistent storage.
