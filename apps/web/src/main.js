@@ -1,7 +1,7 @@
 import './styles.css';
 import { PixiStageRenderer } from './renderer.js';
 import { applyScreentoneToCanvas } from './tone/screentone.js';
-import { clientToCanvasPoint, parseCssTransformMatrix } from './viewport/coordinates.js';
+import { canvasUnitsPerCssPixel, clientToCanvasPoint, parseCssTransformMatrix } from './viewport/coordinates.js';
 import { classifyMultiTouchTap, pinchViewport, snapViewportRotation } from './viewport/gestures.js';
 import { hexToHsv, hsvToHex, sampleImageDataColor } from './color/color-utils.js';
 import { applyBrushTexture, coalescedPointerEvents, createBrushOutline, createFrameScheduler, getBrushPreset, normalizePointerPressure, resolveBrushStrokeOptions, stabilizePoint } from './brush/brush-engine.js';
@@ -485,6 +485,7 @@ function render(dirtyIndices = [], displayStrokes = vectorStrokes) {
   }
   applyGroupState();
   if (!loadingFrame) persistVectorClip();
+  renderer.setHandleScale(cssToCanvasUnits(1));
   renderer.sync(layers, dirtyIndices, displayStrokes, selectedStrokeId, onionEnabled ? vectorOnionSkin() : [], selectionRect, selectionPolygon, selectedNodeIndex, nodeEditEnabled, selectedBezierHandle, selectedBezierAnchor, showSelectedVectorHighlight, selectedStrokeIds);
   renderer.setPreviewMatrix(paintsInLayerSpace() ? layers[active].renderMatrix : null);
   syncMotionUi();
@@ -857,11 +858,19 @@ function applyViewport() {
   if (!inputSurface) return;
   inputSurface.style.transform = `translate(${viewport.x}px, ${viewport.y}px) rotate(${viewport.rotation}deg) scale(${viewport.scale})`;
   document.getElementById('zoomLevel').textContent = Math.round(viewport.scale * 100) + '%';
+  // Node handles are sized in screen pixels, so redraw them when the zoom changes.
+  if (tool === 'select' && nodeEditEnabled && selectedStrokeId && !playbackActive) render();
 }
 
 // Raster painting tools draw into the active layer's own pixel space, so when
 // that layer is moved by keyframes the pointer is mapped through the inverse
 // movement transform.
+// Converts an on-screen size (CSS px) to canvas units at the current zoom, so
+// vector node handles and their hit targets keep a constant physical size.
+function cssToCanvasUnits(cssPixels) {
+  return cssPixels * canvasUnitsPerCssPixel(inputSurface?.clientWidth, W, viewport.scale);
+}
+
 function paintsInLayerSpace() {
   return ['pen', 'eraser', 'smudge'].includes(tool) && Boolean(layers[active]?.renderMatrix);
 }
@@ -2788,7 +2797,7 @@ function bindCanvasEvents() {
       if (nodeMode && selectedStroke() && selectedStrokeId && (hit?.id === selectedStrokeId || (!hit && selectedStroke().bezierPath))) {
         const stroke = selectedStroke();
         const path = stroke.bezierPath || convertLegacyPointsToBezierPath(stroke.points, stroke.id);
-        let nearestAnchor = -1, anchorDistance = 15;
+        let nearestAnchor = -1, anchorDistance = cssToCanvasUnits(20);
         path.anchors.forEach((anchor, anchorIndex) => {
           const nextDistance = Math.hypot(point.x - anchor.x, point.y - anchor.y);
           if (nextDistance < anchorDistance) { anchorDistance = nextDistance; nearestAnchor = anchorIndex; }
@@ -2806,7 +2815,7 @@ function bindCanvasEvents() {
           render();
           return;
         }
-        let nearest = null, distance = 17;
+        let nearest = null, distance = cssToCanvasUnits(20);
         path.segments.forEach((segment, segmentIndex) => {
           [['out', segment.control1], ['in', segment.control2]].forEach(([handle, control]) => {
             const nextDistance = Math.hypot(point.x - control.x, point.y - control.y);
@@ -2827,7 +2836,7 @@ function bindCanvasEvents() {
         }
         if (stroke.bezierPath) {
           const projection = projectPointToBezierPath(path, point);
-          if (projection && projection.distance <= Math.max(18, stroke.width / 2 + 8)) {
+          if (projection && projection.distance <= Math.max(cssToCanvasUnits(18), stroke.width / 2 + cssToCanvasUnits(8))) {
             nodeMoveSnapshot = lineSnapshot();
             const index = vectorStrokes.findIndex(item => item.id === selectedStrokeId);
             const nextPath = insertBezierAnchor(path, projection.segmentIndex, projection.t);
@@ -2844,7 +2853,7 @@ function bindCanvasEvents() {
           return;
         }
         let nearestIndex = -1;
-        let nearestDistance = 14;
+        let nearestDistance = cssToCanvasUnits(20);
         stroke.points.forEach((node, index) => {
           const distance = Math.hypot(point.x - node.x, point.y - node.y);
           if (distance < nearestDistance) { nearestDistance = distance; nearestIndex = index; }
@@ -2855,7 +2864,7 @@ function bindCanvasEvents() {
           selectedNodeIndex = nearestIndex;
         } else {
           const projection = projectPointToLineStroke(stroke, point);
-          if (!projection || projection.distance > 18) {
+          if (!projection || projection.distance > cssToCanvasUnits(18)) {
             nodeMoveSnapshot = null;
             return;
           }

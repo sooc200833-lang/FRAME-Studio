@@ -112,6 +112,7 @@ export class PixiStageRenderer {
   }
 
   sync(layers, dirtyIndices = [], strokes = [], selectedStrokeId = null, onionSkin = [], selectionRect = null, selectionPolygon = null, selectedNodeIndex = null, showNodeHandles = false, selectedBezierHandle = null, selectedBezierAnchor = null, showSelectedHighlight = true, selectedStrokeIds = new Set()) {
+    const k = this.handleScale || 1;
     if (!this.app) return;
 
     // Rebuild transient overlays, but keep committed vector paths attached to their cache entries.
@@ -196,18 +197,18 @@ export class PixiStageRenderer {
           const inSelected = selectedBezierHandle?.segmentIndex === index && selectedBezierHandle?.handle === 'in';
           handles.moveTo(start.x, start.y).lineTo(segment.control1.x, segment.control1.y);
           handles.moveTo(end.x, end.y).lineTo(segment.control2.x, segment.control2.y);
-          handles.stroke({ color: 0x8b929e, width: 1.2, alpha: 0.9 });
-          handles.circle(segment.control1.x, segment.control1.y, outSelected ? 7 : 5)
-            .fill(outSelected ? 0xe5b85c : 0x8ec5ff).stroke({ color: 0x24242a, width: 1.3 });
-          handles.circle(segment.control2.x, segment.control2.y, inSelected ? 7 : 5)
-            .fill(inSelected ? 0xe5b85c : 0x8ec5ff).stroke({ color: 0x24242a, width: 1.3 });
+          handles.stroke({ color: 0x8b929e, width: 1.2 * k, alpha: 0.9 });
+          handles.circle(segment.control1.x, segment.control1.y, (outSelected ? 7 : 5) * k)
+            .fill(outSelected ? 0xe5b85c : 0x8ec5ff).stroke({ color: 0x24242a, width: 1.3 * k });
+          handles.circle(segment.control2.x, segment.control2.y, (inSelected ? 7 : 5) * k)
+            .fill(inSelected ? 0xe5b85c : 0x8ec5ff).stroke({ color: 0x24242a, width: 1.3 * k });
         });
         stroke.bezierPath.anchors.forEach((point, index) => {
           const selected = selectedBezierAnchor === index;
           const smooth = (stroke.bezierPath.anchorModes?.[index] || (index > 0 && index < stroke.bezierPath.anchors.length - 1 ? 'smooth' : 'corner')) === 'smooth';
-          handles.circle(point.x, point.y, selected ? 6 : 4)
+          handles.circle(point.x, point.y, (selected ? 7 : 5) * k)
             .fill(selected ? 0xe5b85c : (smooth ? 0x9bcfff : 0xf8f6f0))
-            .stroke({ color: 0x24242a, width: selected ? 1.8 : 1.1 });
+            .stroke({ color: 0x24242a, width: (selected ? 1.8 : 1.1) * k });
         });
         this.app.stage.addChildAt(handles, this.app.stage.children.length - 1);
         this.strokeGraphics.push(handles);
@@ -215,9 +216,9 @@ export class PixiStageRenderer {
         const nodes = this.acquireGraphics();
         stroke.points.forEach((point, index) => {
           const selected = index === selectedNodeIndex;
-          nodes.circle(point.x, point.y, selected ? 6.5 : 4.5)
+          nodes.circle(point.x, point.y, (selected ? 7 : 5) * k)
             .fill(selected ? 0xe5b85c : 0xf8f6f0)
-            .stroke({ color: selected ? 0x24242a : 0x6d7785, width: selected ? 2 : 1.5 });
+            .stroke({ color: selected ? 0x24242a : 0x6d7785, width: (selected ? 2 : 1.5) * k });
         });
         this.app.stage.addChildAt(nodes, this.app.stage.children.length - 1);
         this.strokeGraphics.push(nodes);
@@ -412,6 +413,11 @@ export class PixiStageRenderer {
       sprite.alpha = layer.renderOpacity ?? layer.opacity ?? 1;
       setDisplayMatrix(sprite, layer.renderMatrix);
     }
+  }
+
+  /** Canvas units per CSS pixel; node handles are sized in CSS pixels. */
+  setHandleScale(unitsPerCssPixel = 1) {
+    this.handleScale = Number.isFinite(unitsPerCssPixel) && unitsPerCssPixel > 0 ? unitsPerCssPixel : 1;
   }
 
   setPreviewMatrix(matrix = null) {
