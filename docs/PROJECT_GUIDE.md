@@ -159,58 +159,56 @@ The current architecture is intentionally pragmatic: app state and much of the U
 
 ## 6. AI collaboration roles
 
-The project uses a two-assistant workflow with one shared source of truth: this GitHub repository. These are default ownership boundaries, not claims that one model is universally better. Either assistant may take a task explicitly assigned to it.
+Updated 2026-11-07 at the user's request. The project uses two assistants with one shared source of truth: this GitHub repository. **Claude owns the product and the codebase.** ChatGPT works only in areas where a mistake is cheap to notice and cheap to undo. Either assistant may take any task the user explicitly assigns to it; an explicit assignment overrides this section.
 
-### ChatGPT — product/technical design partner and independent reviewer
+### Claude — product and engineering lead (default owner of almost everything)
 
-Default responsibilities:
-- Translate the user's product ideas into precise requirements and acceptance criteria.
-- Design workflows, tool organization, inspector/navigation structure, and iPad-oriented UI/UX.
-- Define expected behavior and edge cases before implementation.
-- Review architecture boundaries and trade-offs across drawing, vector, tone, layers, selection, animation, and future 3D workflows.
-- Review Claude's PRs against the requirements, inspect diffs, identify regressions, and request targeted fixes.
-- Coordinate integration across features and maintain a coherent product roadmap.
-- Implement code directly when explicitly assigned or when a focused change is more efficient to complete directly.
+Responsibilities:
+- Turn the user's ideas into specifications, acceptance criteria and UI/workflow designs, and confirm direction with the user before large changes.
+- Own architecture and all core systems: document model and saving, timeline/tracks, movement keyframes, undo/redo, rendering, pointer/pencil input, brush/vector/tone/selection engines, export, performance.
+- Implement features and refactors, write tests, run browser checks, maintain `docs/PROJECT_GUIDE.md`, `docs/architecture.md`, `docs/roadmap.md` and `docs/planning/`.
+- Triage and fix bugs, including those reported by ChatGPT or the user.
+- Merge PRs to `main` after CI passes and the user has agreed (a "go ahead" in chat is enough).
+- Decide whether to apply ChatGPT's suggestions; ChatGPT reviews are advisory, not gates.
 
-Expected deliverables:
-- Feature specification and acceptance checklist.
-- UI/workflow proposal where relevant.
-- Independent code review with concrete file/line references and reproducible concerns.
-- Integration and regression test plan.
+Deliverables per task: focused branch and PR, behavior/implementation/tests/limitations in the PR description, exact `npm test` and `npm run build` results, and a clear statement of what was not tested (for example physical iPad).
 
-### Claude — implementation lead
+### ChatGPT — low-risk contributor and second pair of eyes
 
-Default responsibilities:
-- Implement well-scoped features and refactors in the codebase.
-- Build isolated, testable engines/modules for brush, vector geometry, screentone, selection, animation, and rendering.
-- Investigate implementation-level bugs and performance bottlenecks.
-- Write unit/regression tests and improve module boundaries where justified.
-- Keep implementation details and technical documentation aligned with shipped behavior.
+ChatGPT works on tasks where a wrong answer causes little harm: the result is text or data that is easy to review, does not change how drawings are stored or edited, and can be reverted with one commit.
 
-Expected deliverables:
-- Focused feature branch and pull request.
-- Implementation summary and changed-file list.
-- Tests added/updated and exact test/build results.
-- Known limitations and any browser/device checks not performed.
+ChatGPT may **edit directly** (small PRs, one topic each):
+- User-facing writing: `README.md`, user guide and help pages under `docs/user/`, release notes/changelog, workstream notes under `docs/workstreams/`.
+- Proposals for Korean UI wording (labels, tooltips, toasts, gesture help) collected in `docs/copy/ui-text.md`. Claude applies accepted wording to the app code.
+- Test plans and manual QA checklists, especially iPad/Apple Pencil test scripts under `docs/qa/`, and filled-in results from manual testing the user performs.
+- Research notes under `docs/research/`: library comparisons, license checks, how other drawing/animation apps handle a workflow (broad inspiration only — no copied assets or UI).
+- Sample data proposals: palette presets, brush preset parameter suggestions, demo scene ideas (as documents; Claude wires them into code).
 
-### Shared responsibilities
+ChatGPT may **comment but not change**:
+- Reviews of Claude's PRs (bugs, edge cases, wording, accessibility). Reviews are non-blocking; Claude responds and decides.
+- Bug reports as GitHub issues with reproduction steps, expected vs actual behavior, device/browser.
 
-Both assistants can:
-- Research and compare open-source libraries, verify licenses, and evaluate integration costs.
-- Review complex algorithms and propose alternative approaches.
-- Work on high-risk systems such as brush input, vector editing, compositing, undo/redo, and animation.
-- Challenge incorrect assumptions and correct each other's proposals using code and evidence.
+ChatGPT should **not** change, unless the user explicitly assigns the task:
+- Anything under `apps/web/src/` or `apps/web/index.html`, `tests/`, `.github/`, `package.json`/lockfile, `vite.config.js`.
+- `CLAUDE.md`, `AGENTS.md`, and sections 2–7 of this guide.
+- Repository operations: merging, closing others' PRs, deleting branches, force-pushing, changing settings.
 
-For critical systems, prefer a two-pass process: one assistant implements; the other independently reviews. Do not have both assistants make simultaneous edits to the same files.
+### Why this split
+
+Core systems (saving, timeline, undo, input, rendering) are tightly coupled: a plausible-looking change in one can silently corrupt drawings in another, and only shows up in long editing sessions. One owner for all of them avoids conflicting designs and overlapping edits. Writing, research, QA scripts and wording suggestions are valuable, easy to verify by reading, and harmless if wrong.
+
+### Hand-off rules
+- Files have one owner at a time. ChatGPT's directories (`docs/user/`, `docs/copy/`, `docs/qa/`, `docs/research/`, `docs/workstreams/`, `README.md`) are not edited by Claude while a ChatGPT PR touching them is open, and vice versa for everything else.
+- When ChatGPT's work implies a code change (new wording, a bug, a QA failure), it opens an issue or adds to `docs/copy/ui-text.md`; Claude picks it up.
+- If ChatGPT disagrees with a technical decision, it writes the concern on the PR or an issue with evidence; Claude answers with code, tests or measurements. The user breaks ties.
 
 ## 7. Collaboration protocol
 
 ### Before editing
 1. Read this guide, `README.md`, relevant architecture/roadmap sections, and the exact source files involved.
 2. Check current `main`, recent commits, open PRs, and active branches. Do not assume an earlier chat summary reflects the current repository.
-3. Confirm the task's owner and whether another assistant is editing overlapping files.
-4. Trace the complete user interaction from HTML control → event binding → state/algorithm → canvas/document mutation → renderer refresh → undo/frame persistence.
-5. Define acceptance criteria and identify neighboring tests.
+3. Confirm the task is in your area (section 6) and that no open PR from the other assistant touches the same files.
+4. Code changes (Claude): trace the complete user interaction from HTML control → event binding → state/algorithm → canvas/document mutation → renderer refresh → undo/frame persistence, and define acceptance criteria and neighboring tests.
 
 ### While editing
 - Make the smallest complete change that solves the requested task.
@@ -224,19 +222,18 @@ For critical systems, prefer a two-pass process: one assistant implements; the o
 - If implementation reveals a flaw in the specification, stop and explain the conflict before making a broad or irreversible design change.
 
 ### After editing
-1. Run `npm test`.
-2. Run `npm run build`.
-3. Inspect the diff for accidental unrelated changes, broken controls, stale docs, and accessibility regressions.
-4. Report exactly what was tested. If browser interaction or physical iPad testing was not performed, say so.
-5. Work on a feature branch and open a PR to `main`; do not force-push or rewrite shared history.
-6. The other assistant should review critical PRs before merge. Do not merge until required CI checks pass and review concerns are resolved.
-7. After merge, verify the relevant files on `main` and update this guide if the project state changed.
+1. Code changes: run `npm test` and `npm run build`; run a browser check for UI changes.
+2. Inspect the diff for accidental unrelated changes, broken controls, stale docs, and accessibility regressions.
+3. Report exactly what was tested. If browser interaction or physical iPad testing was not performed, say so.
+4. Work on a feature branch and open a PR to `main`; do not force-push or rewrite shared history.
+5. Merge only after required CI checks pass and the user has agreed. ChatGPT review comments are welcome but do not block merging.
+6. After merge, verify the relevant files on `main` and update this guide if the project state changed.
 
 ### Git coordination
-- One task = one owner = one feature branch = one PR.
-- Never let two assistants independently modify the same file at the same time.
+- One task = one owner = one branch = one PR.
+- Never let two assistants modify the same file at the same time.
 - Prefer separate PRs for independent features. If changes depend on each other, merge the prerequisite first and rebase/update the follow-up branch safely.
-- Treat `main` as the shared, reviewed baseline. The GitHub repository—not either assistant's chat history—is the source of truth.
+- Treat `main` as the shared baseline. The GitHub repository—not either assistant's chat history—is the source of truth.
 
 ## 7. Test and development commands
 
