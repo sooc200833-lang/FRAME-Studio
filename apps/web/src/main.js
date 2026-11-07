@@ -9,8 +9,7 @@ import { createSmudgeSession } from './brush/smudge-engine.js';
 import { normalizeBrushBlendMode } from './brush/blend-modes.js';
 import { expandRegionMask, findConnectedRegion } from './fill/flood-fill.js';
 import { animateLineStrokes, lineBoilPhase } from './line/line-boil.js';
-import { activeFrame, addFrame, applyTimelineFps, createTimeline, deleteFrame, frameAtTick, frameHold, getOnionSkin, selectFrame, setFrameHold, totalTicks, updateFrameCels, updateFrameStrokes, updateFrameTransformCels } from './animation/timeline.js';
-import { normalizeRasterCels, normalizeRasterTransformCels } from './animation/frame-cels.js';
+import { clipAt, createTimelineDocument, deleteClip, duplicateTrack, ensureClipAt, ensureTrack, insertClipAfter, neighborClipStart, normalizeHold, setClipHold, timelineLength } from './animation/tracks.js';
 import { applyMatrix, evaluateMotionTrack, invertMatrix, isIdentityMotion, keyframeAt, motionMatrix, removeKeyframe, setKeyframe } from './animation/motion.js';
 import { cloneRasterTransformRecords, composeRasterTransformStack, createTranslationMatrix, createRotationMatrix, rasterizeRasterTransformStack } from './selection/raster-transform.js';
 import { containsSelectionPoint, hitTestSelectionHandle, moveSelectionRect, normalizeSelectionRect, lineStrokeIntersectsPolygon, pointInPolygon, resizeSelectionRectFromHandle, resolveSelectionTargets, transformLineStrokes, transformLineStrokesByMatrix, transformPolygon, translatePolygon, getSelectionPreviewTransform, getPolygonBounds, getPolygonCentroid, hitTestPolygonTransformHandle, resizePolygonFromHandle } from './selection/selection.js';
@@ -118,7 +117,14 @@ function persistPaletteGroups() {
 const vectorStrokes = [];
 const lineUndo = [];
 const lineRedo = [];
-const timeline = createTimeline({ fps: 12 });
+// Multi-track timeline: one track per raster layer plus the shared vector
+// track. `loadedClips` remembers which clip each live layer canvas (and the
+// live vectorStrokes array) currently holds.
+const timeline = createTimelineDocument({ fps: 12 });
+const VECTOR_TRACK = 'vector';
+const loadedClips = new Map();
+let activeTrackId = null;
+let nextLayerId = 1;
 let onionEnabled = true;
 let loadingFrame = false;
 let frameLoadToken = 0;
@@ -137,6 +143,7 @@ function makeLayer(name) {
   maskContext.fillStyle = '#fff';
   maskContext.fillRect(0, 0, W, H);
   return {
+    id: 'layer-' + nextLayerId++,
     name, visible: true, opacity: 1, blendMode: 'normal',
     canvas, presentationCanvas, transformRecords: [], motionTrack: [],
     maskCanvas, maskEnabled: false, maskUndo: [], maskRedo: [], undo: [], redo: [],
@@ -477,8 +484,8 @@ function render(dirtyIndices = [], displayStrokes = vectorStrokes) {
     if (layers[index]) refreshLayerPresentation(layers[index]);
   }
   applyGroupState();
-  if (!loadingFrame) updateFrameStrokes(timeline, timeline.activeFrameId, vectorStrokes);
-  renderer.sync(layers, dirtyIndices, displayStrokes, selectedStrokeId, onionEnabled ? getOnionSkin(timeline) : [], selectionRect, selectionPolygon, selectedNodeIndex, nodeEditEnabled, selectedBezierHandle, selectedBezierAnchor, showSelectedVectorHighlight, selectedStrokeIds);
+  if (!loadingFrame) persistVectorClip();
+  renderer.sync(layers, dirtyIndices, displayStrokes, selectedStrokeId, onionEnabled ? vectorOnionSkin() : [], selectionRect, selectionPolygon, selectedNodeIndex, nodeEditEnabled, selectedBezierHandle, selectedBezierAnchor, showSelectedVectorHighlight, selectedStrokeIds);
   renderer.setPreviewMatrix(paintsInLayerSpace() ? layers[active].renderMatrix : null);
   syncMotionUi();
   document.getElementById('status').textContent = TOOL_LABELS[tool] || tool.toUpperCase();
@@ -489,163 +496,301 @@ function render(dirtyIndices = [], displayStrokes = vectorStrokes) {
   scheduleFrameThumbnail();
 }
 
-function saveActiveFrame() {
-  updateFrameStrokes(timeline, timeline.activeFrameId, vectorStrokes);
-  updateFrameCels(timeline, timeline.activeFrameId, layers.map(layer => layer.canvas.toDataURL('image/png')));
-  updateFrameTransformCels(timeline, timeline.activeFrameId, layers.map(layer => cloneRasterTransformRecords(layer.transformRecords || [])));
-}
-
-async function decodeRasterCels(cels) {
-  return Promise.all(cels.map(source => new Promise(resolve => {
-    if (!source) {
-      resolve(null);
-      return;
-    }
-    const image = new Image();
-    image.onload = () => resolve(image);
-    image.onerror = () => resolve(null);
-    image.src = source;
-  })));
-}
-
-async function loadTimelineFrame(frameId, saveCurrent = true) {
-  groupedTransformUndo = null;
-  groupedTransformRedo = null;
-  if (saveCurrent && !loadingFrame) saveActiveFrame();
-  if (!selectFrame(timeline, frameId)) return;
-  const token = ++frameLoadToken;
-  loadingFrame = true;
-  const frame = activeFrame(timeline);
-  const [decoded, decodedTransformSources] = await Promise.all([
-    decodeRasterCels(normalizeRasterCels(frame?.cels, layers.length)),
-    Promise.all(normalizeRasterTransformCels(frame?.transformCels, layers.length).map(records =>
-      decodeRasterCels(records.map(record => record.sourceDataUrl)),
-    )),
-  ]);
-  if (token !== frameLoadToken) return;
-  layers.forEach((layer, index) => {
-    const context = layer.canvas.getContext('2d');
-    context.clearRect(0, 0, W, H);
-    if (decoded[index]) context.drawImage(decoded[index], 0, 0, W, H);
-    const records = normalizeRasterTransformCels(frame?.transformCels, layers.length)[index] || [];
-    layer.transformRecords = cloneRasterTransformRecords(records).map((record, recordIndex) => ({
-      ...record,
-      sourceCanvas: decodedTransformSources[index]?.[recordIndex] || null,
-    })).filter(record => record.sourceCanvas);
-    refreshLayerPresentation(layer);
-  });
-  vectorStrokes.splice(0, vectorStrokes.length, ...(frame?.strokes || []).map(stroke => ({
+function cloneLineStroke(stroke) {
+  return {
     ...stroke,
-    points: stroke.points.map(point => ({ x: point.x, y: point.y })),
+    points: stroke.points.map(point => ({ ...point })),
+    ...(Array.isArray(stroke.pressureProfile) ? { pressureProfile: [...stroke.pressureProfile] } : {}),
     ...(stroke.bezierPath ? { bezierPath: {
       ...stroke.bezierPath,
       anchorModes: stroke.bezierPath.anchorModes ? [...stroke.bezierPath.anchorModes] : stroke.bezierPath.anchors.map((_, index) => index > 0 && index < stroke.bezierPath.anchors.length - 1 ? 'smooth' : 'corner'),
       anchors: stroke.bezierPath.anchors.map(point => ({ ...point })),
       segments: stroke.bezierPath.segments.map(segment => ({ control1: { ...segment.control1 }, control2: { ...segment.control2 } })),
     } } : {}),
-  })));
-  selectedStrokeId = null;
+  };
+}
+
+function layerTrack(layer) {
+  return ensureTrack(timeline, layer.id);
+}
+
+function vectorTrack() {
+  return ensureTrack(timeline, VECTOR_TRACK, { vector: true });
+}
+
+function currentTrackId() {
+  return activeTrackId === VECTOR_TRACK ? VECTOR_TRACK : layers[active]?.id;
+}
+
+function currentTrack() {
+  return currentTrackId() === VECTOR_TRACK ? vectorTrack() : layerTrack(layers[active]);
+}
+
+function trackLabel(trackId) {
+  return trackId === VECTOR_TRACK ? '벡터 선' : (layers.find(layer => layer.id === trackId)?.name || '레이어');
+}
+
+function loadedClip(trackId) {
+  const clipId = loadedClips.get(trackId);
+  return timeline.tracks[trackId]?.clips.find(clip => clip.id === clipId) || null;
+}
+
+function persistVectorClip() {
+  const clip = loadedClip(VECTOR_TRACK);
+  if (clip) clip.strokes = vectorStrokes.map(cloneLineStroke);
+}
+
+/**
+ * Called before an edit: makes sure the edited track has a clip at the
+ * playhead (creating one past the track end) and that it is the loaded clip.
+ */
+function ensureEditableClip(kind) {
+  const isVector = kind === 'vector';
+  const track = isVector ? vectorTrack() : layerTrack(layers[active]);
+  const trackId = isVector ? VECTOR_TRACK : layers[active].id;
+  activeTrackId = isVector ? VECTOR_TRACK : null;
+  if (loadedClip(trackId)) return;
+  const found = ensureClipAt(timeline, track, timeline.playhead, isVector ? { strokes: [] } : {});
+  loadedClips.set(trackId, found.clip.id);
+}
+
+function saveActiveFrame() {
+  for (const layer of layers) {
+    let clip = loadedClip(layer.id);
+    if (!clip) {
+      // A newly created layer adopts its blank clip at the playhead.
+      const found = clipAt(layerTrack(layer), timeline.playhead);
+      if (!found || found.clip.cel) continue;
+      loadedClips.set(layer.id, found.clip.id);
+      clip = found.clip;
+    }
+    clip.cel = layer.canvas.toDataURL('image/png');
+    clip.transformCel = cloneRasterTransformRecords(layer.transformRecords || []);
+  }
+  persistVectorClip();
+}
+
+// Decoded images are cached per clip and reused while the clip's data URL is
+// unchanged, so playback does not re-decode held drawings.
+const clipImageCache = new WeakMap();
+
+function decodeImage(source) {
+  return new Promise(resolve => {
+    if (!source) { resolve(null); return; }
+    const image = new Image();
+    image.onload = () => resolve(image);
+    image.onerror = () => resolve(null);
+    image.src = source;
+  });
+}
+
+function decodeClip(clip) {
+  if (!clip) return Promise.resolve({ image: null, transformSources: [] });
+  const cached = clipImageCache.get(clip);
+  if (cached && cached.cel === clip.cel && cached.transformCel === clip.transformCel) return cached.promise;
+  const promise = Promise.all([
+    decodeImage(clip.cel),
+    Promise.all((clip.transformCel || []).map(record => decodeImage(record.sourceDataUrl))),
+  ]).then(([image, transformSources]) => ({ image, transformSources }));
+  clipImageCache.set(clip, { cel: clip.cel, transformCel: clip.transformCel, promise });
+  return promise;
+}
+
+/** Loads, for every track, the clip under the playhead into the live canvases. */
+async function syncClipsToPlayhead({ save = true } = {}) {
+  if (save && !loadingFrame) saveActiveFrame();
+  const tick = timeline.playhead;
+  const changes = [];
+  for (const layer of layers) {
+    const clip = clipAt(layerTrack(layer), tick)?.clip || null;
+    if (loadedClips.has(layer.id) && loadedClips.get(layer.id) === (clip?.id || null)) continue;
+    changes.push({ layer, clip });
+  }
+  const vectorClip = clipAt(vectorTrack(), tick)?.clip || null;
+  const vectorChanged = !loadedClips.has(VECTOR_TRACK) || loadedClips.get(VECTOR_TRACK) !== (vectorClip?.id || null);
+  if (!changes.length && !vectorChanged) {
+    render();
+    return;
+  }
+  groupedTransformUndo = null;
+  groupedTransformRedo = null;
+  const token = ++frameLoadToken;
+  loadingFrame = true;
+  const decoded = await Promise.all(changes.map(change => decodeClip(change.clip)));
+  if (token !== frameLoadToken) return;
+  changes.forEach(({ layer, clip }, index) => {
+    const context = layer.canvas.getContext('2d');
+    context.clearRect(0, 0, W, H);
+    if (decoded[index].image) context.drawImage(decoded[index].image, 0, 0, W, H);
+    layer.transformRecords = cloneRasterTransformRecords(clip?.transformCel || []).map((record, recordIndex) => ({
+      ...record,
+      sourceCanvas: decoded[index].transformSources[recordIndex] || null,
+    })).filter(record => record.sourceCanvas);
+    refreshLayerPresentation(layer);
+    // Pixel undo snapshots belong to the previous clip; never replay them here.
+    layer.undo = [];
+    layer.redo = [];
+    loadedClips.set(layer.id, clip?.id || null);
+  });
+  if (vectorChanged) {
+    vectorStrokes.splice(0, vectorStrokes.length, ...(vectorClip?.strokes || []).map(cloneLineStroke));
+    loadedClips.set(VECTOR_TRACK, vectorClip?.id || null);
+    lineUndo.length = 0;
+    lineRedo.length = 0;
+    selectedStrokeId = null;
+    selectedStrokeIds.clear();
+  }
   loadingFrame = false;
-  render(layers.map((_, index) => index));
+  render(changes.map(change => layers.indexOf(change.layer)));
+}
+
+function vectorOnionSkin(opacity = 0.22) {
+  const track = vectorTrack();
+  const found = clipAt(track, timeline.playhead);
+  if (!found) return [];
+  const result = [];
+  const previous = track.clips[found.index - 1];
+  const next = track.clips[found.index + 1];
+  if (previous?.strokes?.length) result.push({ side: 'previous', tint: 0x55aaff, alpha: opacity, strokes: previous.strokes });
+  if (next?.strokes?.length) result.push({ side: 'next', tint: 0xff6b8a, alpha: opacity, strokes: next.strokes });
+  return result;
 }
 
 function timelineTickWidth() {
   return window.innerWidth <= 820 ? 30 : 40;
 }
 
+const TRACK_LABEL_WIDTH = 86;
+
+function timelineRows() {
+  // Vector lines are drawn above every raster layer, so their track is first;
+  // raster tracks follow top layer first, like the layers panel.
+  return [{ trackId: VECTOR_TRACK, track: vectorTrack(), layerIndex: -1 }]
+    .concat(layers.map((layer, index) => ({ trackId: layer.id, track: layerTrack(layer), layerIndex: index })).reverse());
+}
+
 function drawTimeline() {
   const strip = document.getElementById('frameStrip');
   if (!strip) return;
   const tickWidth = timelineTickWidth();
-  const ticks = totalTicks(timeline);
-  const lane = document.createElement('div');
-  lane.className = 'lane';
-  lane.style.width = (ticks * tickWidth + tickWidth * 2) + 'px';
-  lane.style.setProperty('--tick', tickWidth + 'px');
+  const ticks = timelineLength(timeline);
+  const grid = document.createElement('div');
+  grid.className = 'lane';
+  grid.style.width = (TRACK_LABEL_WIDTH + (ticks + 3) * tickWidth) + 'px';
+  grid.style.setProperty('--tick', tickWidth + 'px');
+  grid.style.setProperty('--label', TRACK_LABEL_WIDTH + 'px');
 
   const ruler = document.createElement('div');
   ruler.className = 'tick-ruler';
-  for (let tick = 0; tick < ticks; tick++) {
+  const corner = document.createElement('span');
+  corner.className = 'ruler-corner';
+  ruler.append(corner);
+  for (let tick = 0; tick < ticks + 3; tick++) {
     const mark = document.createElement('span');
-    mark.className = 'tick-mark' + (tick % 4 === 0 ? ' major' : '');
-    mark.style.left = (tick * tickWidth) + 'px';
+    mark.className = 'tick-mark' + (tick % 4 === 0 ? ' major' : '') + (tick >= ticks ? ' beyond' : '');
+    mark.style.left = (TRACK_LABEL_WIDTH + tick * tickWidth) + 'px';
     if (tick % 4 === 0) mark.textContent = String(tick + 1);
     ruler.append(mark);
   }
-  for (const keyframe of layers[active]?.motionTrack || []) {
-    const diamond = document.createElement('i');
-    diamond.className = 'key-diamond';
-    diamond.title = `움직임 키프레임 · 프레임 ${keyframe.tick + 1}`;
-    diamond.style.left = ((keyframe.tick + 0.5) * tickWidth) + 'px';
-    ruler.append(diamond);
-  }
-  lane.append(ruler);
+  grid.append(ruler);
 
+  const currentId = currentTrackId();
   let activeCell = null;
-  let cursor = 0;
-  timeline.frames.forEach((frame, index) => {
-    const hold = frameHold(frame);
-    const cell = document.createElement('div');
-    cell.className = 'frame-cell' + (frame.id === timeline.activeFrameId ? ' active' : '');
-    cell.dataset.frameId = frame.id;
-    cell.style.left = (cursor * tickWidth) + 'px';
-    cell.style.width = (hold * tickWidth - 3) + 'px';
-    const label = document.createElement('span');
-    label.textContent = hold > 1 ? `${index + 1} · ${hold}` : String(index + 1);
-    cell.append(label);
-    cell.title = `그림 ${index + 1} · ${hold}프레임 동안 유지 · ${frame.strokes.length}개 선`;
-    cell.setAttribute('role', 'button');
-    cell.setAttribute('aria-label', `그림 ${index + 1}, ${hold}프레임`);
-    applyFrameThumbnail(cell, frame.id);
-    if (frame.id === timeline.activeFrameId) {
-      const grip = document.createElement('span');
-      grip.className = 'hold-grip';
-      grip.title = '끌어서 그림 길이 조절';
-      cell.append(grip);
-      activeCell = cell;
+  for (const { trackId, track, layerIndex } of timelineRows()) {
+    const row = document.createElement('div');
+    row.className = 'track-row' + (trackId === currentId ? ' active' : '');
+    row.dataset.trackId = trackId;
+    const label = document.createElement('button');
+    label.className = 'track-name';
+    label.textContent = trackLabel(trackId);
+    label.title = trackLabel(trackId) + ' 트랙 선택';
+    label.onclick = () => selectTrack(trackId);
+    row.append(label);
+    let cursor = 0;
+    track.clips.forEach((clip, index) => {
+      const hold = normalizeHold(clip.hold);
+      const cell = document.createElement('div');
+      const isCurrent = trackId === currentId && timeline.playhead >= cursor && timeline.playhead < cursor + hold;
+      const empty = trackId === VECTOR_TRACK ? !clip.strokes?.length : !clip.cel;
+      cell.className = 'frame-cell' + (isCurrent ? ' active' : '') + (empty && !clipThumbnails.has(clip.id) ? ' empty' : '');
+      cell.dataset.clipId = clip.id;
+      cell.style.left = (TRACK_LABEL_WIDTH + cursor * tickWidth) + 'px';
+      cell.style.width = (hold * tickWidth - 3) + 'px';
+      const text = document.createElement('span');
+      text.textContent = hold > 1 ? `${index + 1} · ${hold}` : String(index + 1);
+      cell.append(text);
+      cell.title = `${trackLabel(trackId)} · 그림 ${index + 1} · ${hold}프레임`;
+      applyClipThumbnail(cell, clip.id);
+      if (isCurrent) {
+        const grip = document.createElement('span');
+        grip.className = 'hold-grip';
+        grip.title = '끌어서 그림 길이 조절';
+        cell.append(grip);
+        activeCell = cell;
+      }
+      row.append(cell);
+      cursor += hold;
+    });
+    if (layerIndex === active) {
+      for (const keyframe of layers[active]?.motionTrack || []) {
+        const diamond = document.createElement('i');
+        diamond.className = 'key-diamond';
+        diamond.title = `움직임 키프레임 · 프레임 ${keyframe.tick + 1}`;
+        diamond.style.left = (TRACK_LABEL_WIDTH + (keyframe.tick + 0.5) * tickWidth) + 'px';
+        row.append(diamond);
+      }
     }
-    lane.append(cell);
-    cursor += hold;
-  });
+    grid.append(row);
+  }
 
   const playhead = document.createElement('div');
   playhead.className = 'playhead';
-  lane.append(playhead);
-  strip.replaceChildren(lane);
+  grid.append(playhead);
+  strip.replaceChildren(grid);
   positionPlayhead();
 
-  if (activeCell && strip.dataset.activeFrameId !== timeline.activeFrameId) {
-    strip.dataset.activeFrameId = timeline.activeFrameId;
+  const activeKey = `${currentId}:${activeCell?.dataset.clipId}`;
+  if (activeCell && strip.dataset.activeKey !== activeKey) {
+    strip.dataset.activeKey = activeKey;
     activeCell.scrollIntoView({ block: 'nearest', inline: 'nearest' });
   }
   const holdOut = document.getElementById('holdOut');
-  if (holdOut) holdOut.textContent = frameHold(activeFrame(timeline)) + '프레임';
+  const found = clipAt(currentTrack(), timeline.playhead);
+  if (holdOut) holdOut.textContent = found ? normalizeHold(found.clip.hold) + '프레임' : '—';
+}
+
+function selectTrack(trackId) {
+  activeTrackId = trackId === VECTOR_TRACK ? VECTOR_TRACK : null;
+  const index = layers.findIndex(layer => layer.id === trackId);
+  if (index >= 0) active = index;
+  render();
 }
 
 function positionPlayhead() {
   const tick = playbackActive && playbackTickPosition !== null ? playbackTickPosition : timeline.playhead;
   const playhead = document.querySelector('#frameStrip .playhead');
-  if (playhead) playhead.style.left = ((Math.floor(tick) + 0.5) * timelineTickWidth()) + 'px';
+  if (playhead) playhead.style.left = (TRACK_LABEL_WIDTH + (Math.floor(tick) + 0.5) * timelineTickWidth()) + 'px';
   const label = document.getElementById('frameCounter');
-  if (label) label.textContent = `${Math.floor(tick) + 1} / ${totalTicks(timeline)}`;
+  if (label) label.textContent = `${Math.floor(tick) + 1} / ${timelineLength(timeline)}`;
 }
 
 function seekToTick(tick) {
   if (playbackActive) setPlaybackEnabled(false);
   if (loadingFrame) return;
-  const clamped = Math.max(0, Math.min(totalTicks(timeline) - 1, Math.floor(tick)));
-  const frame = frameAtTick(timeline, clamped);
-  timeline.playhead = clamped;
-  if (frame && frame.id !== timeline.activeFrameId) loadTimelineFrame(frame.id);
-  else render();
+  // Allow one tick past the end so a new drawing can be started there.
+  timeline.playhead = Math.max(0, Math.min(timelineLength(timeline), Math.floor(tick)));
+  syncClipsToPlayhead();
 }
 
 function changeActiveHold(hold) {
-  const frame = activeFrame(timeline);
-  if (!frame) return;
+  const found = clipAt(currentTrack(), timeline.playhead);
+  if (!found) return;
   if (playbackActive) setPlaybackEnabled(false);
-  setFrameHold(timeline, frame.id, hold);
-  render();
+  saveActiveFrame();
+  setClipHold(currentTrack(), found.clip.id, hold);
+  // Keep the playhead on the clip that was resized.
+  timeline.playhead = Math.min(timeline.playhead, found.start + normalizeHold(hold) - 1);
+  syncClipsToPlayhead({ save: false });
 }
 
 function setPlaybackEnabled(enabled) {
@@ -678,13 +823,14 @@ function playbackTick(timestamp) {
     playbackRaf = 0;
     return;
   }
-  const total = totalTicks(timeline);
+  const total = timelineLength(timeline);
   const position = (playbackStartTick + Math.max(0, timestamp - playbackStartedAt) * timeline.fps / 1000) % total;
   playbackTickPosition = position;
-  timeline.playhead = Math.floor(position);
-  const frame = frameAtTick(timeline, position);
-  if (!loadingFrame && frame && frame.id !== timeline.activeFrameId) {
-    loadTimelineFrame(frame.id);
+  const tick = Math.floor(position);
+  if (tick !== timeline.playhead && !loadingFrame) {
+    timeline.playhead = tick;
+    // Nothing is edited during playback, so clips are not re-saved per tick.
+    syncClipsToPlayhead({ save: false });
   } else if (layers.some(layer => layer.motionTrack?.length)) {
     applyGroupState();
     renderer.updateLayerTransforms(layers);
@@ -698,7 +844,8 @@ function updateTimelineFPS(value) {
     playbackStartTick = playbackTickPosition;
     playbackStartedAt = performance.now();
   }
-  const fps = applyTimelineFps(timeline, value);
+  const fps = Math.max(1, Math.min(60, Number(value) || 12));
+  timeline.fps = fps;
   document.getElementById('fpsOut').value = fps + ' FPS';
 }
 
@@ -837,6 +984,7 @@ function applyMangaTone() {
     return;
   }
   ensureEditableLayerAfterTransform();
+  ensureEditableClip('raster');
   const layer = layers[active];
   const selection = selectionOutlinePolygon();
   const settings = {
@@ -926,12 +1074,14 @@ function appendLayerRow(list, layer, index, nested) {
     item.onclick = event => {
       if (event.target !== visibility && event.target !== target) {
         active = index;
+        activeTrackId = null;
         activeGroupId = layer.groupId || null;
         maskEditing = false;
         document.getElementById('maskEdit')?.classList.remove('active');
         document.getElementById('maskState').textContent = '일반 그림 편집 중';
         updateLayerInspector();
         drawLayers();
+        drawTimeline();
       }
     };
     list.append(item);
@@ -986,7 +1136,7 @@ function animationTick(timestamp) {
       amplitude: Number(document.getElementById('boilAmplitude').value),
       frequency: Number(document.getElementById('boilFrequency').value),
     });
-    renderer.sync(layers, [], displayStrokes, selectedStrokeId, onionEnabled ? getOnionSkin(timeline) : [], selectionRect, selectionPolygon, selectedNodeIndex, nodeEditEnabled, null, null, showSelectedVectorHighlight, selectedStrokeIds);
+    renderer.sync(layers, [], displayStrokes, selectedStrokeId, onionEnabled ? vectorOnionSkin() : [], selectionRect, selectionPolygon, selectedNodeIndex, nodeEditEnabled, null, null, showSelectedVectorHighlight, selectedStrokeIds);
     lastAnimationPaint = timestamp;
   }
   animationFrame = requestAnimationFrame(animationTick);
@@ -1514,6 +1664,11 @@ function bindControls() {
     copy.maskEnabled = source.maskEnabled;
     copy.groupId = source.groupId;
     copy.motionTrack = (source.motionTrack || []).map(keyframe => ({ ...keyframe }));
+    // The copy gets its own track with the same drawings and timing.
+    saveActiveFrame();
+    const copyTrack = duplicateTrack(timeline, layerTrack(source), copy.id);
+    const copyClip = clipAt(copyTrack, timeline.playhead)?.clip;
+    if (copyClip) loadedClips.set(copy.id, copyClip.id);
     layers.push(copy);
     active = layers.length - 1;
     saveActiveFrame();
@@ -1526,13 +1681,9 @@ function bindControls() {
     if (layers.length <= 1) return;
     if (playbackActive) setPlaybackEnabled(false);
     saveActiveFrame();
-    timeline.frames.forEach(frame => {
-      frame.cels = normalizeRasterCels(frame.cels, layers.length);
-      frame.transformCels = normalizeRasterTransformCels(frame.transformCels, layers.length);
-      frame.cels.splice(active, 1);
-      frame.transformCels.splice(active, 1);
-    });
-    layers.splice(active, 1);
+    const [removed] = layers.splice(active, 1);
+    delete timeline.tracks[removed.id];
+    loadedClips.delete(removed.id);
     active = Math.min(active, layers.length - 1);
     saveActiveFrame();
     render(layers.map((_, index) => index));
@@ -1702,25 +1853,48 @@ function bindControls() {
   document.getElementById('fps').oninput = event => updateTimelineFPS(event.target.value);
   updateTimelineFPS(document.getElementById('fps').value);
 
-  document.getElementById('frameAdd').onclick = () => {
+  // Drawing buttons act on the selected track only; other tracks keep their timing.
+  const insertDrawing = duplicate => {
     if (playbackActive) setPlaybackEnabled(false);
+    if (loadingFrame) return;
     saveActiveFrame();
-    const frame = addFrame(timeline);
-    loadTimelineFrame(frame.id, false);
+    const track = currentTrack();
+    const source = clipAt(track, timeline.playhead)?.clip;
+    const { clip, start } = insertClipAfter(timeline, track, timeline.playhead, {
+      duplicate,
+      blank: track.id === VECTOR_TRACK ? { strokes: [] } : {},
+    });
+    if (duplicate && source && clipThumbnails.has(source.id)) clipThumbnails.set(clip.id, clipThumbnails.get(source.id));
+    timeline.playhead = start;
+    syncClipsToPlayhead({ save: false });
   };
-  document.getElementById('frameDuplicate').onclick = () => {
-    if (playbackActive) setPlaybackEnabled(false);
-    saveActiveFrame();
-    const sourceThumbnail = frameThumbnails.get(timeline.activeFrameId);
-    const frame = addFrame(timeline, { duplicate: true });
-    if (sourceThumbnail) frameThumbnails.set(frame.id, sourceThumbnail);
-    loadTimelineFrame(frame.id, false);
-  };
+  document.getElementById('frameAdd').onclick = () => insertDrawing(false);
+  document.getElementById('frameDuplicate').onclick = () => insertDrawing(true);
   document.getElementById('frameDelete').onclick = () => {
     if (playbackActive) setPlaybackEnabled(false);
-    const current = timeline.activeFrameId;
+    if (loadingFrame) return;
+    const track = currentTrack();
+    const found = clipAt(track, timeline.playhead);
+    if (!found) return;
     saveActiveFrame();
-    if (deleteFrame(timeline, current)) loadTimelineFrame(timeline.activeFrameId, false);
+    const clipsBefore = track.clips.slice();
+    const playheadBefore = timeline.playhead;
+    if (!deleteClip(track, found.clip.id)) {
+      showToast('트랙에는 그림이 하나 이상 있어야 해요');
+      return;
+    }
+    timeline.playhead = Math.min(found.start, timelineLength(timeline) - 1);
+    syncClipsToPlayhead({ save: false });
+    showToast('그림을 삭제했어요', {
+      label: '되돌리기',
+      run: () => {
+        if (playbackActive) setPlaybackEnabled(false);
+        saveActiveFrame();
+        track.clips = clipsBefore;
+        timeline.playhead = playheadBefore;
+        syncClipsToPlayhead({ save: false });
+      },
+    });
   };
   document.getElementById('onionToggle').onclick = event => {
     onionEnabled = !onionEnabled;
@@ -1837,16 +2011,26 @@ let openPopoverId = null;
 let eyedropperArmed = false;
 let toastTimer = 0;
 
-function showToast(message) {
+function showToast(message, action = null) {
   const toast = document.getElementById('toast');
   if (!toast) return;
   toast.hidden = true;
   toast.textContent = message;
+  toast.classList.toggle('has-action', Boolean(action));
+  if (action) {
+    const button = document.createElement('button');
+    button.textContent = action.label;
+    button.onclick = () => {
+      toast.hidden = true;
+      action.run();
+    };
+    toast.append(button);
+  }
   // Restart the CSS animation on every toast.
   void toast.offsetWidth;
   toast.hidden = false;
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => { toast.hidden = true; }, 950);
+  toastTimer = setTimeout(() => { toast.hidden = true; }, action ? 5000 : 950);
 }
 
 function closePopovers() {
@@ -2032,35 +2216,46 @@ function bindHsvPicker() {
 
 // Frame thumbnails are generated from the composited active frame after edits
 // settle, so they include vector lines (which are not stored in raster cels).
-const frameThumbnails = new Map();
+const clipThumbnails = new Map();
 let thumbnailTimer = 0;
 
 function scheduleFrameThumbnail() {
   clearTimeout(thumbnailTimer);
   thumbnailTimer = setTimeout(() => {
     if (loadingFrame || playbackActive || down) return;
-    const frameId = timeline.activeFrameId;
-    const thumbnail = document.createElement('canvas');
-    thumbnail.width = 160;
-    thumbnail.height = 120;
-    thumbnail.getContext('2d').drawImage(composite().canvas, 0, 0, 160, 120);
-    frameThumbnails.set(frameId, thumbnail.toDataURL('image/jpeg', 0.72));
-    const cell = document.querySelector(`.frame-cell[data-frame-id="${CSS.escape(frameId)}"]`);
-    if (cell) applyFrameThumbnail(cell, frameId);
+    const make = draw => {
+      const thumbnail = document.createElement('canvas');
+      thumbnail.width = 96;
+      thumbnail.height = 72;
+      const context = thumbnail.getContext('2d');
+      context.fillStyle = '#f4f0e8';
+      context.fillRect(0, 0, 96, 72);
+      context.save();
+      context.scale(96 / W, 72 / H);
+      draw(context);
+      context.restore();
+      return thumbnail.toDataURL('image/jpeg', 0.7);
+    };
+    for (const layer of layers) {
+      const clip = loadedClip(layer.id);
+      if (clip) clipThumbnails.set(clip.id, make(context => context.drawImage(layer.presentationCanvas || layer.canvas, 0, 0)));
+    }
+    const vectorClip = loadedClip(VECTOR_TRACK);
+    if (vectorClip) clipThumbnails.set(vectorClip.id, make(context => drawVectorStrokes(context)));
+    document.querySelectorAll('#frameStrip .frame-cell').forEach(cell => applyClipThumbnail(cell, cell.dataset.clipId));
   }, 380);
 }
 
-function applyFrameThumbnail(cell, frameId) {
-  const source = frameThumbnails.get(frameId);
+function applyClipThumbnail(cell, clipId) {
+  const source = clipThumbnails.get(clipId);
   cell.classList.toggle('has-thumb', Boolean(source));
+  if (source) cell.classList.remove('empty');
   cell.style.backgroundImage = source ? `url("${source}")` : '';
 }
 
 function stepFrame(offset) {
-  if (playbackActive) setPlaybackEnabled(false);
-  const index = timeline.frames.findIndex(frame => frame.id === timeline.activeFrameId);
-  const next = timeline.frames[Math.max(0, Math.min(timeline.frames.length - 1, index + offset))];
-  if (next && next.id !== timeline.activeFrameId) loadTimelineFrame(next.id);
+  const tick = neighborClipStart(currentTrack(), timeline.playhead, offset);
+  if (tick !== null) seekToTick(tick);
 }
 
 function bindTimelineScrub() {
@@ -2070,7 +2265,7 @@ function bindTimelineScrub() {
   const tickFromEvent = event => {
     const lane = strip.querySelector('.lane');
     if (!lane) return 0;
-    return Math.floor((event.clientX - lane.getBoundingClientRect().left) / timelineTickWidth());
+    return Math.floor((event.clientX - lane.getBoundingClientRect().left - TRACK_LABEL_WIDTH) / timelineTickWidth());
   };
   strip.addEventListener('pointerdown', event => {
     const grip = event.target.closest('.hold-grip');
@@ -2078,18 +2273,21 @@ function bindTimelineScrub() {
       // Drag the active drawing's right edge to change how long it is held.
       event.stopPropagation();
       event.preventDefault();
-      const frame = activeFrame(timeline);
+      const found = clipAt(currentTrack(), timeline.playhead);
+      if (!found) return;
       const cell = grip.closest('.frame-cell');
-      holdDrag = { pointerId: event.pointerId, startX: event.clientX, startHold: frameHold(frame), hold: frameHold(frame), cell, moved: false };
+      const hold = normalizeHold(found.clip.hold);
+      holdDrag = { pointerId: event.pointerId, startX: event.clientX, startHold: hold, hold, cell, moved: false };
       strip.setPointerCapture(event.pointerId);
       if (playbackActive) setPlaybackEnabled(false);
       return;
     }
     // Fingers scroll the strip natively (a tap still seeks via click); pen and
     // mouse drags scrub the playhead.
-    if (event.pointerType === 'touch' || !event.target.closest('.lane')) return;
+    if (event.pointerType === 'touch' || !event.target.closest('.lane') || event.target.closest('.track-name')) return;
     scrubbing = true;
     strip.setPointerCapture(event.pointerId);
+    selectRowFromEvent(event);
     seekToTick(tickFromEvent(event));
   });
   strip.addEventListener('pointermove', event => {
@@ -2107,6 +2305,14 @@ function bindTimelineScrub() {
     const tick = tickFromEvent(event);
     if (tick !== timeline.playhead) seekToTick(tick);
   });
+  const selectRowFromEvent = event => {
+    const row = event.target.closest('.track-row');
+    if (!row || row.dataset.trackId === currentTrackId()) return false;
+    activeTrackId = row.dataset.trackId === VECTOR_TRACK ? VECTOR_TRACK : null;
+    const index = layers.findIndex(layer => layer.id === row.dataset.trackId);
+    if (index >= 0) active = index;
+    return true;
+  };
   const stop = event => {
     if (holdDrag?.pointerId === event.pointerId) {
       const drag = holdDrag;
@@ -2123,9 +2329,11 @@ function bindTimelineScrub() {
   strip.addEventListener('pointerup', stop);
   strip.addEventListener('pointercancel', stop);
   strip.addEventListener('click', event => {
-    if (strip.dataset.suppressClick || event.target.closest('.hold-grip') || !event.target.closest('.lane')) return;
+    if (strip.dataset.suppressClick || event.target.closest('.hold-grip') || event.target.closest('.track-name') || !event.target.closest('.lane')) return;
     const tick = tickFromEvent(event);
+    const rowChanged = selectRowFromEvent(event);
     if (tick !== timeline.playhead || playbackActive) seekToTick(tick);
+    else if (rowChanged) render();
   });
 }
 
@@ -2190,8 +2398,9 @@ function bindWorkspaceUi() {
 
   document.getElementById('eyedropper').onclick = () => setEyedropperArmed(!eyedropperArmed);
   document.getElementById('zoomLevel').onclick = () => document.getElementById('resetViewport').click();
-  document.getElementById('holdMinus').onclick = () => changeActiveHold(frameHold(activeFrame(timeline)) - 1);
-  document.getElementById('holdPlus').onclick = () => changeActiveHold(frameHold(activeFrame(timeline)) + 1);
+  const currentHold = () => normalizeHold(clipAt(currentTrack(), timeline.playhead)?.clip.hold);
+  document.getElementById('holdMinus').onclick = () => changeActiveHold(currentHold() - 1);
+  document.getElementById('holdPlus').onclick = () => changeActiveHold(currentHold() + 1);
   document.getElementById('framePrev').onclick = () => stepFrame(-1);
   document.getElementById('frameNext').onclick = () => stepFrame(1);
   bindTimelineScrub();
@@ -2470,6 +2679,7 @@ function bindCanvasEvents() {
       if (event.type === 'pointerup' && !gesture && !loadingFrame) {
         if (playbackActive) setPlaybackEnabled(false);
         ensureEditableLayerAfterTransform();
+        ensureEditableClip('raster');
         floodFill(fill.point.x, fill.point.y);
         render([active]);
       }
@@ -2505,6 +2715,8 @@ function bindCanvasEvents() {
     if (boilEnabled) setBoilEnabled(false);
     try { inputSurface.setPointerCapture(event.pointerId); } catch { /* pointer already released */ }
     if (['pen', 'eraser', 'smudge', 'line', 'fill'].includes(tool)) ensureEditableLayerAfterTransform();
+    if (['pen', 'eraser', 'smudge', 'fill'].includes(tool)) ensureEditableClip('raster');
+    if (['vector', 'line', 'shape'].includes(tool)) ensureEditableClip('vector');
     const point = position(event);
 
     if (tool === 'hand') {
@@ -3316,8 +3528,11 @@ async function start() {
   bindCanvasEvents();
   bindKeyboardShortcuts();
 
-  updateFrameCels(timeline, timeline.activeFrameId, layers.map(layer => layer.canvas.toDataURL('image/png')));
-  render([0, 1]);
+  vectorTrack();
+  for (const layer of layers) loadedClips.set(layer.id, clipAt(layerTrack(layer), 0).clip.id);
+  loadedClips.set(VECTOR_TRACK, clipAt(vectorTrack(), 0).clip.id);
+  saveActiveFrame();
+  render(layers.map((_, index) => index));
 }
 
 start().catch(error => {

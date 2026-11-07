@@ -49,7 +49,7 @@ Operations are replayed in order over the layer's original raster canvas. Each o
 
 Implemented:
 - `apps/web/src/selection/raster-transform.js`: validated affine matrix operations, bounds calculation, serializable records, stack composition, and an explicit rasterize helper.
-- `apps/web/src/animation/frame-cels.js` and `timeline.js`: deep-cloned per-layer transform metadata stored and duplicated per animation frame.
+- `apps/web/src/animation/frame-cels.js` and `tracks.js`: deep-cloned per-layer transform metadata stored and duplicated per clip.
 - `main.js`: layers maintain an original canvas and a separate presentation canvas; frame save/load serializes transform records and hydrates their source images.
 - `renderer.js`: PixiJS layer sprites consume the composed presentation canvas.
 - `composite()`: fill-boundary and PNG export composites use the presentation canvas, with layer masks applied afterward.

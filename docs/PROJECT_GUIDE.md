@@ -44,11 +44,14 @@ Always distinguish code-level tests from visual browser checks and physical iPad
 - Freehand vector strokes are no longer left selected after drawing, so brush/color changes apply to the next stroke rather than restyling the previous one.
 - Verified in headless Chrome (layout at 1180×820 and 390×844, synthetic touch pinch/undo, eyedropper). Not yet verified on a physical iPad.
 
-### Drawing holds and ticks (v1.3)
-- Timeline frames are *drawings*; each has `hold` (ticks it stays on screen, 1–96) and `durationMs = hold × 1000 / fps`.
-- `timeline.playhead` is the current tick. `frameAtTick`, `seekTick`, `frameStartTick`, `totalTicks`, `setFrameHold`, `applyTimelineFps` live in `animation/timeline.js`. `selectFrame` keeps the playhead when it is already inside the drawing's hold.
-- UI: tick ruler + playhead + drawings sized by hold (`drawTimeline`), click/drag to seek (`seekToTick`), drag the active drawing's grip or − ＋ to change its hold, `,`/`.` step one tick.
-- Playback advances a fractional tick (`playbackTickPosition`); drawing changes go through `loadTimelineFrame`, otherwise only layer movement transforms are updated (`renderer.updateLayerTransforms`).
+### Multi-track timeline (v1.4)
+- `animation/tracks.js` (pure) replaces the old single frame list. `timeline.tracks[trackId].clips` — one track per raster layer (`layer.id`, stable `layer-N`) plus the shared vector-line track (`'vector'`). Clips lie end to end from tick 0; each has `hold` (1–240 ticks), raster `cel`/`transformCel` or vector `strokes`. Tracks are independent: a background clip can hold 24 frames while a character track changes every 2.
+- `timeline.playhead` is the current tick; timeline length is the longest track. Past a track's end that layer shows nothing; drawing there creates a clip (`ensureEditableClip` → `ensureClipAt`).
+- `loadedClips` maps track → clip currently held by the live layer canvas / `vectorStrokes`. `saveActiveFrame()` writes the live canvases back into those clips; `syncClipsToPlayhead()` loads only tracks whose clip changed (decoded images cached per clip). New layers adopt their blank clip on the next save.
+- Layer pixel undo stacks and vector line undo are cleared when that track's clip changes (snapshots belong to one clip).
+- Timeline UI (`drawTimeline`): ruler, one row per track (vector first, then layers top-first), clip cells sized by hold with thumbnails, playhead. Selecting a row (or drawing on it) makes it the current track; ＋ / 복제 / 삭제 / − ＋ / grip / prev-next act on the current track only.
+- Playback advances a fractional tick and loads clips without re-saving; layer movement transforms update every animation frame.
+- Onion skin shows the vector track's previous/next clips.
 
 ### Movement keyframes (v1.2)
 - `animation/motion.js` (pure): keyframes `{tick, x, y, rotation, scale, opacity, easing}` stored on `layer.motionTrack`, evaluated at the playhead tick (fractional while playing); values are held before the first/after the last keyframe.
@@ -127,7 +130,8 @@ Always distinguish code-level tests from visual browser checks and physical iPad
 | `apps/web/src/line/line-boil.js` | Deterministic line deformation |
 | `apps/web/src/tone/screentone.js` | Screentone normalization and Canvas application |
 | `apps/web/src/selection/selection.js` | Selection geometry and transforms |
-| `apps/web/src/animation/timeline.js` | Frame/timeline data operations |
+| `apps/web/src/animation/tracks.js` | Multi-track timeline: tracks, clips, holds |
+| `apps/web/src/animation/motion.js` | Layer movement keyframes and matrices |
 | `apps/web/src/animation/frame-cels.js` | Raster cel normalization |
 | `apps/web/src/viewport/coordinates.js` | Pointer-to-canvas coordinate conversion |
 | `apps/web/src/viewport/gestures.js` | Pinch viewport math and multi-touch tap shortcuts |

@@ -99,7 +99,16 @@ The browser drawing engine uses perfect-freehand 1.2.3 to generate pressure-awar
 - [x] Each drawing has a hold (1–96 frames); playback, frame counter and timeline use frame ticks.
 - [x] Timeline lane with tick ruler, playhead, drawings sized by hold, drag the active drawing's right edge or use − ＋ to change its hold.
 - [x] Movement keyframes live at absolute ticks, so a held drawing keeps moving; playback evaluates movement at fractional ticks for smooth motion.
-- [ ] Multiple tracks (one per layer) with independent drawing timing.
+- [x] Multiple tracks (see v1.4).
+
+## Multi-track timeline — v1.4
+- [x] One track per raster layer plus a vector-line track, each with its own clips and holds.
+- [x] Track rows in the timeline; drawing buttons, hold and stepping act on the selected track.
+- [x] Clip loading only for tracks whose clip changes; decoded images cached per clip.
+- [ ] Drag clips to reorder/move them, gaps that are not filled with empty clips.
+- [ ] Raster onion skin; per-layer vector tracks (vector lines are still one shared track).
+- [x] Deleting a drawing can be undone from the toast (되돌리기).
+- [ ] Undo across clip changes and full undo history for timeline edits (insert/hold).
 
 ## Current next action
 
