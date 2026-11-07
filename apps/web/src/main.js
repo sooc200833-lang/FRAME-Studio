@@ -447,6 +447,9 @@ function drawVectorStrokes(context, strokes = vectorStrokes) {
 }
 function refreshLayerPresentation(layer) {
   if (!layer?.canvas || !layer?.presentationCanvas) return;
+  // Every visible pixel change goes through here, so it marks the layer's
+  // clip as needing a fresh PNG encode on the next save.
+  layer.celDirty = true;
   composeRasterTransformStack(layer.canvas, layer.transformRecords || [], layer.presentationCanvas);
 }
 
@@ -568,7 +571,13 @@ function saveActiveFrame() {
       loadedClips.set(layer.id, found.clip.id);
       clip = found.clip;
     }
-    clip.cel = layer.canvas.toDataURL('image/png');
+    // Re-encode only when the pixels changed since this clip was last saved
+    // or loaded; PNG encoding is the most expensive part of saving.
+    if (layer.celDirty !== false || layer.celClipId !== clip.id) {
+      clip.cel = layer.canvas.toDataURL('image/png');
+      layer.celDirty = false;
+      layer.celClipId = clip.id;
+    }
     clip.transformCel = cloneRasterTransformRecords(layer.transformRecords || []);
   }
   persistVectorClip();
@@ -631,6 +640,9 @@ async function syncClipsToPlayhead({ save = true } = {}) {
       sourceCanvas: decoded[index].transformSources[recordIndex] || null,
     })).filter(record => record.sourceCanvas);
     refreshLayerPresentation(layer);
+    // Freshly loaded pixels equal the clip's stored image.
+    layer.celDirty = !clip;
+    layer.celClipId = clip?.id || null;
     // Pixel undo snapshots belong to the previous clip; never replay them here.
     layer.undo = [];
     layer.redo = [];
