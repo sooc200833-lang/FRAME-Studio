@@ -121,12 +121,12 @@
         <div class="tone-preview" aria-hidden="true"><span class="tone-preview-dots"></span><span class="tone-preview-lines"></span></div>
         <div class="field"><label for="tonePattern">톤 종류</label><select id="tonePattern"><option value="dots">망점 · Dot</option><option value="gradient">그라데이션 망점</option><option value="lines">사선 · Lines</option><option value="crosshatch">교차선 · Crosshatch</option></select></div>
         <div class="field"><label for="toneSpacing">점 간격</label><input id="toneSpacing" type="range" min="4" max="48" value="12"><output id="toneSpacingOut">12px</output></div>
-        <div class="field"><label for="toneDotSize">점 / 선 크기</label><input id="toneDotSize" type="range" min="1" max="8" step="0.5" value="2"><output id="toneDotSizeOut">2px</output></div>
+        <div class="field"><label for="toneCoverage">망점 면적 비율</label><input id="toneCoverage" type="range" min="1" max="70" step="1" value="25"><output id="toneCoverageOut">25%</output></div>
         <div class="field"><label for="toneAngle">각도</label><input id="toneAngle" type="range" min="0" max="179" value="45"><output id="toneAngleOut">45°</output></div>
-        <div class="field"><label for="toneOpacity">농도</label><input id="toneOpacity" type="range" min="5" max="100" value="65"><output id="toneOpacityOut">65%</output></div>
+        <div class="field"><label for="toneOpacity">불투명도</label><input id="toneOpacity" type="range" min="5" max="100" value="65"><output id="toneOpacityOut">65%</output></div>
         <div class="tone-color-row"><span>톤 색상은 현재 선택 색상 사용</span><span id="toneColorChip"></span></div>
         <button id="applyTone" class="wide-btn primary">톤 적용</button>
-        <p class="note">선택 영역이 있으면 그 안에만, 없으면 활성 레이어 전체에 적용합니다. 실행 취소로 되돌릴 수 있습니다.</p>
+        <p class="note">점 간격은 패턴 밀도를, 면적 비율은 망점 크기를 정합니다. 불투명도는 색의 투명도예요. 선택 영역이 있으면 그 안에만, 없으면 활성 레이어 전체에 적용하고 실행 취소로 되돌릴 수 있습니다.</p>
       </section>
     </section>
 

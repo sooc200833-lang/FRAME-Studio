@@ -43,8 +43,11 @@
 - [ ] Evaluate Paper.js behind a line-engine adapter.
 
 ## Phase 3 — Tone Studio
-- Add halftone patterns, tone density, gradients, and comic-oriented filters.
-- Support region- and layer-scoped effects.
+- [x] Add halftone patterns: dots, gradient dots, lines, and crosshatch.
+- [x] Separate screen spacing (frequency) from nominal mark-area coverage and opacity.
+- [x] Support selection-clipped application to the active raster layer.
+- [ ] Add non-destructive editable tone layers and calibrated print LPI/output controls.
+- [ ] Add richer region- and layer-scoped tone workflows.
 
 ## Phase 4 — Motion Studio
 - [x] Frame management for vector-line snapshots.
@@ -105,6 +108,7 @@ The browser drawing engine uses perfect-freehand 1.2.3 to generate pressure-awar
 - [x] One track per raster layer plus a vector-line track, each with its own clips and holds.
 - [x] Track rows in the timeline; drawing buttons, hold and stepping act on the selected track.
 - [x] Clip loading only for tracks whose clip changes; decoded images cached per clip.
+- [x] Layer thumbnails and move up/down in the layers panel (from #4); timeline tracks follow layers by id.
 - [ ] Drag clips to reorder/move them, gaps that are not filled with empty clips.
 - [ ] Raster onion skin; per-layer vector tracks (vector lines are still one shared track).
 - [x] Deleting a drawing can be undone from the toast (되돌리기).

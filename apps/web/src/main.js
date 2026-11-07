@@ -1,7 +1,7 @@
 import './styles.css';
 import { PixiStageRenderer } from './renderer.js';
 import { applyScreentoneToCanvas } from './tone/screentone.js';
-import { clientToCanvasPoint, parseCssTransformMatrix } from './viewport/coordinates.js';
+import { canvasUnitsPerCssPixel, clientToCanvasPoint, parseCssTransformMatrix } from './viewport/coordinates.js';
 import { classifyMultiTouchTap, pinchViewport, snapViewportRotation } from './viewport/gestures.js';
 import { hexToHsv, hsvToHex, sampleImageDataColor } from './color/color-utils.js';
 import { applyBrushTexture, coalescedPointerEvents, createBrushOutline, createFrameScheduler, getBrushPreset, normalizePointerPressure, resolveBrushStrokeOptions, stabilizePoint } from './brush/brush-engine.js';
@@ -487,6 +487,7 @@ function render(dirtyIndices = [], displayStrokes = vectorStrokes) {
   }
   applyGroupState();
   if (!loadingFrame) persistVectorClip();
+  renderer.setHandleScale(cssToCanvasUnits(1));
   renderer.sync(layers, dirtyIndices, displayStrokes, selectedStrokeId, onionEnabled ? vectorOnionSkin() : [], selectionRect, selectionPolygon, selectedNodeIndex, nodeEditEnabled, selectedBezierHandle, selectedBezierAnchor, showSelectedVectorHighlight, selectedStrokeIds);
   renderer.setPreviewMatrix(paintsInLayerSpace() ? layers[active].renderMatrix : null);
   syncMotionUi();
@@ -860,11 +861,19 @@ function applyViewport() {
   if (!inputSurface) return;
   inputSurface.style.transform = `translate(${viewport.x}px, ${viewport.y}px) rotate(${viewport.rotation}deg) scale(${viewport.scale})`;
   document.getElementById('zoomLevel').textContent = Math.round(viewport.scale * 100) + '%';
+  // Node handles are sized in screen pixels, so redraw them when the zoom changes.
+  if (tool === 'select' && nodeEditEnabled && selectedStrokeId && !playbackActive) render();
 }
 
 // Raster painting tools draw into the active layer's own pixel space, so when
 // that layer is moved by keyframes the pointer is mapped through the inverse
 // movement transform.
+// Converts an on-screen size (CSS px) to canvas units at the current zoom, so
+// vector node handles and their hit targets keep a constant physical size.
+function cssToCanvasUnits(cssPixels) {
+  return cssPixels * canvasUnitsPerCssPixel(inputSurface?.clientWidth, W, viewport.scale);
+}
+
 function paintsInLayerSpace() {
   return ['pen', 'eraser', 'smudge'].includes(tool) && Boolean(layers[active]?.renderMatrix);
 }
@@ -993,7 +1002,7 @@ function applyMangaTone() {
   const settings = {
     pattern: document.getElementById('tonePattern').value,
     spacing: Number(document.getElementById('toneSpacing').value),
-    dotSize: Number(document.getElementById('toneDotSize').value),
+    coverage: Number(document.getElementById('toneCoverage').value),
     angle: Number(document.getElementById('toneAngle').value),
     opacity: Number(document.getElementById('toneOpacity').value),
     color,
@@ -1007,7 +1016,7 @@ function applyMangaTone() {
 function updateToneControls() {
   const values = [
     ['toneSpacing', 'toneSpacingOut', value => value + 'px'],
-    ['toneDotSize', 'toneDotSizeOut', value => value + 'px'],
+    ['toneCoverage', 'toneCoverageOut', value => value + '%'],
     ['toneAngle', 'toneAngleOut', value => value + '°'],
     ['toneOpacity', 'toneOpacityOut', value => value + '%'],
   ];
@@ -1047,6 +1056,27 @@ function drawLayers() {
   }
 }
 
+// Swaps a layer with its nearest neighbour in the same group (or among
+// ungrouped layers). Animation drawings follow automatically because tracks
+// are keyed by layer id, not by stack position.
+function neighbourLayerIndex(index, direction) {
+  const groupId = layers[index]?.groupId || null;
+  for (let target = index + direction; target >= 0 && target < layers.length; target += direction) {
+    if ((layers[target].groupId || null) === groupId) return target;
+  }
+  return -1;
+}
+
+function moveLayer(index, direction) {
+  const target = neighbourLayerIndex(index, direction);
+  if (target < 0) return;
+  if (playbackActive) setPlaybackEnabled(false);
+  [layers[index], layers[target]] = [layers[target], layers[index]];
+  if (active === index) active = target;
+  else if (active === target) active = index;
+  render(layers.map((_, layerIndex) => layerIndex));
+}
+
 function appendLayerRow(list, layer, index, nested) {
     const item = document.createElement('div');
     item.className = 'layer' + (index === active ? ' selected' : '') + (nested ? ' nested' : '');
@@ -1071,9 +1101,35 @@ function appendLayerRow(list, layer, index, nested) {
       else selectedTransformLayers.delete(layer);
     };
 
+    const thumbnail = document.createElement('canvas');
+    thumbnail.className = 'layer-thumbnail';
+    thumbnail.width = 48;
+    thumbnail.height = 36;
+    thumbnail.setAttribute('aria-hidden', 'true');
+    const thumbnailContext = thumbnail.getContext('2d');
+    thumbnailContext.fillStyle = '#f4f0e8';
+    thumbnailContext.fillRect(0, 0, 48, 36);
+    thumbnailContext.drawImage(layer.presentationCanvas || layer.canvas, 0, 0, 48, 36);
+
     const name = document.createElement('span');
+    name.className = 'layer-name';
     name.textContent = layer.name + (layer.maskEnabled ? ' · MASK' : '');
-    item.append(visibility, target, name);
+
+    const order = document.createElement('span');
+    order.className = 'layer-order';
+    const makeOrderButton = (label, title, direction) => {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.textContent = label;
+      button.title = title;
+      button.setAttribute('aria-label', `${layer.name} ${title}`);
+      button.disabled = neighbourLayerIndex(index, direction) < 0;
+      button.onclick = event => { event.stopPropagation(); moveLayer(index, direction); };
+      return button;
+    };
+    // The list shows the top layer first, so "up" means a higher stack index.
+    order.append(makeOrderButton('↑', '위로 이동', 1), makeOrderButton('↓', '아래로 이동', -1));
+    item.append(visibility, target, thumbnail, name, order);
     item.onclick = event => {
       if (event.target !== visibility && event.target !== target) {
         active = index;
@@ -1554,7 +1610,7 @@ function bindControls() {
   motionStrengthInput.addEventListener('change', finishLineStyleEdit);
   motionStrengthInput.oninput = event => { vectorMotionStrength = Number(event.target.value); document.getElementById('vectorMotionStrengthOut').value = vectorMotionStrength + 'px'; if (selectedStrokeIds.size || selectedStrokeId) { beginLineStyleEdit(); applySelectedStyle({ motionStrength: vectorMotionStrength }, false); } };
   document.getElementById('selectedOutlineToggle').onchange = event => { showSelectedVectorHighlight = event.target.checked; render(); };
-  ['toneSpacing', 'toneDotSize', 'toneAngle', 'toneOpacity'].forEach(id => {
+  ['toneSpacing', 'toneCoverage', 'toneAngle', 'toneOpacity'].forEach(id => {
     document.getElementById(id).oninput = updateToneControls;
   });
   document.getElementById('tonePattern').onchange = updateToneControls;
@@ -2791,7 +2847,7 @@ function bindCanvasEvents() {
       if (nodeMode && selectedStroke() && selectedStrokeId && (hit?.id === selectedStrokeId || (!hit && selectedStroke().bezierPath))) {
         const stroke = selectedStroke();
         const path = stroke.bezierPath || convertLegacyPointsToBezierPath(stroke.points, stroke.id);
-        let nearestAnchor = -1, anchorDistance = 15;
+        let nearestAnchor = -1, anchorDistance = cssToCanvasUnits(20);
         path.anchors.forEach((anchor, anchorIndex) => {
           const nextDistance = Math.hypot(point.x - anchor.x, point.y - anchor.y);
           if (nextDistance < anchorDistance) { anchorDistance = nextDistance; nearestAnchor = anchorIndex; }
@@ -2809,7 +2865,7 @@ function bindCanvasEvents() {
           render();
           return;
         }
-        let nearest = null, distance = 17;
+        let nearest = null, distance = cssToCanvasUnits(20);
         path.segments.forEach((segment, segmentIndex) => {
           [['out', segment.control1], ['in', segment.control2]].forEach(([handle, control]) => {
             const nextDistance = Math.hypot(point.x - control.x, point.y - control.y);
@@ -2830,7 +2886,7 @@ function bindCanvasEvents() {
         }
         if (stroke.bezierPath) {
           const projection = projectPointToBezierPath(path, point);
-          if (projection && projection.distance <= Math.max(18, stroke.width / 2 + 8)) {
+          if (projection && projection.distance <= Math.max(cssToCanvasUnits(18), stroke.width / 2 + cssToCanvasUnits(8))) {
             nodeMoveSnapshot = lineSnapshot();
             const index = vectorStrokes.findIndex(item => item.id === selectedStrokeId);
             const nextPath = insertBezierAnchor(path, projection.segmentIndex, projection.t);
@@ -2847,7 +2903,7 @@ function bindCanvasEvents() {
           return;
         }
         let nearestIndex = -1;
-        let nearestDistance = 14;
+        let nearestDistance = cssToCanvasUnits(20);
         stroke.points.forEach((node, index) => {
           const distance = Math.hypot(point.x - node.x, point.y - node.y);
           if (distance < nearestDistance) { nearestDistance = distance; nearestIndex = index; }
@@ -2858,7 +2914,7 @@ function bindCanvasEvents() {
           selectedNodeIndex = nearestIndex;
         } else {
           const projection = projectPointToLineStroke(stroke, point);
-          if (!projection || projection.distance > 18) {
+          if (!projection || projection.distance > cssToCanvasUnits(18)) {
             nodeMoveSnapshot = null;
             return;
           }
