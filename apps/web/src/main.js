@@ -481,7 +481,15 @@ function composite() {
   return context;
 }
 
-function render(dirtyIndices = [], displayStrokes = vectorStrokes) {
+function boiledStrokes(timestamp = performance.now()) {
+  return animateLineStrokes(vectorStrokes, {
+    phase: lineBoilPhase(timestamp - boilStartedAt, Number(document.getElementById('boilSpeed').value)),
+    amplitude: Number(document.getElementById('boilAmplitude').value),
+    frequency: Number(document.getElementById('boilFrequency').value),
+  });
+}
+
+function render(dirtyIndices = [], displayStrokes = boilEnabled ? boiledStrokes() : vectorStrokes) {
   for (const index of dirtyIndices) {
     if (layers[index]) refreshLayerPresentation(layers[index]);
   }
@@ -807,7 +815,6 @@ function setPlaybackEnabled(enabled) {
   button.classList.toggle('active', enabled);
 
   if (enabled) {
-    if (boilEnabled) setBoilEnabled(false);
     saveActiveFrame();
     playbackStartTick = timeline.playhead;
     playbackTickPosition = timeline.playhead;
@@ -1188,13 +1195,7 @@ function animationTick(timestamp) {
     return;
   }
   if (timestamp - lastAnimationPaint >= 1000 / 30) {
-    const elapsed = timestamp - boilStartedAt;
-    const phase = lineBoilPhase(elapsed, Number(document.getElementById('boilSpeed').value));
-    const displayStrokes = animateLineStrokes(vectorStrokes, {
-      phase,
-      amplitude: Number(document.getElementById('boilAmplitude').value),
-      frequency: Number(document.getElementById('boilFrequency').value),
-    });
+    const displayStrokes = boiledStrokes(timestamp);
     renderer.sync(layers, [], displayStrokes, selectedStrokeId, onionEnabled ? vectorOnionSkin() : [], selectionRect, selectionPolygon, selectedNodeIndex, nodeEditEnabled, null, null, showSelectedVectorHighlight, selectedStrokeIds);
     lastAnimationPaint = timestamp;
   }
@@ -1204,7 +1205,7 @@ function animationTick(timestamp) {
 function setBoilEnabled(enabled) {
   boilEnabled = enabled;
   const button = document.getElementById('boilToggle');
-  button.textContent = enabled ? '미리보기 중지' : 'Line Boil 미리보기';
+  button.textContent = enabled ? '선 흔들림 끄기' : '선 흔들림 켜기';
   button.classList.toggle('active', enabled);
   if (enabled) {
     boilStartedAt = performance.now();
@@ -2586,6 +2587,23 @@ function currentLayerMotionFrom(track) {
   return evaluateMotionTrack(track, timeline.playhead);
 }
 
+// Builds the in-progress vector line with the current brush so the live
+// preview shows the same pressure widths, taper and opacity as the result.
+function previewVectorDrawing() {
+  if (!drawingPoints?.length) return;
+  const points = drawingPoints.length > 1 ? drawingPoints : [drawingPoints[0], { ...drawingPoints[0], x: drawingPoints[0].x + 0.1 }];
+  renderer.previewVectorStroke(createLineStroke({
+    id: 'preview-line',
+    points,
+    color,
+    width: size,
+    brushPreset: vectorBrushPreset,
+    pressureCurve: vectorPressureCurve,
+    opacity: vectorBrushOpacity,
+    pressureProfile: vectorPressureProfile,
+  }));
+}
+
 function createShapePoints(kind, start, end) {
   const left = Math.min(start.x, end.x), right = Math.max(start.x, end.x);
   const top = Math.min(start.y, end.y), bottom = Math.max(start.y, end.y);
@@ -2960,8 +2978,8 @@ function bindCanvasEvents() {
     if (tool === 'vector') {
       down = true;
       lastVectorSampleTime = Number(event.timeStamp) || 0;
-      drawingPoints = [{ ...point, pressure: event.pointerType === 'pen' ? normalizePointerPressure(event, pressureEnabled) : 1 }];
-      renderer.previewStroke(drawingPoints, Number.parseInt(color.slice(1), 16), size);
+      drawingPoints = [{ ...point, pressure: event.pointerType === 'pen' ? normalizePointerPressure(event, pressureEnabled) : 0.5 }];
+      previewVectorDrawing();
       return;
     }
 
@@ -3141,7 +3159,7 @@ function bindCanvasEvents() {
           lastVectorSampleTime = sampleTime;
         }
       }
-      renderer.previewStroke(drawingPoints, Number.parseInt(color.slice(1), 16), size);
+      previewVectorDrawing();
       return;
     }
 

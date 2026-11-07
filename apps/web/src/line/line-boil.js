@@ -92,9 +92,12 @@ export function computeLineBoilPoints(stroke, {
 export function animateLineStrokes(strokes, settings = {}) {
   const phase = Number(settings.phase) || 0;
   return strokes.map(stroke => {
-    const mode = stroke.motionStyle || 'wave';
-    const strength = Math.max(0, Math.min(16, Number(stroke.motionStrength ?? settings.amplitude) || 0));
-    if (mode === 'none' || strength === 0) return { ...stroke, motionPasses: null };
+    // A line's own motion style wins; lines left at "고정" (none) follow the
+    // global Line Boil settings, so the boil panel affects every line.
+    const ownStyle = stroke.motionStyle && stroke.motionStyle !== 'none' ? stroke.motionStyle : null;
+    const mode = ownStyle || 'wave';
+    const strength = Math.max(0, Math.min(16, Number(ownStyle ? (stroke.motionStrength ?? settings.amplitude) : settings.amplitude) || 0));
+    if (strength === 0) return { ...stroke, motionPasses: null };
     const source = stroke.bezierPath ? sampleBezierPath(stroke.bezierPath).points : stroke.points;
     if (mode === 'wave') {
       const moved = computeLineBoilPoints(stroke, { ...settings, amplitude: strength });
