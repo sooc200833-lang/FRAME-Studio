@@ -12,8 +12,8 @@ import { normalizeBrushBlendMode } from './brush/blend-modes.js';
 import { expandRegionMask, findConnectedRegion } from './fill/flood-fill.js';
 import { animateLineStrokes, lineBoilPhase } from './line/line-boil.js';
 import { EXPORT_FORMATS, resolveExportPlan } from './export/export-plan.js';
-import { buildProjectDocument, parseProjectDocument, referencedImageKeys } from './document/project-format.js';
-import { isProjectStorageAvailable, listProjects, loadImageDataUrls, loadProjectRecord, getMeta, requestPersistentStorage, saveProjectRecord, setMeta } from './document/project-store.js';
+import { buildProjectDocument, duplicateProjectName, parseProjectDocument, referencedImageKeys, retargetProjectDocument } from './document/project-format.js';
+import { deleteProjectRecord, duplicateProjectRecord, isProjectStorageAvailable, listProjects, loadImageDataUrls, loadProjectRecord, getMeta, requestPersistentStorage, restoreProjectSnapshot, saveProjectRecord, setMeta } from './document/project-store.js';
 import { clipAt, createTimelineDocument, deleteClip, duplicateTrack, ensureClipAt, ensureTrack, insertClipAfter, neighborClipStart, normalizeHold, setClipHold, timelineLength } from './animation/tracks.js';
 import { applyMatrix, evaluateMotionTrack, invertMatrix, isIdentityMotion, keyframeAt, motionMatrix, removeKeyframe, setKeyframe } from './animation/motion.js';
 import { cloneRasterTransformRecords, composeRasterTransformStack, createTranslationMatrix, createRotationMatrix, rasterizeRasterTransformStack } from './selection/raster-transform.js';
@@ -4021,23 +4021,33 @@ function updateProjectUi() {
   if (nameInput && document.activeElement !== nameInput) nameInput.value = project.name;
 }
 
+let pendingDeleteId = null;
+let pendingDeleteTimer = 0;
+let projectListToken = 0;
+
 async function refreshProjectList() {
   const list = document.getElementById('projectList');
   if (!list || !storageReady) return;
+  // Several refreshes can overlap (menu open, duplicate, delete); only the latest may render.
+  const token = ++projectListToken;
   const projects = await listProjects().catch(() => []);
+  if (token !== projectListToken) return;
   list.replaceChildren(...projects.map(item => {
+    const isCurrent = item.id === project.id;
+    const row = document.createElement('div');
+    row.className = 'project-row' + (isCurrent ? ' current' : '');
     const button = document.createElement('button');
-    button.className = 'project-item' + (item.id === project.id ? ' current' : '');
-    button.disabled = item.id === project.id;
+    button.className = 'project-item' + (isCurrent ? ' current' : '');
+    button.disabled = isCurrent;
     const thumb = document.createElement('span');
     thumb.className = 'project-thumb';
     if (item.thumbnail) thumb.style.backgroundImage = `url("${item.thumbnail}")`;
     const label = document.createElement('span');
     label.className = 'project-label';
     const name = document.createElement('strong');
-    name.textContent = item.name || '제목 없음';
+    name.textContent = isCurrent ? project.name : (item.name || '제목 없음');
     const time = document.createElement('small');
-    time.textContent = item.id === project.id ? '지금 작업 중' : new Date(item.updatedAt).toLocaleString('ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+    time.textContent = isCurrent ? '지금 작업 중' : new Date(item.updatedAt).toLocaleString('ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' });
     label.append(name, time);
     button.append(thumb, label);
     button.onclick = () => switchProject(async () => {
@@ -4045,8 +4055,111 @@ async function refreshProjectList() {
       closePopovers();
       showToast(`'${project.name}' 작품을 열었어요`);
     });
-    return button;
+
+    const actions = document.createElement('span');
+    actions.className = 'project-actions';
+    const duplicate = document.createElement('button');
+    duplicate.className = 'project-action';
+    duplicate.textContent = '복제';
+    duplicate.setAttribute('aria-label', `${name.textContent} 복제`);
+    duplicate.onclick = () => duplicateProject(item.id, projects.map(entry => entry.name));
+    const remove = document.createElement('button');
+    remove.className = 'project-action danger' + (pendingDeleteId === item.id ? ' confirm' : '');
+    remove.textContent = pendingDeleteId === item.id ? '삭제할까요?' : '삭제';
+    remove.setAttribute('aria-label', `${name.textContent} 삭제`);
+    remove.onclick = () => requestDeleteProject(item.id);
+    actions.append(duplicate, remove);
+    row.append(button, actions);
+    return row;
   }));
+}
+
+async function duplicateProject(id, existingNames) {
+  if (projectBusy) return;
+  // The open project may have unsaved changes; save so the copy matches the screen.
+  if (id === project.id) await saveProjectNow();
+  if (saveInFlight) await saveInFlight;
+  projectBusy = true;
+  try {
+    const copy = await duplicateProjectRecord(id, doc => retargetProjectDocument(doc, newProjectId(), {
+      name: duplicateProjectName(id === project.id ? project.name : doc.name, existingNames),
+    }));
+    showToast(`'${copy.name}'을(를) 만들었어요`);
+  } catch (error) {
+    console.error('Project duplicate failed:', error);
+    showToast(error?.name === 'QuotaExceededError' ? '저장 공간이 부족해서 복제하지 못했어요' : '작품을 복제하지 못했어요');
+  } finally {
+    projectBusy = false;
+  }
+  await refreshProjectList();
+}
+
+/** First tap arms the button ("삭제할까요?"), second tap within 4 s deletes. */
+function requestDeleteProject(id) {
+  if (projectBusy) return;
+  clearTimeout(pendingDeleteTimer);
+  if (pendingDeleteId !== id) {
+    pendingDeleteId = id;
+    pendingDeleteTimer = setTimeout(() => {
+      pendingDeleteId = null;
+      refreshProjectList();
+    }, 4000);
+    refreshProjectList();
+    return;
+  }
+  pendingDeleteId = null;
+  deleteProject(id);
+}
+
+async function deleteProject(id) {
+  const wasCurrent = id === project.id;
+  let snapshot = null;
+  const task = async () => {
+    clearTimeout(autosaveTimer);
+    snapshot = await deleteProjectRecord(id);
+    if (!wasCurrent) return;
+    // The open project is gone: continue with the most recent other one, or a blank one.
+    const next = (await listProjects()).find(entry => entry.id !== id);
+    if (next) await openProject(next.id);
+    else {
+      project = { id: newProjectId(), name: '제목 없음', createdAt: new Date().toISOString() };
+      await applyProjectState({
+        fps: 12, playhead: 0, nextClipId: 1, nextLayerId: 3, active: 0, activeTrackId: null,
+        groups: [], layers: freshLayerState(), tracks: {},
+      });
+    }
+  };
+  try {
+    if (wasCurrent) {
+      // switchProject saves first (harmless: the record is deleted right after).
+      await switchProject(task);
+    } else {
+      if (saveInFlight) await saveInFlight;
+      projectBusy = true;
+      try { await task(); } finally { projectBusy = false; }
+    }
+  } catch (error) {
+    console.error('Project delete failed:', error);
+    showToast('작품을 삭제하지 못했어요');
+    await refreshProjectList();
+    return;
+  }
+  await refreshProjectList();
+  if (!snapshot?.record) return;
+  const deletedName = snapshot.record.name || '제목 없음';
+  showToast(`'${deletedName}'을(를) 삭제했어요`, {
+    label: '되돌리기',
+    run: async () => {
+      try {
+        await restoreProjectSnapshot(snapshot);
+        showToast(`'${deletedName}'을(를) 되살렸어요`);
+      } catch (error) {
+        console.error('Project restore failed:', error);
+        showToast('되돌리지 못했어요');
+      }
+      await refreshProjectList();
+    },
+  });
 }
 
 function bindProjectControls() {

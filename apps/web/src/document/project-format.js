@@ -192,3 +192,39 @@ export function referencedImageKeys(doc) {
   }
   return keys;
 }
+
+/**
+ * Returns a copy of a saved project document under a new id (for "duplicate").
+ * Image keys are project-scoped, so every key is remapped; `keyMap` maps the
+ * old key to the new one so the caller can copy the stored images.
+ */
+export function retargetProjectDocument(doc, newId, { name, now = new Date().toISOString() } = {}) {
+  if (!doc || typeof doc !== 'object') throw new TypeError('doc must be a project document');
+  if (typeof newId !== 'string' || !newId) throw new TypeError('newId must be a non-empty string');
+  const keyMap = new Map();
+  const remap = (oldKey, newKey) => {
+    if (!oldKey) return null;
+    keyMap.set(oldKey, newKey);
+    return newKey;
+  };
+  const copy = structuredClone(doc);
+  copy.id = newId;
+  copy.name = text(name, `${text(doc.name, '제목 없음')} 사본`);
+  copy.createdAt = now;
+  copy.updatedAt = now;
+  for (const layer of copy.layers || []) {
+    layer.maskImage = remap(layer.maskImage, maskImageKey(newId, layer.id));
+  }
+  for (const track of Object.values(copy.tracks || {})) {
+    for (const clip of track.clips || []) clip.celImage = remap(clip.celImage, clipImageKey(newId, clip.id));
+  }
+  return { doc: copy, keyMap };
+}
+
+/** Name for a duplicate that doesn't clash with existing names: "A 사본", "A 사본 2", … */
+export function duplicateProjectName(name, existingNames = []) {
+  const base = `${text(name, '제목 없음').trim() || '제목 없음'} 사본`;
+  const taken = new Set(existingNames);
+  if (!taken.has(base)) return base;
+  for (let n = 2; ; n++) if (!taken.has(`${base} ${n}`)) return `${base} ${n}`;
+}

@@ -44,6 +44,11 @@ Always distinguish code-level tests from visual browser checks and physical iPad
 - Freehand vector strokes are no longer left selected after drawing, so brush/color changes apply to the next stroke rather than restyling the previous one.
 - Verified in headless Chrome (layout at 1180×820 and 390×844, synthetic touch pinch/undo, eyedropper). Not yet verified on a physical iPad.
 
+### Project gallery (v1.10)
+- 작업 → 작품 목록: each project row has 복제 and 삭제. Duplicate copies the saved record under a new id (`retargetProjectDocument` remaps the project-scoped image keys; images are copied as Blobs). Duplicating the open project saves it first so the copy matches the screen. Names avoid clashes ("A 사본", "A 사본 2").
+- Delete needs two taps ("삭제할까요?", 4 s). It removes the record and every image under `${id}/`, then shows a 5 s 되돌리기 toast that puts the snapshot back. Deleting the open project opens the most recent other project, or a blank one.
+- Not yet: choosing canvas size/FPS for a new project.
+
 ### Animation export (v1.9)
 - 작업 → 내보내기: PNG (current frame, optional transparent background), PNG sequence (zip, stored), GIF, MP4, WebM. Size 100/50/25 %, frame range for animated formats. Video formats the browser can't encode are disabled.
 - `export/export-plan.js` (pure, tested): frames to render, output size (even for video), timing, GIF centisecond delays that keep the total length exact, safe file names.

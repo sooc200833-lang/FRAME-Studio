@@ -123,6 +123,12 @@ output{color:var(--accent);min-width:38px;text-align:right;font-size:12px;font-v
 .project-list{display:flex;flex-direction:column;gap:6px;max-height:220px;overflow:auto;margin-top:6px}
 .project-list:empty{display:none}
 .project-item{display:flex;align-items:center;gap:10px;padding:6px;text-align:left}
+.project-row{display:flex;align-items:stretch;gap:6px}
+.project-row .project-item{flex:1;min-width:0}
+.project-actions{display:flex;flex-direction:column;gap:4px;flex:0 0 auto}
+.project-action{flex:1;min-width:64px;padding:4px 8px;font-size:11px;border-radius:8px}
+.project-action.danger{color:#f0a8a0}
+.project-action.danger.confirm{background:#5a2420;border-color:#e0786c;color:#ffd9d4}
 .project-item.current{border-color:var(--accent);opacity:1}
 .project-thumb{flex:0 0 64px;height:48px;border-radius:6px;background:#f4f0e8 center/cover no-repeat;border:1px solid #ffffff20}
 .project-label{display:flex;flex-direction:column;gap:2px;min-width:0}
