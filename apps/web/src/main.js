@@ -11,6 +11,7 @@ import { createSmudgeSession } from './brush/smudge-engine.js';
 import { normalizeBrushBlendMode } from './brush/blend-modes.js';
 import { expandRegionMask, findConnectedRegion } from './fill/flood-fill.js';
 import { animateLineStrokes, lineBoilPhase } from './line/line-boil.js';
+import { EXPORT_FORMATS, resolveExportPlan } from './export/export-plan.js';
 import { buildProjectDocument, parseProjectDocument, referencedImageKeys } from './document/project-format.js';
 import { isProjectStorageAvailable, listProjects, loadImageDataUrls, loadProjectRecord, getMeta, requestPersistentStorage, saveProjectRecord, setMeta } from './document/project-store.js';
 import { clipAt, createTimelineDocument, deleteClip, duplicateTrack, ensureClipAt, ensureTrack, insertClipAfter, neighborClipStart, normalizeHold, setClipHold, timelineLength } from './animation/tracks.js';
@@ -549,20 +550,34 @@ function refreshLayerPresentation(layer) {
   composeRasterTransformStack(layer.canvas, layer.transformRecords || [], layer.presentationCanvas);
 }
 
-function composite() {
+let compositeScratch = null;
+
+/**
+ * Flattens all visible layers into one canvas, matching the screen: each
+ * layer (pixels + its vector lines, with its movement transform) is drawn
+ * at full strength first, then placed with its opacity and blend mode as a
+ * whole. Used for export, thumbnails, fill boundaries and the eyedropper.
+ */
+function composite({ background = true, strokes = vectorStrokes } = {}) {
   const canvas = document.createElement('canvas');
   canvas.width = W;
   canvas.height = H;
   const context = canvas.getContext('2d', { willReadFrequently: true });
-  context.fillStyle = '#f4f0e8';
-  context.fillRect(0, 0, W, H);
+  if (background) {
+    context.fillStyle = '#f4f0e8';
+    context.fillRect(0, 0, W, H);
+  }
+  if (!compositeScratch) {
+    compositeScratch = document.createElement('canvas');
+    compositeScratch.width = W;
+    compositeScratch.height = H;
+  }
+  const layerContext = compositeScratch.getContext('2d');
   layers.forEach(layer => {
     if (!(layer.renderVisible ?? layer.visible)) return;
-    context.save();
-    if (layer.renderMatrix) context.transform(...layer.renderMatrix);
-    context.globalAlpha = layer.renderOpacity ?? layer.opacity ?? 1;
-    const blendMode = layer.renderBlendMode || layer.blendMode || 'normal';
-    context.globalCompositeOperation = blendMode === 'add' ? 'lighter' : (blendMode === 'normal' ? 'source-over' : blendMode);
+    layerContext.setTransform(1, 0, 0, 1, 0, 0);
+    layerContext.clearRect(0, 0, W, H);
+    if (layer.renderMatrix) layerContext.setTransform(...layer.renderMatrix);
     if (layer.maskEnabled && layer.maskCanvas) {
       const masked = document.createElement('canvas');
       masked.width = W; masked.height = H;
@@ -570,12 +585,17 @@ function composite() {
       maskedContext.drawImage(layer.presentationCanvas || layer.canvas, 0, 0);
       maskedContext.globalCompositeOperation = 'destination-in';
       maskedContext.drawImage(layer.maskCanvas, 0, 0);
-      context.drawImage(masked, 0, 0);
+      layerContext.drawImage(masked, 0, 0);
     } else {
-      context.drawImage(layer.presentationCanvas || layer.canvas, 0, 0);
+      layerContext.drawImage(layer.presentationCanvas || layer.canvas, 0, 0);
     }
-    // The layer's vector lines share its transform, opacity and blend mode.
-    drawVectorStrokes(context, strokesOfLayer(layer.id));
+    drawVectorStrokes(layerContext, strokes.filter(stroke => stroke.layerId === layer.id));
+    layerContext.setTransform(1, 0, 0, 1, 0, 0);
+    const blendMode = layer.renderBlendMode || layer.blendMode || 'normal';
+    context.save();
+    context.globalAlpha = layer.renderOpacity ?? layer.opacity ?? 1;
+    context.globalCompositeOperation = blendMode === 'add' ? 'lighter' : (blendMode === 'normal' ? 'source-over' : blendMode);
+    context.drawImage(compositeScratch, 0, 0);
     context.restore();
   });
   return context;
@@ -1985,18 +2005,8 @@ function bindControls() {
     else restore(layers[active], layers[active].redo, layers[active].undo);
   };
 
-  document.getElementById('export').onclick = () => {
-    const output = composite().canvas;
-    output.toBlob(blob => {
-      if (!blob) return;
-      const url = URL.createObjectURL(blob);
-      const anchor = document.createElement('a');
-      anchor.href = url;
-      anchor.download = 'frame-studio.png';
-      anchor.click();
-      URL.revokeObjectURL(url);
-    });
-  };
+  bindExportControls();
+
 
   document.getElementById('brushPreset').onchange = event => {
     brushPreset = event.target.value;
@@ -3845,7 +3855,7 @@ async function saveProjectNow() {
     return saveInFlight;
   }
   // Never snapshot in the middle of a stroke, a clip load or playback.
-  if (loadingFrame || down || playbackActive) {
+  if (loadingFrame || down || playbackActive || exporting) {
     autosaveTimer = setTimeout(() => saveProjectNow(), AUTOSAVE_DELAY_MS);
     return;
   }
@@ -4080,6 +4090,155 @@ async function restoreOrCreateProject() {
   } finally {
     projectBusy = false;
   }
+}
+
+// ───────────────────────── Export ─────────────────────────
+
+let exporting = false;
+let exportAbort = null;
+let supportedVideo = null;
+
+function exportOptions() {
+  return {
+    format: document.getElementById('exportFormat').value,
+    scale: Number(document.getElementById('exportScale').value) || 1,
+    start: Number(document.getElementById('exportStart').value) - 1,
+    end: Number(document.getElementById('exportEnd').value) - 1,
+    transparent: document.getElementById('exportTransparent').checked,
+  };
+}
+
+function currentExportPlan() {
+  const options = exportOptions();
+  return resolveExportPlan({
+    format: options.format,
+    totalTicks: timelineLength(timeline),
+    playhead: timeline.playhead,
+    range: { start: options.start, end: options.end },
+    scale: options.scale,
+    fps: timeline.fps,
+    width: W,
+    height: H,
+    projectName: project.name,
+  });
+}
+
+async function refreshExportPanel({ resetRange = false } = {}) {
+  const total = timelineLength(timeline);
+  const startInput = document.getElementById('exportStart');
+  const endInput = document.getElementById('exportEnd');
+  startInput.max = endInput.max = String(total);
+  if (resetRange || Number(endInput.value) > total || Number(endInput.value) < 1) {
+    startInput.value = '1';
+    endInput.value = String(total);
+  }
+  const format = document.getElementById('exportFormat');
+  const animated = EXPORT_FORMATS[format.value]?.animated;
+  document.querySelector('.export-range').hidden = !animated;
+  document.getElementById('exportTransparentRow').hidden = !['png', 'png-sequence'].includes(format.value);
+  const plan = currentExportPlan();
+  const info = document.getElementById('exportInfo');
+  info.textContent = animated
+    ? `${plan.ticks.length}프레임 · ${plan.durationSeconds.toFixed(1)}초 · ${plan.fps}fps · ${plan.width}×${plan.height}`
+    : `프레임 ${plan.ticks[0] + 1} · ${plan.width}×${plan.height}`;
+  // Video support depends on the browser's encoders; check once, lazily.
+  if (!supportedVideo) {
+    const { supportedVideoFormats } = await import('./export/exporters.js');
+    supportedVideo = await supportedVideoFormats({ width: Math.round(W / 2) * 2, height: Math.round(H / 2) * 2, fps: timeline.fps }).catch(() => []);
+    for (const option of format.options) {
+      if (option.value === 'mp4' || option.value === 'webm') {
+        const ok = supportedVideo.includes(option.value);
+        option.disabled = !ok;
+        if (!ok) option.textContent = `${EXPORT_FORMATS[option.value].label} (이 브라우저 미지원)`;
+      }
+    }
+    if (format.selectedOptions[0]?.disabled) format.value = 'gif';
+  }
+}
+
+function setExportProgress(done, total, label) {
+  document.getElementById('exportBar').style.width = `${Math.round((done / Math.max(1, total)) * 100)}%`;
+  document.getElementById('exportProgress').textContent = label || `${done} / ${total} 프레임`;
+}
+
+/** Renders the picture at `tick` through the same pipeline as the screen. */
+async function renderExportFrame(tick, plan, { transparent }) {
+  timeline.playhead = tick;
+  await syncClipsToPlayhead({ save: false });
+  const strokes = boilEnabled
+    ? animateLineStrokes(vectorStrokes, {
+      phase: lineBoilPhase(tick * plan.frameDurationMs, Number(document.getElementById('boilSpeed').value)),
+      amplitude: Number(document.getElementById('boilAmplitude').value),
+      frequency: Number(document.getElementById('boilFrequency').value),
+    })
+    : vectorStrokes;
+  const full = composite({ background: !transparent, strokes }).canvas;
+  if (plan.width === W && plan.height === H) return full;
+  const scaled = document.createElement('canvas');
+  scaled.width = plan.width;
+  scaled.height = plan.height;
+  const context = scaled.getContext('2d', { willReadFrequently: true });
+  context.imageSmoothingQuality = 'high';
+  context.drawImage(full, 0, 0, plan.width, plan.height);
+  return scaled;
+}
+
+async function runExport() {
+  if (exporting) return;
+  const options = exportOptions();
+  let plan;
+  try {
+    plan = currentExportPlan();
+  } catch (error) {
+    showToast(error.message);
+    return;
+  }
+  if (playbackActive) setPlaybackEnabled(false);
+  if (loadingFrame || down) return;
+  saveActiveFrame();
+  closePopovers();
+  exporting = true;
+  exportAbort = new AbortController();
+  const overlay = document.getElementById('exportOverlay');
+  overlay.hidden = false;
+  document.getElementById('exportTitle').textContent = `${EXPORT_FORMATS[plan.format].label} 만드는 중…`;
+  setExportProgress(0, plan.ticks.length);
+  const playheadBefore = timeline.playhead;
+  try {
+    const exporters = await import('./export/exporters.js');
+    const renderFrame = tick => renderExportFrame(tick, plan, options);
+    const callbacks = { onProgress: (done, total) => setExportProgress(done, total), signal: exportAbort.signal };
+    let blob;
+    if (plan.format === 'png') blob = await exporters.exportPng(plan, renderFrame);
+    else if (plan.format === 'png-sequence') blob = await exporters.exportPngSequence(plan, renderFrame, callbacks);
+    else if (plan.format === 'gif') blob = await exporters.exportGif(plan, renderFrame, callbacks);
+    else blob = await exporters.exportVideo(plan, renderFrame, callbacks);
+    setExportProgress(plan.ticks.length, plan.ticks.length, '파일 저장 중…');
+    const result = await exporters.deliverFile(blob, plan.fileName, { preferShare: plan.format !== 'png-sequence' && /iPad|iPhone|Macintosh/.test(navigator.userAgent) && navigator.maxTouchPoints > 1 });
+    const size = blob.size > 1024 * 1024 ? `${(blob.size / 1024 / 1024).toFixed(1)}MB` : `${Math.max(1, Math.round(blob.size / 1024))}KB`;
+    if (result !== 'cancelled') showToast(`${plan.fileName} (${size})`);
+  } catch (error) {
+    if (error?.name === 'AbortError') showToast('내보내기를 취소했어요');
+    else {
+      console.error('Export failed:', error);
+      showToast(`내보내지 못했어요: ${error?.message || error}`);
+    }
+  } finally {
+    exporting = false;
+    exportAbort = null;
+    overlay.hidden = true;
+    timeline.playhead = playheadBefore;
+    await syncClipsToPlayhead({ save: false });
+  }
+}
+
+function bindExportControls() {
+  document.getElementById('export').onclick = () => runExport();
+  document.getElementById('exportCancel').onclick = () => exportAbort?.abort();
+  for (const id of ['exportFormat', 'exportScale', 'exportStart', 'exportEnd', 'exportTransparent']) {
+    document.getElementById(id).addEventListener('change', () => refreshExportPanel());
+  }
+  document.querySelector('[data-popover="actionsPopover"]')?.addEventListener('click', () => refreshExportPanel({ resetRange: true }));
 }
 
 async function start() {

@@ -108,6 +108,16 @@ output{color:var(--accent);min-width:38px;text-align:right;font-size:12px;font-v
 .settings:not([open]) summary::after{content:"▸"}
 #brushPopover[data-mode=vector] .raster-settings,#brushPopover[data-mode=raster] .vector-settings{display:none}
 
+/* Export */
+.export-range span{display:flex;align-items:center;gap:6px;color:var(--muted)}
+.export-range input{width:64px;padding:6px 8px;border:1px solid var(--line);border-radius:8px;background:var(--surface-2);text-align:center;-webkit-user-select:text;user-select:text}
+.export-overlay{position:fixed;inset:0;z-index:100;display:grid;place-items:center;background:rgba(10,10,12,.72);backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px)}
+.export-card{width:min(340px,86vw);display:flex;flex-direction:column;gap:12px;padding:20px;background:var(--surface);border:1px solid var(--line);border-radius:16px;box-shadow:0 20px 60px #000c}
+.export-card strong{font-size:15px}
+.export-card small{color:var(--muted);font-size:12px;font-variant-numeric:tabular-nums}
+.export-bar{height:8px;border-radius:4px;background:var(--surface-3);overflow:hidden}
+.export-bar span{display:block;height:100%;width:0;background:var(--accent);transition:width .15s}
+
 /* Projects */
 .project-name-field input{flex:1;min-width:0;max-width:70%;padding:7px 9px;border:1px solid var(--line);border-radius:8px;background:var(--surface-2);-webkit-user-select:text;user-select:text}
 .project-list{display:flex;flex-direction:column;gap:6px;max-height:220px;overflow:auto;margin-top:6px}

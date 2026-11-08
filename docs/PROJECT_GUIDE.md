@@ -44,6 +44,13 @@ Always distinguish code-level tests from visual browser checks and physical iPad
 - Freehand vector strokes are no longer left selected after drawing, so brush/color changes apply to the next stroke rather than restyling the previous one.
 - Verified in headless Chrome (layout at 1180×820 and 390×844, synthetic touch pinch/undo, eyedropper). Not yet verified on a physical iPad.
 
+### Animation export (v1.9)
+- 작업 → 내보내기: PNG (current frame, optional transparent background), PNG sequence (zip, stored), GIF, MP4, WebM. Size 100/50/25 %, frame range for animated formats. Video formats the browser can't encode are disabled.
+- `export/export-plan.js` (pure, tested): frames to render, output size (even for video), timing, GIF centisecond delays that keep the total length exact, safe file names.
+- `export/exporters.js` (loaded on demand): fflate (zip), gifenc (GIF, per-frame 256-colour palette), mediabunny + WebCodecs (H.264/HEVC/AV1 in MP4, VP9/VP8/AV1 in WebM). Delivery uses the share sheet on iPad when available, otherwise a download.
+- Frames are rendered through the live pipeline (`syncClipsToPlayhead` + `composite`), so export matches the screen: per-layer timing, movement keyframes, masks, layer opacity as a whole, and line boil when it is on. A full-screen overlay shows progress and can cancel; autosave waits; the playhead is restored afterwards.
+- `composite()` now flattens each layer (pixels + lines) before applying its opacity/blend, like the renderer.
+
 ### Raster brush v2 (v1.8)
 - Rebuilt from scratch at the user's request. `brush/raster-brush.js` (pure, tested) turns pointer samples into evenly spaced dabs: spacing is a fraction of the dab diameter and carries across samples (independent of pointer sample rate); streamline smoothing; pressure curve; pressure→size and pressure→flow per preset; mouse/finger use full pressure; the stroke ends exactly at the last pen sample (pen-up pressure 0 is ignored).
 - Presets: 연필 (grain tip, pressure→opacity), 잉크 펜 (hard, pressure→size), 마커 (flat opacity cap per stroke), 브러시 (soft). 획 안정화 adds to each preset's streamline.
