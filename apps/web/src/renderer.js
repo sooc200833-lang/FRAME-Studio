@@ -1,6 +1,6 @@
 import { sampleLineStrokePath } from './line/line-engine.js';
 import { buildVectorStrokeSegments } from './line/vector-rendering.js';
-import { AlphaFilter, Application, Container, Graphics, Matrix, Sprite, Texture } from 'pixi.js';
+import { AlphaFilter, Application, Container, Graphics, Matrix, Rectangle, Sprite, Texture } from 'pixi.js';
 import { getVectorGraphicsCacheEntry, pruneVectorGraphicsCache } from './renderer/vector-graphics-cache.js';
 import { getPolygonBounds, getPolygonTransformHandles } from './selection/selection.js';
 import { createRendererInitOptions, initializeWithBackendFallback } from './renderer/renderer-options.js';
@@ -35,7 +35,7 @@ export class PixiStageRenderer {
       } catch (error) {
         console.warn(`FRAME Studio: ${backend} renderer initialization failed.`, error);
         try {
-          candidate.destroy({ removeView: true }, { children: true, texture: true, textureSource: true });
+          candidate.destroy({ removeView: true, releaseGlobalResources: true }, { children: true, texture: true, textureSource: true });
         } catch {
           // Initialization may have failed before PixiJS had resources to destroy.
         }
@@ -135,6 +135,10 @@ export class PixiStageRenderer {
         sprite.height = this.height;
         const vectors = new Container();
         const group = new Container();
+        // Layer content lives in document space (0..W, 0..H); a fixed local
+        // filter area spares PixiJS a bounds measurement every frame while the
+        // opacity filter is on, and matches how export flattens each layer.
+        group.filterArea = new Rectangle(0, 0, this.width, this.height);
         group.addChild(sprite, vectors);
         entry = { texture, sprite, displayCanvas, vectors, group };
         this.entries.set(layer, entry);
@@ -394,7 +398,7 @@ export class PixiStageRenderer {
     if (!this.app) return;
     for (const entry of this.vectorGraphicsCache.values()) entry.graphics.destroy();
     this.vectorGraphicsCache.clear();
-    this.app.destroy({ removeView: true }, { children: true, texture: true, textureSource: true });
+    this.app.destroy({ removeView: true, releaseGlobalResources: true }, { children: true, texture: true, textureSource: true });
     this.entries.clear();
     this.layerPreviews.clear();
     this.strokeGraphics = [];
