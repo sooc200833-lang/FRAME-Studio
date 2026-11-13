@@ -92,8 +92,8 @@ export function computeLineBoilPoints(stroke, {
 export function animateLineStrokes(strokes, settings = {}) {
   const phase = Number(settings.phase) || 0;
   return strokes.map(stroke => {
-    // A line's own motion style wins; lines left at "고정" (none) follow the
-    // global Line Boil settings, so the boil panel affects every line.
+    // Per-stroke animation styles work independently of the global boil toggle.
+    // "none" still follows the global Line Boil panel for backward compatibility.
     const ownStyle = stroke.motionStyle && stroke.motionStyle !== 'none' ? stroke.motionStyle : null;
     const mode = ownStyle || 'wave';
     const strength = Math.max(0, Math.min(16, Number(ownStyle ? (stroke.motionStrength ?? settings.amplitude) : settings.amplitude) || 0));
@@ -103,9 +103,21 @@ export function animateLineStrokes(strokes, settings = {}) {
       const moved = computeLineBoilPoints(stroke, { ...settings, amplitude: strength });
       return { ...stroke, points: moved.map((point, index) => ({ ...point, pressure: stroke.points[Math.min(index, stroke.points.length - 1)]?.pressure ?? 0.5 })), bezierPath: undefined, motionPasses: null };
     }
+
     const passes = [];
-    const count = mode === 'redraw' ? 3 : 2;
+    const count = mode === 'redraw' || mode === 'boil' ? 3 : 2;
     for (let pass = 0; pass < count; pass++) {
+      if (mode === 'boil') {
+        // Three phase-shifted redraws create a hand-drawn boiling contour.
+        const phaseOffset = (pass - 1) * 0.92;
+        const passPoints = computeLineBoilPoints(stroke, {
+          ...settings,
+          phase: phase + phaseOffset,
+          amplitude: strength * (pass === 1 ? 0.72 : 0.88),
+        });
+        passes.push({ points: passPoints, alpha: [0.28, 0.42, 0.28][pass] });
+        continue;
+      }
       const offset = (pass - (count - 1) / 2) * strength * (mode === 'redraw' ? 0.42 : 0.18);
       const passPoints = source.map((point, index) => {
         const tangent = tangentAt(source, index);
