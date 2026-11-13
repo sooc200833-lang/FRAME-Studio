@@ -117,3 +117,14 @@ The browser drawing engine uses an in-house stamp (dab) raster brush with pencil
 ## Current next action
 
 Next: add non-destructive live previews and transform handles; improve vector hit-testing to account for stroke width; then add isolated/nested group compositing. Add visual regression fixtures for antialiased fill boundaries before calling fill cleanup production-ready.
+
+
+## Doodraw-inspired animated brushes — first implementation
+- [x] Add per-stroke Wobbly/Wave, Boiling, Trio/Redraw, and Frame Echo/Flicker modes.
+- [x] Keep the source vector path immutable; render animation as presentation-only geometry.
+- [x] Animate selected per-stroke styles without requiring the global Line Boil toggle.
+- [x] Use the same animated passes in the in-progress vector preview.
+- [ ] Add independent per-brush Speed, Jiggle, Thickness, and Stabilization controls.
+- [ ] Add raster animated strokes, deterministic frame capture, and project-format migration tests.
+- [ ] Add Chalk/Crayon texture and particle-tip brush families.
+- [ ] Validate interaction and rendering on a physical iPad with Apple Pencil.
