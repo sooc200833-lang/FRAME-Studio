@@ -2814,6 +2814,12 @@ function previewVectorDrawing() {
     motionStyle: vectorMotionStyle,
     motionStrength: vectorMotionStrength,
   });
+  // Animate the preview only when the committed line will animate too; a static
+  // line must not wobble while drawing and then snap straight on pen-up.
+  if (!boilEnabled && vectorMotionStyle === 'none') {
+    renderer.previewVectorStroke(previewStroke);
+    return;
+  }
   const previewPhase = lineBoilPhase(performance.now() - boilStartedAt, Number(document.getElementById('boilSpeed').value));
   renderer.previewVectorStroke(animateLineStrokes([previewStroke], { phase: previewPhase, amplitude: Number(document.getElementById('boilAmplitude').value) })[0]);
 }
