@@ -13,7 +13,8 @@ export default defineConfig({
   build: {
     rollupOptions: {
       input: {
-        main: resolve(process.cwd(), 'apps/web/index.html'),
+        lobby: resolve(process.cwd(), 'apps/web/index.html'),
+        drawing: resolve(process.cwd(), 'apps/web/drawing.html'),
         backgroundStudio: resolve(process.cwd(), 'apps/web/background-studio.html'),
       },
     },
