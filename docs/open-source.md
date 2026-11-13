@@ -10,6 +10,7 @@ This document tracks components FRAME Studio uses and projects reviewed for arch
 | [fflate](https://github.com/101arrowz/fflate) | MIT | Zip for PNG-sequence export (loaded on demand) |
 | [Mediabunny](https://github.com/Vanilagy/mediabunny) | MPL-2.0 | MP4/WebM muxing with WebCodecs for video export (loaded on demand, unmodified) |
 | [PixiJS](https://github.com/pixijs/pixijs) | MIT | Stage rendering, textures, vector display and layer compositing |
+| [three.js](https://github.com/mrdoob/three.js) 0.187.0 | MIT | 3D Background Studio only (scene, OrbitControls, TransformControls). npm dependency, pinned; not loaded by the drawing page |
 
 ## Brush engine and color-mixing work
 
@@ -28,6 +29,7 @@ This document tracks components FRAME Studio uses and projects reviewed for arch
 | [Graphite](https://github.com/GraphiteEditor/Graphite) | Apache-2.0 / MIT (mixed repository) | Non-destructive vector/raster graph and procedural compositing | Architecture reference; Rust/WASM core is not a drop-in PixiJS dependency |
 | [miniPaint](https://github.com/viliusle/miniPaint) | MIT | Browser editor structure, layers, editable shapes and Bezier tools | Reference for future import/export and shape workflows; not bundled |
 | [Pencil2D](https://github.com/pencil2d/pencil) | GPL-2.0 | Raster/vector animation layers and frame-by-frame workflow | Workflow reference only; no code copied |
+| [Sakura Crossing](https://github.com/Kenton-GMI/sakura-crossing) | not checked | Three.js scene rendered as a 2D animation background; screen-space ink lines from depth | Idea only (depth-based ink). The 3D studio's ink/tone shader is written for this project; no code copied |
 | [MyPaint](https://github.com/mypaint/mypaint) | GPL-2.0-or-later (verify exact component before reuse) | Tablet brush dynamics, per-stroke settings and pigment-like painting | Brush-engine research only; no code copied |
 | [Paper.js](https://github.com/paperjs/paper.js) | MIT | Vector paths and Bezier geometry | Candidate for isolated Line Studio evaluation |
 | [Three.js](https://github.com/mrdoob/three.js) | MIT | 3D primitives, camera and geometry | Candidate for a separate 3D viewport |

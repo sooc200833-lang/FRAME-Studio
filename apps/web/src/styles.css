@@ -24,7 +24,7 @@ svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.7;stroke
 /* ── Top bar ── */
 .topbar{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:0 12px;background:var(--surface);border-bottom:1px solid #26262c;z-index:20;min-width:0}
 .topbar-group{display:flex;align-items:center;gap:4px;min-width:0}
-.brand{font-weight:800;letter-spacing:.14em;font-size:13px;margin-right:8px;white-space:nowrap}.brand span{color:var(--accent)}
+.brand{color:inherit;text-decoration:none;font-weight:800;letter-spacing:.14em;font-size:13px;margin-right:8px;white-space:nowrap}.brand span{color:var(--accent)}
 .top-btn{width:42px;height:42px;padding:0;display:grid;place-items:center;border:1px solid transparent;background:transparent;color:#cfcfd6;border-radius:11px;flex:0 0 auto}
 .top-btn:hover{background:#ffffff0d}
 .top-btn.active{background:transparent;border-color:transparent;color:var(--accent)}
@@ -295,3 +295,5 @@ output{color:var(--accent);min-width:38px;text-align:right;font-size:12px;font-v
   .tl-side{gap:4px}
   .tl-right .icon-btn{width:32px;height:32px}
 }
+
+a.menu-row{background:var(--surface-2);border:1px solid var(--line);border-radius:9px;text-decoration:none;color:inherit;margin-top:6px;box-sizing:border-box}

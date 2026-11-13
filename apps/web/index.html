@@ -2,350 +2,45 @@
 <html lang="ko">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#121214">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <title>FRAME Studio</title>
+<link rel="stylesheet" href="./src/lobby.css">
 </head>
-<body>
-<svg width="0" height="0" style="position:absolute" aria-hidden="true">
-  <defs>
-    <symbol id="i-actions" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="19" cy="12" r="1.8"/></symbol>
-    <symbol id="i-effects" viewBox="0 0 24 24"><path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8zM18.5 15.5l.8 2.2 2.2.8-2.2.8-.8 2.2-.8-2.2-2.2-.8 2.2-.8z"/></symbol>
-    <symbol id="i-select" viewBox="0 0 24 24"><path d="M5 9V6a1 1 0 011-1h3M15 5h3a1 1 0 011 1v3M19 15v3a1 1 0 01-1 1h-3M9 19H6a1 1 0 01-1-1v-3"/></symbol>
-    <symbol id="i-transform" viewBox="0 0 24 24"><path d="M6 4l12 7-5.2 1.6L10.4 18z"/></symbol>
-    <symbol id="i-fill" viewBox="0 0 24 24"><path d="M5 11.5L11.5 5l7 7-6.5 6.5a1.5 1.5 0 01-2.1 0L5 13.6a1.5 1.5 0 010-2.1zM5 12h13.5M20 15.5s1.5 2 1.5 3a1.5 1.5 0 01-3 0c0-1 1.5-3 1.5-3z"/></symbol>
-    <symbol id="i-shape" viewBox="0 0 24 24"><path d="M4 20L13 11"/><rect x="12" y="4" width="8" height="8" rx="1.5"/></symbol>
-    <symbol id="i-hand" viewBox="0 0 24 24"><path d="M8 12.5V6a1.5 1.5 0 013 0v5M11 10.5V4.5a1.5 1.5 0 013 0v6M14 10.5V6a1.5 1.5 0 013 0v7.5a6.5 6.5 0 01-6.5 6.5 6.4 6.4 0 01-5.3-2.8L3.6 14a1.5 1.5 0 012.5-1.6L8 14.5"/></symbol>
-    <symbol id="i-paint" viewBox="0 0 24 24"><path d="M14.5 4.5l5 5L11 18l-5-5zM6 13l5 5-3.5 1.5a1.5 1.5 0 01-2-1.9z"/></symbol>
-    <symbol id="i-smudge" viewBox="0 0 24 24"><path d="M12 3.5c3.4 4.3 6 7.3 6 10.7a6 6 0 01-12 0c0-3.4 2.6-6.4 6-10.7zM9.2 14.5a3 3 0 002.8 2.8"/></symbol>
-    <symbol id="i-eraser" viewBox="0 0 24 24"><path d="M4.6 15.4l9.5-9.5a1.5 1.5 0 012.1 0l3.9 3.9a1.5 1.5 0 010 2.1L12 20H8.3a1.5 1.5 0 01-1-.4l-2.7-2.7a1.5 1.5 0 010-1.5zM9 11l6 6M12 20h8"/></symbol>
-    <symbol id="i-layers" viewBox="0 0 24 24"><path d="M12 4l8.5 4.6L12 13.2 3.5 8.6zM3.5 12.6L12 17.2l8.5-4.6M3.5 16.4L12 21l8.5-4.6"/></symbol>
-    <symbol id="i-undo" viewBox="0 0 24 24"><path d="M9 7L4.5 11.5 9 16M5 11.5h9a5 5 0 010 10h-2"/></symbol>
-    <symbol id="i-redo" viewBox="0 0 24 24"><path d="M15 7l4.5 4.5L15 16M19 11.5h-9a5 5 0 000 10h2"/></symbol>
-    <symbol id="i-picker" viewBox="0 0 24 24"><path d="M14.5 5.5l4 4M16.6 3.4a2 2 0 012.8 0l1.2 1.2a2 2 0 010 2.8l-2.8 2.8-4-4zM13.8 6.2L5 15v4h4l8.8-8.8"/></symbol>
-    <symbol id="i-prev" viewBox="0 0 24 24"><path d="M7 5v14M18 5.5L9.5 12 18 18.5z"/></symbol>
-    <symbol id="i-next" viewBox="0 0 24 24"><path d="M17 5v14M6 5.5L14.5 12 6 18.5z"/></symbol>
-    <symbol id="i-play" viewBox="0 0 24 24"><path d="M8 5.5v13L18.5 12z"/></symbol>
-    <symbol id="i-pause" viewBox="0 0 24 24"><path d="M8 5.5v13M16 5.5v13"/></symbol>
-    <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
-    <symbol id="i-copy" viewBox="0 0 24 24"><rect x="8" y="8" width="11" height="11" rx="2"/><path d="M5 15V6a1 1 0 011-1h9"/></symbol>
-    <symbol id="i-trash" viewBox="0 0 24 24"><path d="M5 7h14M10 7V5h4v2M7 7l1 12.5h8L17 7"/></symbol>
-    <symbol id="i-motion" viewBox="0 0 24 24"><path d="M4 17c3-7 6-9 9-6s5 1 7-4"/><rect x="3" y="15.5" width="3.5" height="3.5" rx=".6" transform="rotate(45 4.75 17.25)"/><rect x="18.5" y="5.2" width="3.5" height="3.5" rx=".6" transform="rotate(45 20.25 6.95)"/></symbol>
-    <symbol id="i-onion" viewBox="0 0 24 24"><circle cx="9" cy="12" r="5.5"/><circle cx="15" cy="12" r="5.5"/></symbol>
-  </defs>
-</svg>
-
-<div class="app">
-  <header class="topbar">
-    <div class="topbar-group">
-      <div class="brand" title="FRAME Studio">FRAME<span>•</span></div>
-      <button class="top-btn" data-popover="actionsPopover" title="작업 · 내보내기와 보기" aria-label="작업"><svg><use href="#i-actions"/></svg></button>
-      <button class="top-btn" data-popover="effectsPopover" title="효과 · 선 흔들림과 스크린톤" aria-label="효과"><svg><use href="#i-effects"/></svg></button>
-      <button class="top-btn tool" id="selectTool" data-tool="marquee" data-popover="selectPopover" title="선택 영역" aria-label="선택"><svg><use href="#i-select"/></svg></button>
-      <button class="top-btn tool" data-tool="select" data-popover="transformPopover" title="벡터 선 선택·변형" aria-label="변형"><svg><use href="#i-transform"/></svg></button>
-      <button class="top-btn tool" data-tool="fill" data-popover="fillPopover" title="면 채우기" aria-label="채우기"><svg><use href="#i-fill"/></svg></button>
-      <button class="top-btn tool" id="shapeTool" data-tool="line" data-popover="shapePopover" title="직선·도형" aria-label="도형"><svg><use href="#i-shape"/></svg></button>
-      <button class="top-btn tool" data-tool="hand" title="손 도구 · 캔버스 이동" aria-label="손"><svg><use href="#i-hand"/></svg></button>
-    </div>
-    <div class="topbar-group">
-      <button class="top-btn tool active" id="paintTool" data-tool="vector" data-popover="brushPopover" title="그리기 · 다시 누르면 브러시 라이브러리" aria-label="그리기"><svg><use href="#i-paint"/></svg></button>
-      <button class="top-btn tool" data-tool="smudge" data-popover="smudgePopover" title="스머지 · 색 섞기" aria-label="스머지"><svg><use href="#i-smudge"/></svg></button>
-      <button class="top-btn tool" data-tool="eraser" data-popover="eraserPopover" title="지우개" aria-label="지우개"><svg><use href="#i-eraser"/></svg></button>
-      <button class="top-btn" data-popover="layersPopover" title="레이어" aria-label="레이어"><svg><use href="#i-layers"/></svg></button>
-      <button class="color-btn" id="colorButton" data-popover="colorPopover" title="색상" aria-label="색상"><span id="colorButtonSwatch"></span></button>
-    </div>
+<body class="lobby">
+<main class="lobby-main">
+  <header class="lobby-head">
+    <div class="lobby-brand">FRAME<span>•</span></div>
+    <p>그림과 애니메이션, 만화 배경을 한곳에서 만들어요.</p>
   </header>
-
-  <main class="stage">
-    <div class="canvaswrap" id="canvasWrap">
-      <div id="pixiHost" aria-label="그리기 작업 영역"></div>
+  <nav class="workspaces" aria-label="작업 공간">
+    <a class="workspace" href="./drawing.html">
+      <span class="workspace-art art-drawing" aria-hidden="true"></span>
+      <strong>그리기 스튜디오</strong>
+      <span>벡터 선, 래스터 브러시, 레이어, 타임라인 애니메이션</span>
+      <em>열기</em>
+    </a>
+    <a class="workspace" href="./background-studio.html">
+      <span class="workspace-art art-3d" aria-hidden="true"></span>
+      <strong>3D 배경 스튜디오</strong>
+      <span>방·복도·거리 장면을 배치하고 만화 선과 톤으로 배경 만들기</span>
+      <em>열기</em>
+    </a>
+    <div class="workspace planned" aria-disabled="true">
+      <span class="workspace-art art-assets" aria-hidden="true"></span>
+      <strong>에셋 라이브러리</strong>
+      <span>자주 쓰는 소품, 장면, 브러시 모음</span>
+      <em>준비 중</em>
     </div>
-
-    <aside class="sidebar" aria-label="브러시 크기와 불투명도">
-      <div class="side-slider" title="브러시 크기">
-        <input id="size" type="range" min="1" max="100" value="7" aria-label="브러시 크기">
-        <strong id="sizeOut" class="side-value">7 px</strong>
-      </div>
-      <button id="eyedropper" class="side-square" title="스포이드 · 캔버스를 눌러 색 가져오기" aria-label="스포이드"><svg><use href="#i-picker"/></svg></button>
-      <div class="side-slider" title="브러시 불투명도">
-        <input id="sideOpacity" type="range" min="5" max="100" value="100" aria-label="브러시 불투명도">
-        <output id="sideOpacityOut" class="side-value">100%</output>
-      </div>
-      <button id="undo" class="side-round" title="실행 취소 · 두 손가락 탭" aria-label="실행 취소"><svg><use href="#i-undo"/></svg></button>
-      <button id="redo" class="side-round" title="다시 실행 · 세 손가락 탭" aria-label="다시 실행"><svg><use href="#i-redo"/></svg></button>
-    </aside>
-
-    <div class="hud" aria-live="polite"><span id="saveStatus" data-state="idle">자동 저장 준비 중</span><span id="status">VECTOR</span><button id="zoomLevel" class="hud-zoom" title="눌러서 화면에 맞춤">100%</button></div>
-    <div class="toast" id="toast" role="status" hidden></div>
-    <div class="export-overlay" id="exportOverlay" hidden role="dialog" aria-modal="true" aria-labelledby="exportTitle">
-      <div class="export-card">
-        <strong id="exportTitle">내보내는 중…</strong>
-        <div class="export-bar"><span id="exportBar"></span></div>
-        <small id="exportProgress">준비 중</small>
-        <button id="exportCancel">취소</button>
-      </div>
+    <div class="workspace planned" aria-disabled="true">
+      <span class="workspace-art art-motion" aria-hidden="true"></span>
+      <strong>모션 스튜디오</strong>
+      <span>카메라 움직임과 장면 연출</span>
+      <em>준비 중</em>
     </div>
-
-    <!-- ───────── Popovers ───────── -->
-    <section class="popover" id="actionsPopover" data-side="left" hidden aria-label="작업">
-      <h3>작품</h3>
-      <div class="field project-name-field"><label for="projectName">이름</label><input id="projectName" type="text" maxlength="60" value="제목 없음" autocomplete="off" spellcheck="false"></div>
-      <button id="newProject" class="menu-row">새 작품 시작<small>지금 작품은 자동 저장돼요</small></button>
-      <div id="projectList" class="project-list" aria-label="저장된 작품"></div>
-      <h4>내보내기</h4>
-      <div class="field"><label for="exportFormat">형식</label><select id="exportFormat">
-        <option value="png">PNG 한 장 (현재 프레임)</option>
-        <option value="mp4">MP4 영상</option>
-        <option value="gif">GIF</option>
-        <option value="png-sequence">PNG 시퀀스 (zip)</option>
-        <option value="webm">WebM 영상</option>
-      </select></div>
-      <div class="field"><label for="exportScale">크기</label><select id="exportScale">
-        <option value="1">원본 (1200×900)</option>
-        <option value="0.5">50%</option>
-        <option value="0.25">25%</option>
-      </select></div>
-      <div class="field export-range"><label>구간</label><span><input id="exportStart" type="number" min="1" value="1" inputmode="numeric" aria-label="시작 프레임"> – <input id="exportEnd" type="number" min="1" value="1" inputmode="numeric" aria-label="끝 프레임"></span></div>
-      <label class="check-field" id="exportTransparentRow"><input id="exportTransparent" type="checkbox"><span>배경 투명하게 (PNG)</span></label>
-      <p id="exportInfo" class="note"></p>
-      <button id="export" class="wide-btn primary">내보내기</button>
-      <h4>보기</h4>
-      <div class="viewport-controls" role="group" aria-label="캔버스 보기 조절">
-        <button id="zoomOut" title="축소" aria-label="축소">−</button>
-        <button id="zoomIn" title="확대" aria-label="확대">＋</button>
-        <button id="rotateCanvas" title="15도 회전" aria-label="캔버스 15도 회전">↻ 15°</button>
-        <button id="resetViewport" title="보기 초기화" aria-label="보기 초기화">맞춤</button>
-      </div>
-      <h4>입력</h4>
-      <label class="check-field"><input id="pencilOnlyToggle" type="checkbox"><span>Apple Pencil로만 그리기 · 손가락 한 개는 화면 이동, 펜으로 그리는 동안 손바닥 무시</span></label>
-      <label class="check-field"><input id="selectedOutlineToggle" type="checkbox" checked><span>선택 벡터선 노란색 강조 표시</span></label>
-      <h4>제스처</h4>
-      <ul class="gesture-list">
-        <li><b>두 손가락 핀치</b> 확대·회전·이동</li>
-        <li><b>두 손가락 탭</b> 실행 취소</li>
-        <li><b>펜 전용 모드</b> 손가락 한 개로 화면 이동, 펜으로 그리는 중엔 손바닥 무시</li>
-        <li><b>세 손가락 탭</b> 다시 실행</li>
-        <li><b>그리기 도구 다시 누르기</b> 브러시 라이브러리</li>
-        <li><b>키보드</b> B 그리기 · S 스머지 · E 지우개 · I 스포이드 · [ ] 크기 · , . 프레임 이동 · M 움직임 · ⌘Z / ⇧⌘Z</li>
-        <li><b>그림 길이</b> 타임라인에서 선택한 그림의 오른쪽 끝을 끌거나 − ＋ 버튼</li>
-        <li><b>트랙</b> 레이어마다 따로 트랙이 있어요. 트랙 이름이나 그림을 눌러 고른 뒤 ＋ / 복제 / 삭제가 그 트랙에만 적용돼요</li>
-      </ul>
-    </section>
-
-    <section class="popover" id="effectsPopover" data-side="left" hidden aria-label="효과">
-      <section id="boilTools">
-        <h3>선 흔들림 · LINE BOIL</h3>
-        <div class="field"><label for="boilAmplitude">흔들림 강도</label><input id="boilAmplitude" type="range" min="0" max="12" step="0.5" value="3"><output id="boilAmplitudeOut">3px</output></div>
-        <div class="field"><label for="boilFrequency">흔들림 패턴</label><input id="boilFrequency" type="range" min="0.02" max="0.24" step="0.01" value="0.08"><output id="boilFrequencyOut">0.08</output></div>
-        <div class="field"><label for="boilSpeed">재생 속도</label><input id="boilSpeed" type="range" min="0.2" max="3" step="0.1" value="1"><output id="boilSpeedOut">1.0×</output></div>
-        <button id="boilToggle" class="wide-btn">선 흔들림 켜기</button>
-        <p class="note">모든 벡터 선이 흔들려요. 브러시 설정에서 선마다 움직임(Redraw·Flicker·Wave)을 따로 정하면 그 설정이 우선해요. 재생 중에도 유지되고, 그리기 시작하면 꺼져요. 원본 선은 바뀌지 않아요.</p>
-      </section>
-      <section id="toneTools">
-        <h3>만화 스크린톤 · SCREENTONE</h3>
-        <div class="tone-preview" aria-hidden="true"><span class="tone-preview-dots"></span><span class="tone-preview-lines"></span></div>
-        <div class="field"><label for="tonePattern">톤 종류</label><select id="tonePattern"><option value="dots">망점 · Dot</option><option value="gradient">그라데이션 망점</option><option value="lines">사선 · Lines</option><option value="crosshatch">교차선 · Crosshatch</option></select></div>
-        <div class="field"><label for="toneSpacing">점 간격</label><input id="toneSpacing" type="range" min="4" max="48" value="12"><output id="toneSpacingOut">12px</output></div>
-        <div class="field"><label for="toneCoverage">망점 면적 비율</label><input id="toneCoverage" type="range" min="1" max="70" step="1" value="25"><output id="toneCoverageOut">25%</output></div>
-        <div class="field"><label for="toneAngle">각도</label><input id="toneAngle" type="range" min="0" max="179" value="45"><output id="toneAngleOut">45°</output></div>
-        <div class="field"><label for="toneOpacity">불투명도</label><input id="toneOpacity" type="range" min="5" max="100" value="65"><output id="toneOpacityOut">65%</output></div>
-        <div class="tone-color-row"><span>톤 색상은 현재 선택 색상 사용</span><span id="toneColorChip"></span></div>
-        <button id="applyTone" class="wide-btn primary">톤 적용</button>
-        <p class="note">점 간격은 패턴 밀도를, 면적 비율은 망점 크기를 정합니다. 불투명도는 색의 투명도예요. 선택 영역이 있으면 그 안에만, 없으면 활성 레이어 전체에 적용하고 실행 취소로 되돌릴 수 있습니다.</p>
-      </section>
-    </section>
-
-    <section class="popover" id="selectPopover" data-side="left" hidden aria-label="선택">
-      <h3>선택</h3>
-      <div class="segmented" role="group" aria-label="선택 방식">
-        <button data-set-tool="marquee" data-host="selectTool" class="active">사각형</button>
-        <button data-set-tool="lasso" data-host="selectTool">올가미</button>
-      </div>
-      <div class="field"><label for="selectionAngle">회전 각도</label><input id="selectionAngle" type="range" min="-180" max="180" value="0"><output id="selectionAngleOut">0°</output></div>
-      <div class="field"><label for="selectionScale">크기 조절</label><input id="selectionScale" type="range" min="25" max="200" value="100"><output id="selectionScaleOut">100%</output></div>
-      <div class="button-row"><button id="selectionTransform" class="primary">변형 적용</button><button id="selectionDeselect">선택 해제</button></div>
-      <p class="note">영역 안을 드래그하면 이동, 모서리 핸들로 크기·회전을 바꿉니다. 레이어 패널의 체크박스로 함께 변형할 레이어를 고릅니다.</p>
-    </section>
-
-    <section class="popover" id="transformPopover" data-side="left" hidden aria-label="벡터 선 변형">
-      <h3>벡터 선 변형</h3>
-      <p class="note" style="margin-top:0">선을 눌러 선택하고 드래그해 옮깁니다.</p>
-      <section id="lineTools" hidden>
-        <div class="field"><label for="lineColor">선 색상</label><input id="lineColor" type="color" value="#24242a"></div>
-        <div class="field"><label for="lineWidth">선 굵기</label><input id="lineWidth" type="range" min="1" max="100" value="7"><output id="lineWidthOut">7px</output></div>
-        <label class="check-field"><input id="nodeEditToggle" type="checkbox"><span>곡선 핸들 편집 모드</span></label>
-        <label class="check-field"><input id="linkBezierHandles" type="checkbox"><span>핸들 연결 · 부드러운 곡선</span></label>
-        <div class="button-row"><button id="toggleBezierAnchorMode" disabled>부드러운 앵커로 변경</button><button id="deleteBezierAnchor" disabled>선택 앵커 삭제</button></div>
-        <p id="lineNodeStatus" class="note">곡선 위를 누르면 새 앵커가 추가됩니다. 핸들 연결을 켜면 반대쪽 핸들도 대칭으로 움직입니다. Shift로 일시 전환할 수 있습니다.</p>
-        <div class="button-row"><button id="deleteLineNode" disabled>선택 노드 삭제</button><button id="smoothLine">곡선 부드럽게</button></div>
-        <button id="deleteLine" class="wide-btn danger">선 삭제</button>
-      </section>
-    </section>
-
-    <section class="popover" id="fillPopover" data-side="left" hidden aria-label="채우기">
-      <h3>채우기</h3>
-      <div class="field"><label for="tolerance">허용 오차</label><input id="tolerance" type="range" min="0" max="100" value="24"><output id="tolOut">24</output></div>
-      <div class="field"><label for="edge">선화 아래 확장</label><input id="edge" type="range" min="0" max="4" value="1"><output id="edgeOut">1px</output></div>
-      <p class="note">보이는 모든 레이어의 경계를 기준으로 닫힌 영역을 활성 레이어에 칠합니다.</p>
-    </section>
-
-    <section class="popover" id="shapePopover" data-side="left" hidden aria-label="도형">
-      <h3>직선 · 도형</h3>
-      <div class="segmented" role="group" aria-label="도형 종류">
-        <button data-set-tool="line" data-host="shapeTool" class="active">직선</button>
-        <button data-set-tool="shape" data-host="shapeTool">도형</button>
-      </div>
-      <div class="field"><label for="shapeKind">도형 종류</label><select id="shapeKind"><option value="rectangle">사각형</option><option value="ellipse">타원</option></select></div>
-      <p class="note">결과는 편집 가능한 벡터 선으로 만들어집니다.</p>
-    </section>
-
-    <section class="popover" id="brushPopover" data-side="right" data-mode="vector" hidden aria-label="브러시 라이브러리">
-      <h3>브러시 라이브러리</h3>
-      <h4>벡터 · 나중에 수정 가능</h4>
-      <div class="brush-grid">
-        <button class="brush-card" data-brush-kind="vector" data-brush="pencil"><i class="b-pencil"></i>연필<small>Pencil</small></button>
-        <button class="brush-card active" data-brush-kind="vector" data-brush="ink"><i class="b-ink"></i>잉크<small>Ink</small></button>
-        <button class="brush-card" data-brush-kind="vector" data-brush="brush"><i class="b-brush"></i>수채 붓<small>Brush</small></button>
-        <button class="brush-card" data-brush-kind="vector" data-brush="marker"><i class="b-marker"></i>마커<small>Marker</small></button>
-        <button class="brush-card" data-brush-kind="vector" data-brush="nib"><i class="b-nib"></i>딥펜<small>Nib</small></button>
-        <button class="brush-card" data-brush-kind="vector" data-brush="dry"><i class="b-dry"></i>드라이<small>Dry</small></button>
-      </div>
-      <h4>래스터 · 필압과 질감</h4>
-      <div class="brush-grid">
-        <button class="brush-card" data-brush-kind="raster" data-brush="pencil"><i class="b-pencil"></i>연필<small>Pencil</small></button>
-        <button class="brush-card" data-brush-kind="raster" data-brush="ink"><i class="b-ink"></i>잉크 펜<small>Ink</small></button>
-        <button class="brush-card" data-brush-kind="raster" data-brush="marker"><i class="b-marker"></i>마커<small>Marker</small></button>
-        <button class="brush-card" data-brush-kind="raster" data-brush="brush"><i class="b-brush"></i>브러시<small>Brush</small></button>
-      </div>
-      <h4>크기 빠른 선택</h4>
-      <div class="size-presets" id="sizePresets" aria-label="선 굵기 빠른 선택"></div>
-
-      <details class="settings" open>
-        <summary>브러시 설정</summary>
-        <div class="vector-settings">
-          <div class="field"><label for="vectorBrushPreset">벡터 프리셋</label><select id="vectorBrushPreset"><option value="pencil">연필 · Pencil</option><option value="ink" selected>잉크 · Ink</option><option value="brush">수채 붓 · Brush</option><option value="marker">마커 · Marker</option><option value="nib">딥펜 · Nib</option><option value="dry">드라이 브러시 · Dry</option></select></div>
-          <div class="field"><label for="vectorPressureCurve">필압 민감도</label><input id="vectorPressureCurve" type="range" min="50" max="200" value="100"><output id="vectorPressureCurveOut">1.00</output></div>
-          <div class="profile-editor">
-            <div class="profile-editor-head"><strong>필압 반응 프로파일</strong><span>PRESSURE → WIDTH</span></div>
-            <canvas id="vectorPressureProfile" width="320" height="104" role="img" aria-label="벡터 선 필압 반응 곡선 편집 영역"></canvas>
-            <p class="note">선을 선택한 뒤 곡선의 점을 움직여 필압에 따른 굵기 변화를 조절합니다.</p>
-          </div>
-          <div class="field"><label for="vectorBrushOpacity">선 불투명도</label><input id="vectorBrushOpacity" type="range" min="5" max="100" value="100"><output id="vectorBrushOpacityOut">100%</output></div>
-          <div class="field"><label for="vectorMotionStyle">선 움직임</label><select id="vectorMotionStyle"><option value="none">고정 · Static</option><option value="wave">Wobbly · 부드러운 떨림</option><option value="boil">Boiling · 보일링 선</option><option value="redraw">Trio · 3중 선</option><option value="flicker">Frame Echo · 잔상</option></select></div>
-          <div class="field"><label for="vectorMotionStrength">움직임 강도</label><input id="vectorMotionStrength" type="range" min="0" max="12" value="3"><output id="vectorMotionStrengthOut">3px</output></div>
-        </div>
-        <div class="raster-settings">
-          <div class="field"><label for="brushPreset">래스터 프리셋</label><select id="brushPreset"><option value="pencil">연필 · Pencil</option><option value="ink" selected>잉크 펜 · Ink</option><option value="marker">마커 · Marker</option><option value="brush">브러시 · Brush</option></select></div>
-          <div class="field"><label for="brushOpacity">브러시 불투명도</label><input id="brushOpacity" type="range" min="5" max="100" value="100"><output id="brushOpacityOut">100%</output></div>
-          <div class="field"><label for="pressureCurve">필압 반응 곡선</label><input id="pressureCurve" type="range" min="50" max="200" value="92"><output id="pressureCurveOut">0.92</output></div>
-          <div class="field"><label for="brushSmoothing">획 안정화</label><input id="brushSmoothing" type="range" min="0" max="80" value="28"><output id="brushSmoothingOut">28%</output></div>
-          <div class="field"><label for="brushBlendMode">혼합 방식</label><select id="brushBlendMode"><option value="source-over">일반</option><option value="multiply">곱하기</option><option value="screen">스크린</option><option value="overlay">오버레이</option></select></div>
-        </div>
-        <label class="check-field"><input id="pressureEnabled" type="checkbox" checked><span>Apple Pencil 필압 반영</span></label>
-      </details>
-    </section>
-
-    <section class="popover" id="smudgePopover" data-side="right" hidden aria-label="스머지">
-      <h3>스머지</h3>
-      <div class="field"><label for="smudgeStrength">혼합 강도</label><input id="smudgeStrength" type="range" min="5" max="100" value="62"><output id="smudgeStrengthOut">62%</output></div>
-      <div class="field"><label for="smudgeSpacing">브러시 간격</label><input id="smudgeSpacing" type="range" min="8" max="60" value="22"><output id="smudgeSpacingOut">22%</output></div>
-      <p class="note">활성 래스터 레이어의 색을 드래그 방향으로 섞습니다. 크기는 왼쪽 슬라이더를 따릅니다.</p>
-    </section>
-
-    <section class="popover" id="eraserPopover" data-side="right" hidden aria-label="지우개">
-      <h3>지우개</h3>
-      <div class="brush-grid">
-        <button class="brush-card" data-brush-kind="raster" data-brush="pencil"><i class="b-pencil"></i>연필<small>Pencil</small></button>
-        <button class="brush-card" data-brush-kind="raster" data-brush="ink"><i class="b-ink"></i>잉크 펜<small>Ink</small></button>
-        <button class="brush-card" data-brush-kind="raster" data-brush="marker"><i class="b-marker"></i>마커<small>Marker</small></button>
-        <button class="brush-card" data-brush-kind="raster" data-brush="brush"><i class="b-brush"></i>브러시<small>Brush</small></button>
-      </div>
-      <p class="note">래스터 레이어의 픽셀을 지웁니다. 벡터 선은 변형 도구로 선택해 삭제하세요.</p>
-    </section>
-
-    <section class="popover" id="layersPopover" data-side="right" hidden aria-label="레이어">
-      <div class="popover-head"><h3>레이어</h3><button id="addLayer" class="icon-btn" title="새 레이어" aria-label="새 레이어"><svg><use href="#i-plus"/></svg></button></div>
-      <div id="layers"></div>
-      <div class="field"><label for="layerOpacity">불투명도</label><input id="layerOpacity" type="range" min="0" max="100" value="100"><output id="layerOpacityOut">100%</output></div>
-      <div class="field"><label for="layerBlend">혼합 모드</label><select id="layerBlend"><option value="normal">일반</option><option value="multiply">곱하기</option><option value="screen">스크린</option><option value="add">더하기</option><option value="darken">어둡게</option><option value="lighten">밝게</option></select></div>
-      <div class="button-row"><button id="layerDuplicate">복제</button><button id="clear">비우기</button><button id="layerDelete" class="danger">삭제</button></div>
-      <div class="button-row"><button id="maskAdd">마스크 추가</button><button id="maskEdit">마스크 편집</button></div>
-      <p id="maskState" class="note">일반 그림 편집 중</p>
-      <details class="settings">
-        <summary>그룹 · 변형</summary>
-        <div class="button-row"><button id="groupAdd">그룹 만들기</button><button id="groupRemove">그룹 해제</button></div>
-        <div class="button-row"><button id="layerToGroup">선택 그룹에 넣기</button><button id="layerOutGroup">그룹에서 꺼내기</button></div>
-        <section id="groupInspector" hidden>
-          <div class="field"><label for="groupOpacity">그룹 불투명도</label><input id="groupOpacity" type="range" min="0" max="100" value="100"><output id="groupOpacityOut">100%</output></div>
-          <div class="field"><label for="groupBlend">그룹 혼합 모드</label><select id="groupBlend"><option value="normal">일반</option><option value="multiply">곱하기</option><option value="screen">스크린</option><option value="add">더하기</option><option value="darken">어둡게</option><option value="lighten">밝게</option></select></div>
-        </section>
-        <button id="rasterizeTransforms" class="wide-btn" disabled>변형 픽셀로 확정</button>
-      </details>
-      <p class="note">눈 아이콘으로 표시 여부를, 체크박스로 변형 대상을 고릅니다.</p>
-    </section>
-
-    <section class="popover" id="colorPopover" data-side="right" hidden aria-label="색상">
-      <div class="popover-head"><h3>색상</h3><div class="active-color-card"><div id="activeColorPreview"></div><strong id="activeColorHex">#24242A</strong></div></div>
-      <div class="hsv-picker">
-        <canvas id="colorSV" width="280" height="180" aria-label="채도와 명도 선택"></canvas>
-        <input id="colorHue" type="range" min="0" max="359" value="0" aria-label="색조">
-      </div>
-      <div class="color-picker-row"><label for="customColor">시스템 색상 선택</label><input id="customColor" type="color" value="#24242a"></div>
-      <div class="palette-actions"><button id="addPaletteColor">＋ 현재 색상 저장</button><button id="resetPalette">기본 팔레트</button></div>
-      <div class="palette-categories" id="paletteCategories" aria-label="색상 팔레트 종류"></div>
-      <div class="swatches" id="palette" aria-label="색상 선택"></div>
-      <h4>최근 사용</h4>
-      <div class="swatches" id="recentPalette"></div>
-    </section>
-    <section class="popover from-bottom" id="motionPopover" data-side="right" hidden aria-label="움직임 키프레임">
-      <div class="popover-head"><h3>움직임</h3><span id="motionLayerName" class="popover-sub">레이어</span></div>
-      <button id="motionEditToggle" class="wide-btn">캔버스에서 끌어 움직이기</button>
-      <div class="field"><label for="motionX">가로 위치</label><input id="motionX" type="range" min="-1200" max="1200" value="0"><output id="motionXOut">0px</output></div>
-      <div class="field"><label for="motionY">세로 위치</label><input id="motionY" type="range" min="-900" max="900" value="0"><output id="motionYOut">0px</output></div>
-      <div class="field"><label for="motionRotation">회전</label><input id="motionRotation" type="range" min="-360" max="360" value="0"><output id="motionRotationOut">0°</output></div>
-      <div class="field"><label for="motionScale">크기</label><input id="motionScale" type="range" min="10" max="400" value="100"><output id="motionScaleOut">100%</output></div>
-      <div class="field"><label for="motionOpacity">불투명도</label><input id="motionOpacity" type="range" min="0" max="100" value="100"><output id="motionOpacityOut">100%</output></div>
-      <div class="field"><label for="motionEasing">다음 키까지 곡선</label><select id="motionEasing"><option value="easeInOut">부드럽게</option><option value="linear">일정하게</option><option value="easeIn">점점 빠르게</option><option value="easeOut">점점 느리게</option><option value="hold">멈췄다 바뀜</option></select></div>
-      <div class="button-row"><button id="motionKeyAdd" class="primary">키프레임 추가</button><button id="motionKeyDelete">키프레임 삭제</button></div>
-      <button id="motionClear" class="wide-btn danger">이 레이어 움직임 모두 지우기</button>
-      <p id="motionKeyInfo" class="note">값을 바꾸거나 캔버스를 끌면 현재 프레임에 키프레임이 생겨요</p>
-      <p class="note">선택한 래스터 레이어 전체가 움직여요. 키프레임 사이 프레임은 자동으로 이어지고, 움직임 편집 중에는 실행 취소가 움직임에만 적용돼요. 단축키 M.</p>
-    </section>
-  </main>
-
-  <section class="timeline" aria-label="애니메이션 타임라인">
-    <div class="timeline-bar">
-      <div class="tl-side">
-        <button id="onionToggle" class="pill active" title="어니언 스킨"><svg><use href="#i-onion"/></svg><span>어니언 ON</span></button>
-        <button id="motionButton" class="pill" data-popover="motionPopover" title="움직임 키프레임"><svg><use href="#i-motion"/></svg><span>움직임</span></button>
-        <label class="fps-control" for="fps"><input id="fps" type="range" min="1" max="30" value="12"><output id="fpsOut">12 FPS</output></label>
-      </div>
-      <div class="transport">
-        <button id="framePrev" class="icon-btn" title="이전 그림" aria-label="이전 그림"><svg><use href="#i-prev"/></svg></button>
-        <button id="playToggle" class="play-btn" title="재생" aria-label="재생"><svg><use href="#i-play"/></svg></button>
-        <button id="frameNext" class="icon-btn" title="다음 그림" aria-label="다음 그림"><svg><use href="#i-next"/></svg></button>
-      </div>
-      <div class="tl-side tl-right">
-        <span id="frameCounter" class="frame-counter" title="재생 위치 / 전체 프레임">1 / 1</span>
-        <div class="hold-control" role="group" aria-label="선택한 그림의 길이">
-          <button id="holdMinus" title="그림 길이 줄이기" aria-label="그림 길이 줄이기">−</button>
-          <span id="holdOut" title="선택한 그림이 유지되는 프레임 수">1프레임</span>
-          <button id="holdPlus" title="그림 길이 늘리기" aria-label="그림 길이 늘리기">＋</button>
-        </div>
-        <button id="frameAdd" class="icon-btn" title="빈 그림 추가" aria-label="빈 그림 추가"><svg><use href="#i-plus"/></svg></button>
-        <button id="frameDuplicate" class="icon-btn" title="그림 복제" aria-label="그림 복제"><svg><use href="#i-copy"/></svg></button>
-        <button id="frameDelete" class="icon-btn" title="그림 삭제" aria-label="그림 삭제"><svg><use href="#i-trash"/></svg></button>
-      </div>
-    </div>
-    <div class="track">
-      <div id="frameStrip" class="frame-strip" aria-label="레이어별 애니메이션 트랙"></div>
-    </div>
-  </section>
-</div>
-
-<!-- The hidden canvas elements are the editable paint buffers, not the display surface. -->
-<canvas id="artboardBuffer" width="1200" height="900" hidden></canvas>
-<script type="module" src="/src/main.js"></script>
+  </nav>
+  <p class="lobby-note">작업은 이 브라우저에 자동 저장돼요. 3D 배경은 "그리기로 보내기"를 누르면 그리기 스튜디오의 맨 아래 레이어로 들어가요.</p>
+</main>
 </body>
 </html>

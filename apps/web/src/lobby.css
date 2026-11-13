@@ -1,0 +1,30 @@
+/* FRAME · Lobby (workspace picker). */
+:root{color-scheme:dark;--bg:#0f0f11;--surface:#1b1b1f;--surface-2:#24242a;--line:#34343c;--muted:#8e8e98;--text:#ececf0;--accent:#e5b85c;--accent-soft:#4a3f29}
+*{box-sizing:border-box}
+html,body{min-height:100%}
+body{margin:0;background:var(--bg);color:var(--text);font:15px -apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Segoe UI",sans-serif}
+.lobby-main{max-width:980px;margin:0 auto;padding:max(40px,env(safe-area-inset-top)) 20px 40px}
+.lobby-head{margin-bottom:28px}
+.lobby-brand{font-weight:800;letter-spacing:.18em;font-size:22px}
+.lobby-brand span{color:var(--accent)}
+.lobby-head p{color:var(--muted);margin:8px 0 0}
+.workspaces{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+.workspace{display:grid;grid-template-rows:auto auto 1fr auto;gap:6px;padding:16px;border-radius:16px;background:var(--surface);border:1px solid var(--line);color:inherit;text-decoration:none;min-height:230px;transition:border-color .15s,transform .15s}
+a.workspace:hover,a.workspace:focus-visible{border-color:var(--accent);transform:translateY(-2px);outline:none}
+.workspace strong{font-size:17px}
+.workspace span{color:var(--muted);font-size:13px;line-height:1.45}
+.workspace em{font-style:normal;font-size:13px;font-weight:700;color:var(--accent);justify-self:start}
+.workspace.planned{opacity:.55}
+.workspace.planned em{color:var(--muted)}
+.workspace-art{display:block;height:110px;border-radius:10px;margin-bottom:8px;background:#f4f1ea;position:relative;overflow:hidden}
+/* Small original illustrations drawn with CSS. */
+.art-drawing::before{content:"";position:absolute;left:14%;right:14%;top:52%;height:6px;border-radius:6px;background:#1c1b20;transform:rotate(-9deg)}
+.art-drawing::after{content:"";position:absolute;left:30%;top:28%;width:26%;height:40%;border:3px solid #1c1b20;border-radius:50% 50% 40% 60%;transform:rotate(12deg)}
+.art-3d{background:linear-gradient(180deg,#f4f1ea 55%,#d9d3c6 55%)}
+.art-3d::before{content:"";position:absolute;left:22%;top:20%;width:56%;height:52%;border:3px solid #1c1b20;background:radial-gradient(#1c1b20 1px,transparent 1.6px) 0 0/6px 6px #ebe6dc}
+.art-3d::after{content:"";position:absolute;left:40%;top:44%;width:16%;height:28%;border:3px solid #1c1b20;background:#f4f1ea}
+.art-assets::before{content:"";position:absolute;inset:26% 18%;background:repeating-linear-gradient(90deg,#1c1b20 0 3px,transparent 3px 33%)}
+.art-motion::before{content:"";position:absolute;left:16%;right:16%;top:46%;border-top:3px dashed #1c1b20}
+.art-motion::after{content:"";position:absolute;right:14%;top:38%;border:9px solid transparent;border-left:14px solid #1c1b20}
+.lobby-note{color:var(--muted);font-size:13px;margin-top:22px;line-height:1.5}
+@media (max-width:640px){.workspaces{grid-template-columns:1fr}.workspace{min-height:0}}
