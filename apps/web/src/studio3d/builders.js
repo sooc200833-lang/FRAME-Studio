@@ -2,7 +2,7 @@
 // Group whose shapes fill the type's base `size`, centred on the origin, so
 // position/rotation/scale from the document apply the same way to every type.
 
-import { BoxGeometry, ConeGeometry, CylinderGeometry, Group, Mesh, SphereGeometry } from 'three';
+import { BoxGeometry, ConeGeometry, CylinderGeometry, ExtrudeGeometry, Group, Mesh, Path, Shape, SphereGeometry } from 'three';
 import { OBJECT_TYPES } from './scene-document.js';
 
 // Geometries are shared by every object of a type.
@@ -106,11 +106,52 @@ const BUILDERS = {
   ],
 };
 
-/** A Group for `item` with the given material; userData.sceneId links it back to the document. */
-export function buildSceneObject(item, material) {
+/**
+ * A wall slab with openings (see wallOpenings): notches are cut into the
+ * outline from the bottom edge, other openings are holes. Units are the wall's
+ * base size; the geometry belongs to this wall only.
+ */
+export function wallWithOpenings(material, [w, h, d], openings) {
+  const shape = new Shape();
+  shape.moveTo(-w / 2, -h / 2);
+  const notches = openings.filter(o => o.notch).sort((a, b) => a.x - b.x);
+  for (const o of notches) {
+    shape.lineTo(o.x - o.w / 2, -h / 2);
+    shape.lineTo(o.x - o.w / 2, o.y + o.h / 2);
+    shape.lineTo(o.x + o.w / 2, o.y + o.h / 2);
+    shape.lineTo(o.x + o.w / 2, -h / 2);
+  }
+  shape.lineTo(w / 2, -h / 2);
+  shape.lineTo(w / 2, h / 2);
+  shape.lineTo(-w / 2, h / 2);
+  shape.closePath();
+  for (const o of openings.filter(entry => !entry.notch)) {
+    const hole = new Path();
+    hole.moveTo(o.x - o.w / 2, o.y - o.h / 2);
+    hole.lineTo(o.x - o.w / 2, o.y + o.h / 2);
+    hole.lineTo(o.x + o.w / 2, o.y + o.h / 2);
+    hole.lineTo(o.x + o.w / 2, o.y - o.h / 2);
+    hole.closePath();
+    shape.holes.push(hole);
+  }
+  const geometry = new ExtrudeGeometry(shape, { depth: d, bevelEnabled: false, curveSegments: 1 });
+  geometry.translate(0, 0, -d / 2);
+  const mesh = new Mesh(geometry, material);
+  mesh.userData.ownGeometry = true;
+  return [mesh];
+}
+
+/**
+ * A Group for `item` with the given material; userData.sceneId links it back
+ * to the document. Walls with `openings` get holes/notches.
+ */
+export function buildSceneObject(item, material, { openings = [] } = {}) {
   const type = OBJECT_TYPES[item.type];
   const group = new Group();
-  for (const mesh of BUILDERS[item.type](material, type.size)) {
+  const meshes = item.type === 'wall' && openings.length
+    ? wallWithOpenings(material, type.size, openings)
+    : BUILDERS[item.type](material, type.size);
+  for (const mesh of meshes) {
     mesh.userData.sceneId = item.id;
     group.add(mesh);
   }

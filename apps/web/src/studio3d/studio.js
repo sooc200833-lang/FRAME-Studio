@@ -9,9 +9,11 @@ import {
 } from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { TransformControls } from 'three/examples/jsm/controls/TransformControls.js';
-import { BACKGROUND_SLOT, putHandoff } from '../handoff/handoff-store.js';
+import { BACKGROUND_SLOT, GUIDES_SLOT, putHandoff } from '../handoff/handoff-store.js';
 import { applyTransform, buildSceneObject } from './builders.js';
 import { MangaRenderer } from './manga-renderer.js';
+import { openingsKey, snapOpening, snapWall, wallOpenings } from './wall-layout.js';
+import { drawPerspectiveGuides, perspectiveGuides } from './perspective.js';
 import {
   EXPORT_RATIOS, OBJECT_TYPES, SCENE_PRESETS, addSceneObject, createSceneDocument, createSceneHistory, duplicateSceneObject,
   exportSize, parseSceneDocument, removeSceneObject, serializeScene, updateSceneObject,
@@ -40,6 +42,11 @@ const renderer = new WebGLRenderer({ antialias: true, alpha: true });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
 renderer.autoClear = false;
 frame.append(renderer.domElement);
+// Perspective guides are a 2D overlay: never part of the 3D render or the PNG.
+const guideCanvas = document.createElement('canvas');
+guideCanvas.className = 's3-guides';
+guideCanvas.hidden = true;
+frame.append(guideCanvas);
 
 const manga = new MangaRenderer(renderer);
 const scene = new Scene();
@@ -72,11 +79,11 @@ gizmo.addEventListener('dragging-changed', event => {
   if (event.value) gizmoBefore = doc;
   else if (gizmoBefore && selectedId) {
     const group = objectsById.get(selectedId);
-    const next = updateSceneObject(doc, selectedId, {
+    const next = withWallSnap(updateSceneObject(doc, selectedId, {
       position: group.position.toArray(),
       rotation: [group.rotation.x, group.rotation.y, group.rotation.z],
       scale: group.scale.toArray(),
-    });
+    }), selectedId);
     const before = gizmoBefore;
     gizmoBefore = null;
     commit(next, { before });
@@ -84,6 +91,16 @@ gizmo.addEventListener('dragging-changed', event => {
 });
 gizmo.addEventListener('objectChange', () => { renderSelectionPanel(); requestRender(); });
 gizmo.addEventListener('change', requestRender);
+
+/**
+ * With 벽에 붙이기 on, a moved wall joins a nearby wall end, and a door or
+ * window lands in the nearest wall (which then gets a hole for it).
+ */
+function withWallSnap(next, id) {
+  if (!$('wallSnap').checked) return next;
+  const patch = snapWall(next, id) || snapOpening(next, id);
+  return patch ? updateSceneObject(next, id, patch) : next;
+}
 
 const depthOnly = new MeshBasicMaterial({ colorWrite: false });
 const toonMaps = new Map();
@@ -112,6 +129,7 @@ function materialOf(group) {
 
 function disposeObject(group) {
   materialOf(group)?.dispose();
+  group.traverse(node => { if (node.userData.ownGeometry) node.geometry.dispose(); });
   scene.remove(group);
 }
 
@@ -123,15 +141,19 @@ function syncScene({ rebuildMaterials = false } = {}) {
   }
   for (const item of doc.objects) {
     let group = objectsById.get(item.id);
+    const openings = item.type === 'wall' ? wallOpenings(doc, item) : [];
+    const key = openingsKey(openings);
     // Ids restart in every new scene, so the same id can now be a different
-    // type: rebuild instead of reusing the old shape.
-    if (group && (rebuildMaterials || group.userData.type !== item.type)) {
+    // type: rebuild instead of reusing the old shape. Walls also rebuild when
+    // the doors/windows cutting them change.
+    if (group && (rebuildMaterials || group.userData.type !== item.type || group.userData.openings !== key)) {
       disposeObject(group);
       objectsById.delete(item.id);
       group = null;
     }
     if (!group) {
-      group = buildSceneObject(item, makeMaterial(item.color));
+      group = buildSceneObject(item, makeMaterial(item.color), { openings });
+      group.userData.openings = key;
       objectsById.set(item.id, group);
       scene.add(group);
     } else {
@@ -247,6 +269,33 @@ function draw() {
   renderer.render(scene, camera);
   scene.overrideMaterial = previous;
   renderer.render(overlay, camera);
+  drawGuideOverlay();
+}
+
+function drawGuideOverlay() {
+  const show = $('guides').checked;
+  guideCanvas.hidden = !show;
+  if (!show) return;
+  const ratio = renderer.getPixelRatio();
+  const width = frame.clientWidth;
+  const height = frame.clientHeight;
+  if (guideCanvas.width !== Math.round(width * ratio) || guideCanvas.height !== Math.round(height * ratio)) {
+    guideCanvas.width = Math.round(width * ratio);
+    guideCanvas.height = Math.round(height * ratio);
+  }
+  const context = guideCanvas.getContext('2d');
+  context.setTransform(ratio, 0, 0, ratio, 0, 0);
+  context.clearRect(0, 0, width, height);
+  drawPerspectiveGuides(context, perspectiveGuides(camera, { width, height }));
+}
+
+/** The guides alone on a transparent PNG of the given size (for the drawing studio). */
+async function renderGuidesPng(width, height) {
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+  drawPerspectiveGuides(canvas.getContext('2d'), perspectiveGuides(camera, { width, height }), { scale: width / 800, alpha: 0.75 });
+  return new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
 }
 
 function loop() {
@@ -410,8 +459,8 @@ function buildAddButtons() {
       button.onclick = () => {
         // New objects land on the floor in front of the view target.
         const target = orbit.target;
-        const { doc: next, id } = addSceneObject(doc, type, { position: [Number(target.x.toFixed(2)), OBJECT_TYPES[type].size[1] / 2, Number(target.z.toFixed(2))] });
-        commit(next);
+        const { doc: added, id } = addSceneObject(doc, type, { position: [Number(target.x.toFixed(2)), OBJECT_TYPES[type].size[1] / 2, Number(target.z.toFixed(2))] });
+        commit(withWallSnap(added, id));
         select(id);
       };
       buttons.append(button);
@@ -552,6 +601,7 @@ function bindControls() {
     gizmo.setScaleSnap(on ? 0.1 : null);
   };
   $('gridToggle').onchange = event => { grid.visible = event.target.checked; requestRender(); };
+  $('guides').onchange = () => requestRender();
   for (const button of document.querySelectorAll('[data-view]')) button.onclick = () => setView(button.dataset.view);
 
   for (const [id, key, index, unit] of TRANSFORM_FIELDS) {
@@ -639,6 +689,9 @@ function bindControls() {
       // The drawing canvas is 1200×900; render at that long side.
       const { blob, width, height } = await renderPng({ longSide: 1200, transparent: $('transparent').checked });
       await putHandoff(BACKGROUND_SLOT, { blob, width, height, name: doc.name });
+      if ($('sendGuides').checked) {
+        await putHandoff(GUIDES_SLOT, { blob: await renderGuidesPng(width, height), width, height, name: doc.name });
+      }
       window.location.href = './drawing.html';
     } catch (error) {
       console.error('Hand-off to drawing failed:', error);

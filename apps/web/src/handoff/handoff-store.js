@@ -49,6 +49,7 @@ export async function takeHandoff(slot, { maxAgeMs = 10 * 60 * 1000 } = {}) {
 }
 
 export const BACKGROUND_SLOT = 'background';
+export const GUIDES_SLOT = 'perspective-guides';
 
 /** Largest centred rectangle with the image's aspect ratio inside the canvas. */
 export function containRect(imageWidth, imageHeight, canvasWidth, canvasHeight) {
