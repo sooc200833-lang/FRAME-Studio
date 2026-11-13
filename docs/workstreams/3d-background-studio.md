@@ -1,5 +1,7 @@
 # 3D Background Studio — prototype
 
+> Overall workspace structure, lobby navigation, cross-workspace workflow, milestones, and acceptance criteria: [Workspace Lobby and 3D Manga Background Workflow](workspace-lobby-and-3d-background.md).
+
 ## Goal
 A separate 3D workspace that can be developed and tested without destabilizing the PixiJS drawing canvas.
 
