@@ -78,3 +78,30 @@ test('lines left at the fixed style follow the global boil amplitude', () => {
   const own = { ...structuredClone(stroke), id: 'own-line', motionStyle: 'redraw', motionStrength: 4 };
   assert.equal(animateLineStrokes([own], { phase: 1, amplitude: 0 })[0].motionPasses.length, 3, 'a line with its own style keeps its own strength');
 });
+
+
+test('boiling brush creates three deterministic phase-shifted contour passes', () => {
+  const boiling = { ...structuredClone(stroke), id: 'boiling-line', motionStyle: 'boil', motionStrength: 6 };
+  const first = animateLineStrokes([boiling], { phase: 1.2, amplitude: 4 })[0];
+  const second = animateLineStrokes([boiling], { phase: 1.2, amplitude: 4 })[0];
+  assert.equal(first.motionPasses.length, 3);
+  assert.deepEqual(first.motionPasses, second.motionPasses);
+  assert.notDeepEqual(first.motionPasses[0].points, first.motionPasses[1].points);
+  assert.deepEqual(boiling.points, stroke.points, 'source geometry remains untouched');
+});
+
+test('per-stroke animated styles produce motion while global amplitude is zero', () => {
+  for (const style of ['wave', 'redraw', 'flicker', 'boil']) {
+    const animated = { ...structuredClone(stroke), id: 'animated-' + style, motionStyle: style, motionStrength: 5 };
+    const result = animateLineStrokes([animated], { phase: 0.7, amplitude: 0 })[0];
+    if (style === 'wave') assert.notDeepEqual(result.points, animated.points);
+    else assert.ok(result.motionPasses?.length, style + ' has rendered passes');
+  }
+});
+
+test('static lines remain static when global amplitude is zero', () => {
+  const fixed = { ...structuredClone(stroke), motionStyle: 'none' };
+  const result = animateLineStrokes([fixed], { phase: 2, amplitude: 0 })[0];
+  assert.equal(result.motionPasses, null);
+  assert.deepEqual(result.points, fixed.points);
+});
