@@ -44,6 +44,17 @@ Always distinguish code-level tests from visual browser checks and physical iPad
 - Freehand vector strokes are no longer left selected after drawing, so brush/color changes apply to the next stroke rather than restyling the previous one.
 - Verified in headless Chrome (layout at 1180×820 and 390×844, synthetic touch pinch/undo, eyedropper). Not yet verified on a physical iPad.
 
+### Lobby and 3D Background Studio (v1.13)
+- The site opens at a lobby (`index.html`). The drawing editor moved to `drawing.html` with unchanged code; its logo and the 작업 menu link back to the lobby and to the 3D studio.
+- 3D Background Studio (`background-studio.html`, three.js 0.187 from npm):
+  - Scenes: room, corridor and street presets plus an empty scene. 16 object types.
+  - Editing: select by tap or list; move/rotate/scale with handles or numbers; snap.
+  - Camera: perspective/orthographic, front/side/top views. The viewport keeps the export ratio (4:3, 3:4, 16:9, 1:1).
+  - Look: cel shading, depth/normal ink lines, dot tone.
+  - Undo/redo. Autosave in the browser. JSON scene files.
+  - PNG export, opaque or transparent.
+  - 그리기로 보내기: the image becomes the bottom layer of the open drawing.
+- Not yet: snapping walls together, imported models, perspective guides, camera keyframes, editable vector line export, and a linked (re-editable) 3D layer in the drawing document.
 ### Doodraw-style brushes, 2nd pass (v1.12)
 - Each moving line has its own **움직임 리듬** and **움직임 속도** (`motionStep`, `motionSpeed` on the stroke).
   - Rhythm 0 is smooth; speed only applies there.

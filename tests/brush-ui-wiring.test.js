@@ -6,7 +6,7 @@ const root = new URL('../', import.meta.url);
 const read = path => readFile(new URL(path, root), 'utf8');
 
 test('raster brush and smudge tools are reachable from the toolbar', async () => {
-  const html = await read('apps/web/index.html');
+  const html = await read('apps/web/drawing.html');
   // Raster painting is chosen from the brush library behind the paint tool.
   assert.match(html, /id="paintTool" data-tool="vector" data-popover="brushPopover"/);
   assert.match(html, /data-brush-kind="raster"/);
@@ -14,7 +14,7 @@ test('raster brush and smudge tools are reachable from the toolbar', async () =>
 });
 
 test('brush blend and smudge controls exist exactly once', async () => {
-  const html = await read('apps/web/index.html');
+  const html = await read('apps/web/drawing.html');
   for (const id of ['brushBlendMode', 'smudgeStrength', 'smudgeSpacing']) {
     const matches = html.match(new RegExp(`id=["']${id}["']`, 'g')) || [];
     assert.equal(matches.length, 1, `expected one element with id ${id}`);
@@ -39,7 +39,7 @@ test('raster brush preview and commit share one composite mode', async () => {
 });
 
 test('vector pressure profile canvas exists for its pointer event bindings', async () => {
-  const html = await read('apps/web/index.html');
+  const html = await read('apps/web/drawing.html');
   const main = await read('apps/web/src/main.js');
   assert.match(html, /<canvas[^>]*id="vectorPressureProfile"/);
   assert.match(main, /const profileCanvas = document\.getElementById\('vectorPressureProfile'\)/);
@@ -47,7 +47,7 @@ test('vector pressure profile canvas exists for its pointer event bindings', asy
 });
 
 test('every statically referenced DOM id exists exactly once in the app HTML', async () => {
-  const html = await read('apps/web/index.html');
+  const html = await read('apps/web/drawing.html');
   const main = await read('apps/web/src/main.js');
   const declaredIds = [...html.matchAll(/\bid=["']([^"']+)["']/g)].map(match => match[1]);
   const declaredSet = new Set(declaredIds);
@@ -62,14 +62,14 @@ test('every statically referenced DOM id exists exactly once in the app HTML', a
 });
 
 test('the id check really sees the app ids (guards against a vacuous regex)', async () => {
-  const html = await read('apps/web/index.html');
+  const html = await read('apps/web/drawing.html');
   const ids = [...html.matchAll(/\bid=["']([^"']+)["']/g)].map(match => match[1]);
   assert.ok(ids.includes('pixiHost'));
   assert.ok(ids.length > 100);
 });
 
 test('every popover trigger and tool-mode host points at an existing element', async () => {
-  const html = await read('apps/web/index.html');
+  const html = await read('apps/web/drawing.html');
   const ids = new Set([...html.matchAll(/\bid=["']([^"']+)["']/g)].map(match => match[1]));
   const popovers = [...html.matchAll(/data-popover="([^"]+)"/g)].map(match => match[1]);
   const hosts = [...html.matchAll(/data-host="([^"]+)"/g)].map(match => match[1]);
@@ -79,7 +79,7 @@ test('every popover trigger and tool-mode host points at an existing element', a
 });
 
 test('brush library cards cover every raster and vector preset option', async () => {
-  const html = await read('apps/web/index.html');
+  const html = await read('apps/web/drawing.html');
   const optionValues = id => {
     const select = html.match(new RegExp(`<select id="${id}">([\\s\\S]*?)</select>`))[1];
     return [...select.matchAll(/value="([^"]+)"/g)].map(match => match[1]).sort();
@@ -91,7 +91,7 @@ test('brush library cards cover every raster and vector preset option', async ()
 
 
 test('Doodraw-inspired animated vector brush modes are selectable and wired to live rendering', async () => {
-  const html = await read('apps/web/index.html');
+  const html = await read('apps/web/drawing.html');
   const main = await read('apps/web/src/main.js');
   for (const value of ['none', 'wave', 'boil', 'redraw', 'flicker']) {
     assert.match(html, new RegExp(`<option value="${value}"`), `missing motion style ${value}`);

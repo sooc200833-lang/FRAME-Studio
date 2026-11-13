@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="theme-color" content="#121214">
+<title>FRAME · 3D 배경 스튜디오</title>
+<link rel="stylesheet" href="./src/studio3d/studio.css">
+</head>
+<body class="studio3d">
+<header class="s3-top">
+  <a class="s3-brand" href="./" title="로비로 돌아가기" aria-label="FRAME 로비로 돌아가기">FRAME<span>•</span></a>
+  <input id="sceneName" class="s3-name" type="text" maxlength="80" aria-label="장면 이름" autocomplete="off" spellcheck="false">
+  <span id="saveState" class="s3-save" role="status"></span>
+  <div class="s3-actions">
+    <button id="undo3d" title="실행 취소 (Ctrl+Z)" aria-label="실행 취소">↶</button>
+    <button id="redo3d" title="다시 실행 (Ctrl+Shift+Z)" aria-label="다시 실행">↷</button>
+    <label class="s3-file" title="장면 파일 열기">열기<input id="openSceneFile" type="file" accept=".json,application/json"></label>
+    <button id="saveSceneFile" title="장면 파일(.json) 저장 · 나중에 다시 편집할 때 사용">장면 파일</button>
+    <button id="exportPng" title="PNG 이미지로 저장">PNG</button>
+    <button id="sendToDrawing" class="primary" title="지금 화면을 그리기 스튜디오의 맨 아래 레이어로 보내요">그리기로 보내기</button>
+  </div>
+</header>
+
+<main class="s3-layout">
+  <aside class="s3-panel s3-left" aria-label="장면과 오브젝트">
+    <section>
+      <h2>새 장면</h2>
+      <div class="button-grid">
+        <button data-preset="room">방</button>
+        <button data-preset="corridor">복도</button>
+        <button data-preset="street">거리</button>
+        <button data-preset="empty">빈 공간</button>
+      </div>
+      <p class="hint">한 번 더 누르면 새로 시작해요. 되돌리기도 돼요.</p>
+    </section>
+    <section>
+      <h2>오브젝트 추가</h2>
+      <div id="addObjects"></div>
+    </section>
+    <section>
+      <h2>장면 오브젝트</h2>
+      <div id="objectList" class="object-list"></div>
+    </section>
+  </aside>
+
+  <section class="s3-stage" aria-label="3D 화면">
+    <div class="s3-toolbar">
+      <div class="segmented" role="group" aria-label="조작 방식">
+        <button data-mode="translate" class="active" title="이동 (W)">이동</button>
+        <button data-mode="rotate" title="회전 (E)">회전</button>
+        <button data-mode="scale" title="크기 (R)">크기</button>
+      </div>
+      <label class="check"><input id="snap" type="checkbox"> 스냅</label>
+      <label class="check"><input id="gridToggle" type="checkbox" checked> 그리드</label>
+      <div class="segmented" role="group" aria-label="시점">
+        <button data-view="front">정면</button>
+        <button data-view="side">측면</button>
+        <button data-view="top">위</button>
+        <button data-view="reset">초기화</button>
+      </div>
+    </div>
+    <div id="stageArea" class="s3-stage-area">
+      <div id="viewportFrame" class="s3-viewport"></div>
+    </div>
+    <p class="s3-help">드래그: 시점 회전 · 두 손가락/우클릭: 이동 · 핀치/휠: 확대 · 탭: 오브젝트 선택</p>
+  </section>
+
+  <aside class="s3-panel s3-right" aria-label="선택한 오브젝트와 카메라, 렌더 설정">
+    <section>
+      <h2>선택한 오브젝트</h2>
+      <p id="selectionEmpty" class="hint">화면이나 목록에서 오브젝트를 고르세요.</p>
+      <div id="selectionPanel" hidden>
+        <p class="selection-name" id="selectionName"></p>
+        <div class="xyz"><span>위치</span><input id="posX" type="number" step="0.1" aria-label="위치 X"><input id="posY" type="number" step="0.1" aria-label="위치 Y"><input id="posZ" type="number" step="0.1" aria-label="위치 Z"></div>
+        <div class="xyz"><span>회전°</span><input id="rotX" type="number" step="5" aria-label="회전 X"><input id="rotY" type="number" step="5" aria-label="회전 Y"><input id="rotZ" type="number" step="5" aria-label="회전 Z"></div>
+        <div class="xyz"><span>크기</span><input id="sclX" type="number" step="0.1" min="0.05" aria-label="크기 X"><input id="sclY" type="number" step="0.1" min="0.05" aria-label="크기 Y"><input id="sclZ" type="number" step="0.1" min="0.05" aria-label="크기 Z"></div>
+        <div class="field"><label for="objColor">색</label><input id="objColor" type="color"></div>
+        <div class="button-grid two">
+          <button id="duplicateObject">복제</button>
+          <button id="deleteObject" class="danger">삭제</button>
+        </div>
+      </div>
+    </section>
+    <section>
+      <h2>카메라</h2>
+      <div class="field"><label for="projection">투영</label><select id="projection"><option value="perspective">원근</option><option value="orthographic">평행</option></select></div>
+      <div class="field"><label for="fov">화각</label><input id="fov" type="range" min="15" max="100" step="1"><output id="fovOut"></output></div>
+      <div class="field"><label for="ratio">화면 비율</label><select id="ratio"><option value="4:3">4:3 (그리기 캔버스)</option><option value="3:4">3:4 세로</option><option value="16:9">16:9 와이드</option><option value="1:1">1:1</option></select></div>
+    </section>
+    <section>
+      <h2>만화 렌더</h2>
+      <label class="check"><input id="toon" type="checkbox"> 셀 셰이딩</label>
+      <div class="field"><label for="steps">명암 단계</label><select id="steps"><option value="2">2</option><option value="3">3</option><option value="4">4</option><option value="5">5</option><option value="6">6</option></select></div>
+      <label class="check"><input id="ink" type="checkbox"> 잉크 선</label>
+      <div class="field"><label for="inkWidth">선 굵기</label><input id="inkWidth" type="range" min="0.5" max="5" step="0.25"><output id="inkWidthOut"></output></div>
+      <div class="field"><label for="inkDepth">선 민감도</label><input id="inkDepth" type="range" min="0" max="100" step="5"></div>
+      <label class="check"><input id="tone" type="checkbox"> 망점 톤</label>
+      <div class="field"><label for="toneSize">톤 간격</label><input id="toneSize" type="range" min="3" max="16" step="1"><output id="toneSizeOut"></output></div>
+    </section>
+    <section>
+      <h2>내보내기</h2>
+      <label class="check"><input id="transparent" type="checkbox"> 투명 배경</label>
+      <div class="field"><label for="exportSize">PNG 크기 (긴 변)</label><select id="exportSize"><option value="1200">1200px</option><option value="2400" selected>2400px</option><option value="4000">4000px</option></select></div>
+      <p class="hint">PNG는 그림에 쓰고, 장면 파일은 나중에 3D를 다시 고칠 때 써요. 그리기로 보내면 1200px로 맨 아래 레이어에 들어가요.</p>
+    </section>
+  </aside>
+</main>
+<div id="toast3d" class="s3-toast" role="status" hidden></div>
+<script type="module" src="./src/studio3d/studio.js"></script>
+</body>
+</html>

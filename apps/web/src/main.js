@@ -4,6 +4,7 @@ import { applyScreentoneToCanvas } from './tone/screentone.js';
 import { canvasUnitsPerCssPixel, clientToCanvasPoint, parseCssTransformMatrix } from './viewport/coordinates.js';
 import { classifyMultiTouchTap, classifyTouchStart, pinchViewport, snapViewportRotation } from './viewport/gestures.js';
 import { hexToHsv, hsvToHex, sampleImageDataColor } from './color/color-utils.js';
+import { BACKGROUND_SLOT, containRect, takeHandoff } from './handoff/handoff-store.js';
 import { coalescedPointerEvents, createFrameScheduler, normalizePointerPressure, stabilizePoint } from './brush/brush-engine.js';
 import { finishVectorPoints, shouldKeepVectorSample, vectorSampleSpacing } from './line/vector-input.js';
 import { createRasterStroke, getRasterBrush } from './brush/raster-brush.js';
@@ -4450,6 +4451,39 @@ async function start() {
   updateProjectUi();
   const restored = await restoreOrCreateProject();
   if (!restored) render(layers.map((_, index) => index));
+  await importPendingBackground();
+}
+
+/**
+ * A background sent from the 3D Background Studio arrives as a new raster
+ * layer at the bottom of the stack, fitted inside the canvas. Existing layers
+ * and their pixels are untouched; the layer can be hidden or deleted as usual.
+ */
+async function importPendingBackground() {
+  let handoff = null;
+  try {
+    handoff = await takeHandoff(BACKGROUND_SLOT);
+  } catch (error) {
+    console.warn('Background hand-off could not be read:', error);
+  }
+  if (!handoff?.blob) return;
+  try {
+    const bitmap = await createImageBitmap(handoff.blob);
+    if (playbackActive) setPlaybackEnabled(false);
+    const layer = makeLayer(handoff.name ? `3D 배경 · ${handoff.name}`.slice(0, 40) : '3D 배경');
+    const rect = containRect(bitmap.width, bitmap.height, W, H);
+    layer.canvas.getContext('2d').drawImage(bitmap, rect.x, rect.y, rect.width, rect.height);
+    bitmap.close?.();
+    layer.celDirty = true;
+    layers.unshift(layer);
+    active += 1; // keep the layer you were drawing on selected
+    saveActiveFrame();
+    render(layers.map((_, index) => index));
+    showToast('3D 배경을 맨 아래 레이어로 가져왔어요');
+  } catch (error) {
+    console.error('Background import failed:', error);
+    showToast('3D 배경을 가져오지 못했어요');
+  }
 }
 
 start().catch(error => {
