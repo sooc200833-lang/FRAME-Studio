@@ -52,7 +52,7 @@ export function createVectorBrushStyle({ brushPreset = 'ink', pressureCurve = 1,
     brushPreset: preset.name,
     pressureCurve: Math.max(0.35, Math.min(2.5, Number(pressureCurve) || 1)),
     opacity: Math.max(0.05, Math.min(1, Number(opacity ?? preset.opacity))),
-    motionStyle: ['none', 'redraw', 'flicker', 'wave'].includes(motionStyle) ? motionStyle : 'none',
+    motionStyle: ['none', 'redraw', 'flicker', 'wave', 'boil'].includes(motionStyle) ? motionStyle : 'none',
     motionStrength: Math.max(0, Math.min(16, Number(motionStrength) || 0)),
   };
 }
