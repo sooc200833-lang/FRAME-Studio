@@ -78,6 +78,14 @@
 
     <div class="hud" aria-live="polite"><span id="saveStatus" data-state="idle">자동 저장 준비 중</span><span id="status">VECTOR</span><button id="zoomLevel" class="hud-zoom" title="눌러서 화면에 맞춤">100%</button></div>
     <div class="toast" id="toast" role="status" hidden></div>
+    <div class="export-overlay" id="exportOverlay" hidden role="dialog" aria-modal="true" aria-labelledby="exportTitle">
+      <div class="export-card">
+        <strong id="exportTitle">내보내는 중…</strong>
+        <div class="export-bar"><span id="exportBar"></span></div>
+        <small id="exportProgress">준비 중</small>
+        <button id="exportCancel">취소</button>
+      </div>
+    </div>
 
     <!-- ───────── Popovers ───────── -->
     <section class="popover" id="actionsPopover" data-side="left" hidden aria-label="작업">
@@ -86,7 +94,22 @@
       <button id="newProject" class="menu-row">새 작품 시작<small>지금 작품은 자동 저장돼요</small></button>
       <div id="projectList" class="project-list" aria-label="저장된 작품"></div>
       <h4>내보내기</h4>
-      <button id="export" class="menu-row">PNG로 내보내기<small>현재 프레임</small></button>
+      <div class="field"><label for="exportFormat">형식</label><select id="exportFormat">
+        <option value="png">PNG 한 장 (현재 프레임)</option>
+        <option value="mp4">MP4 영상</option>
+        <option value="gif">GIF</option>
+        <option value="png-sequence">PNG 시퀀스 (zip)</option>
+        <option value="webm">WebM 영상</option>
+      </select></div>
+      <div class="field"><label for="exportScale">크기</label><select id="exportScale">
+        <option value="1">원본 (1200×900)</option>
+        <option value="0.5">50%</option>
+        <option value="0.25">25%</option>
+      </select></div>
+      <div class="field export-range"><label>구간</label><span><input id="exportStart" type="number" min="1" value="1" inputmode="numeric" aria-label="시작 프레임"> – <input id="exportEnd" type="number" min="1" value="1" inputmode="numeric" aria-label="끝 프레임"></span></div>
+      <label class="check-field" id="exportTransparentRow"><input id="exportTransparent" type="checkbox"><span>배경 투명하게 (PNG)</span></label>
+      <p id="exportInfo" class="note"></p>
+      <button id="export" class="wide-btn primary">내보내기</button>
       <h4>보기</h4>
       <div class="viewport-controls" role="group" aria-label="캔버스 보기 조절">
         <button id="zoomOut" title="축소" aria-label="축소">−</button>

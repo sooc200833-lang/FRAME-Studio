@@ -6,6 +6,9 @@ This document tracks components FRAME Studio uses and projects reviewed for arch
 
 | Project | License | Use in FRAME Studio |
 |---|---|---|
+| [gifenc](https://github.com/mattdesl/gifenc) | MIT | GIF encoding for animation export (loaded on demand) |
+| [fflate](https://github.com/101arrowz/fflate) | MIT | Zip for PNG-sequence export (loaded on demand) |
+| [Mediabunny](https://github.com/Vanilagy/mediabunny) | MPL-2.0 | MP4/WebM muxing with WebCodecs for video export (loaded on demand, unmodified) |
 | [PixiJS](https://github.com/pixijs/pixijs) | MIT | Stage rendering, textures, vector display and layer compositing |
 
 ## Brush engine and color-mixing work
