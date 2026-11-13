@@ -105,3 +105,48 @@ test('static lines remain static when global amplitude is zero', () => {
   assert.equal(result.motionPasses, null);
   assert.deepEqual(result.points, fixed.points);
 });
+
+import { lineMotionPhase, normalizeMotionSpeed, normalizeMotionStep } from '../apps/web/src/line/line-boil.js';
+
+const motionLine = (extra = {}) => ({ id: 'line-m', points: [{ x: 0, y: 0, pressure: 0.5 }, { x: 60, y: 10, pressure: 0.5 }, { x: 140, y: 0, pressure: 0.5 }], width: 6, ...extra });
+
+test('static lines stay put when the global boil is off, even next to animated lines', () => {
+  const still = motionLine({ id: 'still', motionStyle: 'none' });
+  const boiling = motionLine({ id: 'boiling', motionStyle: 'boil', motionStrength: 4 });
+  const [a, b] = animateLineStrokes([still, boiling], { phase: 1, amplitude: 3, globalBoil: false, elapsedMs: 500 });
+  assert.equal(a, still, 'a static line is returned untouched');
+  assert.equal(b.motionPasses.length, 3);
+  // With the global switch on, static lines follow it as before.
+  const followed = animateLineStrokes([still], { phase: 1, amplitude: 3, globalBoil: true })[0];
+  assert.notDeepEqual(followed.points, still.points);
+});
+
+test('stepped motion holds each drawing, then jumps', () => {
+  const step = 8; // 8 drawings per second → 125 ms each
+  assert.equal(lineMotionPhase(10, { step }), lineMotionPhase(120, { step }));
+  assert.notEqual(lineMotionPhase(120, { step }), lineMotionPhase(130, { step }));
+  // A stepped line's geometry is identical inside one hold.
+  const line = motionLine({ motionStyle: 'wave', motionStrength: 5, motionStep: step });
+  const at = ms => animateLineStrokes([line], { amplitude: 3, globalBoil: false, elapsedMs: ms })[0].points;
+  assert.deepEqual(at(130), at(240));
+  assert.notDeepEqual(at(240), at(260));
+});
+
+test('smooth motion follows each line\'s own speed', () => {
+  assert.equal(lineMotionPhase(1000, { speed: 1 }), Math.PI * 2);
+  assert.equal(lineMotionPhase(1000, { speed: 2 }), Math.PI * 4);
+  const slow = motionLine({ motionStyle: 'wave', motionStrength: 5, motionSpeed: 0.5 });
+  const fast = motionLine({ motionStyle: 'wave', motionStrength: 5, motionSpeed: 1 });
+  // Half speed at 2 s matches full speed at 1 s.
+  assert.deepEqual(
+    animateLineStrokes([slow], { globalBoil: false, elapsedMs: 2000 })[0].points,
+    animateLineStrokes([fast], { globalBoil: false, elapsedMs: 1000 })[0].points,
+  );
+});
+
+test('motion settings are clamped', () => {
+  assert.equal(normalizeMotionSpeed(99), 4);
+  assert.equal(normalizeMotionSpeed('x'), 1);
+  assert.equal(normalizeMotionStep(7), 0, 'only the offered rhythms are allowed');
+  assert.equal(normalizeMotionStep(12), 12);
+});

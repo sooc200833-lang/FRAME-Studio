@@ -13,7 +13,7 @@ test('pressure changes vector stroke width according to brush profile', () => {
 });
 test('vector brush presets have distinct profiles and style is serializable', () => {
   assert.notEqual(getVectorBrushPreset('pencil').pressurePower, getVectorBrushPreset('marker').pressurePower);
-  assert.deepEqual(createVectorBrushStyle({ brushPreset: 'dry', motionStyle: 'redraw' }), { brushPreset: 'dry', pressureCurve: 1, opacity: 0.88, motionStyle: 'redraw', motionStrength: 3 });
+  assert.deepEqual(createVectorBrushStyle({ brushPreset: 'dry', motionStyle: 'redraw' }), { brushPreset: 'dry', pressureCurve: 1, opacity: 0.88, motionStyle: 'redraw', motionStrength: 3, motionSpeed: 1, motionStep: 0 });
 });
 
 test('stroke width profile is clamped and sampled continuously along the stroke', () => {
