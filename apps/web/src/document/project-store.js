@@ -102,6 +102,65 @@ export async function listProjects() {
     .sort((a, b) => String(b.updatedAt).localeCompare(String(a.updatedAt)));
 }
 
+/** Every stored image key that belongs to a project (keys are `${projectId}/…`). */
+function projectImageRange(id) {
+  return IDBKeyRange.bound(`${id}/`, `${id}/\uffff`);
+}
+
+/**
+ * Copies a saved project under a new id. `retarget(doc)` must return
+ * `{ doc, keyMap }` (see retargetProjectDocument). Images are copied as Blobs.
+ */
+export async function duplicateProjectRecord(id, retarget) {
+  const db = await openProjectDb();
+  const read = db.transaction(['projects', 'images']);
+  const record = await request(read.objectStore('projects').get(id));
+  if (!record?.doc) throw new Error('작품을 찾지 못했어요');
+  const { doc, keyMap } = retarget(record.doc);
+  const images = read.objectStore('images');
+  const blobs = await Promise.all([...keyMap].map(([from, to]) => request(images.get(from)).then(blob => [to, blob])));
+  const tx = db.transaction(['projects', 'images'], 'readwrite');
+  const done = transactionDone(tx);
+  tx.objectStore('projects').put({ id: doc.id, name: doc.name, updatedAt: doc.updatedAt, thumbnail: record.thumbnail, doc });
+  for (const [key, blob] of blobs) if (blob) tx.objectStore('images').put(blob, key);
+  await done;
+  return doc;
+}
+
+/**
+ * Deletes a project and all its images. Returns a snapshot that
+ * restoreProjectSnapshot can put back (for "undo delete").
+ */
+export async function deleteProjectRecord(id) {
+  const db = await openProjectDb();
+  const tx = db.transaction(['projects', 'images', 'meta'], 'readwrite');
+  const done = transactionDone(tx);
+  const projects = tx.objectStore('projects');
+  const images = tx.objectStore('images');
+  const range = projectImageRange(id);
+  const [record, keys, blobs, lastId] = await Promise.all([
+    request(projects.get(id)),
+    request(images.getAllKeys(range)),
+    request(images.getAll(range)),
+    request(tx.objectStore('meta').get('lastProjectId')),
+  ]);
+  projects.delete(id);
+  images.delete(range);
+  if (lastId === id) tx.objectStore('meta').delete('lastProjectId');
+  await done;
+  return { record, images: keys.map((key, index) => [key, blobs[index]]) };
+}
+
+export async function restoreProjectSnapshot(snapshot) {
+  if (!snapshot?.record) return;
+  const db = await openProjectDb();
+  const tx = db.transaction(['projects', 'images'], 'readwrite');
+  const done = transactionDone(tx);
+  tx.objectStore('projects').put(snapshot.record);
+  for (const [key, blob] of snapshot.images) tx.objectStore('images').put(blob, key);
+  await done;
+}
+
 export async function getMeta(key) {
   const db = await openProjectDb();
   return request(db.transaction('meta').objectStore('meta').get(key));
