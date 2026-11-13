@@ -5,6 +5,7 @@ import { canvasUnitsPerCssPixel, clientToCanvasPoint, parseCssTransformMatrix } 
 import { classifyMultiTouchTap, classifyTouchStart, pinchViewport, snapViewportRotation } from './viewport/gestures.js';
 import { hexToHsv, hsvToHex, sampleImageDataColor } from './color/color-utils.js';
 import { coalescedPointerEvents, createFrameScheduler, normalizePointerPressure, stabilizePoint } from './brush/brush-engine.js';
+import { finishVectorPoints, shouldKeepVectorSample, vectorSampleSpacing } from './line/vector-input.js';
 import { createRasterStroke, getRasterBrush } from './brush/raster-brush.js';
 import { StrokeBuffer } from './brush/raster-brush-canvas.js';
 import { createSmudgeSession } from './brush/smudge-engine.js';
@@ -2893,6 +2894,9 @@ function bindCanvasEvents() {
   // New dabs are stamped as samples arrive; the screen refresh is batched to
   // at most one per animation frame.
   const brushPreviewScheduler = createFrameScheduler(showRasterStroke);
+  // Pen events can arrive several times per display frame; redraw the vector
+  // preview once per frame with every sample collected so far.
+  const vectorPreviewScheduler = createFrameScheduler(previewVectorDrawing);
   const smudgeRenderScheduler = createFrameScheduler(() => {
     if (!smudgeSession) return;
     const context = layers[active].canvas.getContext('2d');
@@ -3459,19 +3463,21 @@ function bindCanvasEvents() {
     }
 
     if (tool === 'vector') {
+      const minDistance = vectorSampleSpacing(cssToCanvasUnits(1));
       for (const sample of coalescedPointerEvents(event)) {
         const samplePoint = position(sample);
         const previous = drawingPoints[drawingPoints.length - 1];
         const sampleTime = Number(sample.timeStamp ?? event.timeStamp) || lastVectorSampleTime + 16;
-        if (Math.hypot(samplePoint.x - previous.x, samplePoint.y - previous.y) >= 1.25) {
-          const pressure = sample.pointerType === 'pen'
-            ? normalizePointerPressure(sample, pressureEnabled)
-            : estimateVectorMousePressure(previous, samplePoint, sampleTime - lastVectorSampleTime, size);
-          drawingPoints.push({ ...samplePoint, pressure });
+        const pressure = sample.pointerType === 'pen'
+          ? normalizePointerPressure(sample, pressureEnabled)
+          : estimateVectorMousePressure(previous, samplePoint, sampleTime - lastVectorSampleTime, size);
+        const candidate = { ...samplePoint, pressure };
+        if (shouldKeepVectorSample(previous, candidate, { minDistance })) {
+          drawingPoints.push(candidate);
           lastVectorSampleTime = sampleTime;
         }
       }
-      previewVectorDrawing();
+      vectorPreviewScheduler.schedule();
       return;
     }
 
@@ -3722,6 +3728,7 @@ function bindCanvasEvents() {
       // undo snapshot that pointerdown recorded for raster tools.
       if (tool !== 'vector' && !maskEditing) layers[active].undo.pop();
       if (tool === 'pen' || tool === 'eraser') cancelRasterStroke();
+      vectorPreviewScheduler.cancel();
       strokeSamples = [];
       strokeIsStylus = false;
       drawingPoints = null;
@@ -3743,13 +3750,14 @@ function bindCanvasEvents() {
     }
 
     if (tool === 'vector') {
-      const previous = drawingPoints[drawingPoints.length - 1];
-      if (Math.hypot(point.x - previous.x, point.y - previous.y) > 0.1) drawingPoints.push({ ...point, pressure: event.pointerType === 'pen' ? normalizePointerPressure(event, pressureEnabled) : 0.5 });
-      if (drawingPoints.length === 1) drawingPoints.push({ x: point.x + 0.1, y: point.y + 0.1 });
+      vectorPreviewScheduler.cancel();
+      // A lifting pen reports pressure 0 and a mouse none: the end point keeps
+      // the last real pressure so the line end doesn't blob or thin on pen-up.
+      const finishedPoints = finishVectorPoints(drawingPoints, point);
       commitLineHistory(lineSnapshot());
       const created = createLineStroke({
         id: 'line-' + nextLineId++,
-        points: drawingPoints,
+        points: finishedPoints,
         color,
         width: size,
         brushPreset: vectorBrushPreset,
@@ -3795,6 +3803,14 @@ function bindCanvasEvents() {
 
   inputSurface.addEventListener('pointerup', end);
   inputSurface.addEventListener('pointercancel', end);
+  // Switching apps or windows mid-stroke may never deliver pointerup; discard
+  // the unfinished stroke instead of leaving the tool stuck in "drawing".
+  const abandonStroke = () => {
+    if (!down || !['vector', 'pen', 'eraser', 'shape', 'line'].includes(tool)) return;
+    end({ type: 'pointercancel', pointerId: penPointerId ?? -1, clientX: 0, clientY: 0, pressure: 0, button: 0 });
+  };
+  window.addEventListener('blur', abandonStroke);
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') abandonStroke(); });
 }
 
 function bindKeyboardShortcuts() {

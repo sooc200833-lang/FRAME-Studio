@@ -55,6 +55,12 @@ Always distinguish code-level tests from visual browser checks and physical iPad
   - `paper` names a seamless 256² paper tooth (`paperGrain`, pure and tested), anchored to the canvas.
   - `StrokeBuffer` cuts the tooth out of the stroke at composite time, only inside the painted bounds. Preview and commit therefore stay the same picture, and erasing with these brushes is grainy too.
   - Grain does not yet fill in with harder pressure.
+### Live pressure vector lines (v1.11)
+- Input sampling is in `line/vector-input.js` (pure, tested). The live preview and the committed line use the same point list and the same `createLineStroke` → `drawVectorStroke` path, so pen-up changes nothing except the final pen-up position.
+- Pen-up: a lifting pen reports pressure 0, and a mouse reports none. The end point therefore inherits the last real pressure. Previously it fell back to 0.5, which put a blob on light lines and a nub on heavy ones. A tap becomes a dot at the tap pressure.
+- Sampling: about 1.5 screen px of spacing (follows zoom, 0.35–2.5 canvas units). Closer samples are still kept when pressure changes by ≥ 0.06, so slow pressure changes are not dropped.
+- The preview redraws once per display frame (rAF), not on every pointer event. Losing window focus or hiding the tab mid-stroke discards the unfinished line, the same as pointercancel.
+- Not done: `getPredictedEvents()`. The brief asks to measure it on a device first, and it would stay display-only.
 
 ### Project gallery (v1.10)
 - 작업 → 작품 목록: each project row has 복제 and 삭제. Duplicate copies the saved record under a new id (`retargetProjectDocument` remaps the project-scoped image keys; images are copied as Blobs). Duplicating the open project saves it first so the copy matches the screen. Names avoid clashes ("A 사본", "A 사본 2").
