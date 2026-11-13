@@ -44,6 +44,18 @@ Always distinguish code-level tests from visual browser checks and physical iPad
 - Freehand vector strokes are no longer left selected after drawing, so brush/color changes apply to the next stroke rather than restyling the previous one.
 - Verified in headless Chrome (layout at 1180×820 and 390×844, synthetic touch pinch/undo, eyedropper). Not yet verified on a physical iPad.
 
+### Doodraw-style brushes, 2nd pass (v1.12)
+- Each moving line has its own **움직임 리듬** and **움직임 속도** (`motionStep`, `motionSpeed` on the stroke).
+  - Rhythm 0 is smooth; speed only applies there.
+  - 12/8/6/4 redraws per second hold each drawing and then jump to a clearly different one (golden-angle phase steps). This is the hand-redrawn boil look.
+  - `lineMotionPhase` is deterministic, and export uses the same `lineMotionSettings`, so exported frames match the screen.
+- Fix: static lines (고정) no longer wobble when another line has a motion style and Line Boil is off (`animateLineStrokes(..., { globalBoil })`).
+- Fix: export animates per-line motion styles even with Line Boil off (it used to export them frozen).
+- Raster **분필 Chalk** and **크레용 Crayon**:
+  - `paper` names a seamless 256² paper tooth (`paperGrain`, pure and tested), anchored to the canvas.
+  - `StrokeBuffer` cuts the tooth out of the stroke at composite time, only inside the painted bounds. Preview and commit therefore stay the same picture, and erasing with these brushes is grainy too.
+  - Grain does not yet fill in with harder pressure.
+
 ### Project gallery (v1.10)
 - 작업 → 작품 목록: each project row has 복제 and 삭제. Duplicate copies the saved record under a new id (`retargetProjectDocument` remaps the project-scoped image keys; images are copied as Blobs). Duplicating the open project saves it first so the copy matches the screen. Names avoid clashes ("A 사본", "A 사본 2").
 - Delete needs two taps ("삭제할까요?", 4 s). It removes the record and every image under `${id}/`, then shows a 5 s 되돌리기 toast that puts the snapshot back. Deleting the open project opens the most recent other project, or a blank one.

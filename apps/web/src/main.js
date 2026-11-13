@@ -10,7 +10,7 @@ import { StrokeBuffer } from './brush/raster-brush-canvas.js';
 import { createSmudgeSession } from './brush/smudge-engine.js';
 import { normalizeBrushBlendMode } from './brush/blend-modes.js';
 import { expandRegionMask, findConnectedRegion } from './fill/flood-fill.js';
-import { animateLineStrokes, lineBoilPhase } from './line/line-boil.js';
+import { animateLineStrokes, lineBoilPhase, normalizeMotionSpeed, normalizeMotionStep } from './line/line-boil.js';
 import { EXPORT_FORMATS, resolveExportPlan } from './export/export-plan.js';
 import { buildProjectDocument, duplicateProjectName, parseProjectDocument, referencedImageKeys, retargetProjectDocument } from './document/project-format.js';
 import { deleteProjectRecord, duplicateProjectRecord, isProjectStorageAvailable, listProjects, loadImageDataUrls, loadProjectRecord, getMeta, requestPersistentStorage, restoreProjectSnapshot, saveProjectRecord, setMeta } from './document/project-store.js';
@@ -185,6 +185,8 @@ let pressureProfileDrag = false;
 let lineStyleEditSnapshot = null;
 let vectorMotionStyle = 'none';
 let vectorMotionStrength = 3;
+let vectorMotionSpeed = 1;
+let vectorMotionStep = 0;
 let selectedNodeIndex = null;
 let nodeDragging = false;
 let nodeMoveSnapshot = null;
@@ -602,11 +604,18 @@ function composite({ background = true, strokes = vectorStrokes } = {}) {
 }
 
 function boiledStrokes(timestamp = performance.now()) {
-  return animateLineStrokes(vectorStrokes, {
-    phase: lineBoilPhase(timestamp - boilStartedAt, Number(document.getElementById('boilSpeed').value)),
+  return animateLineStrokes(vectorStrokes, lineMotionSettings(timestamp - boilStartedAt));
+}
+
+/** Settings for animateLineStrokes at `elapsedMs` (screen, preview and export share them). */
+function lineMotionSettings(elapsedMs) {
+  return {
+    phase: lineBoilPhase(elapsedMs, Number(document.getElementById('boilSpeed').value)),
     amplitude: Number(document.getElementById('boilAmplitude').value),
     frequency: Number(document.getElementById('boilFrequency').value),
-  });
+    globalBoil: boilEnabled,
+    elapsedMs,
+  };
 }
 
 function render(dirtyIndices = [], displayStrokes = null) {
@@ -1352,6 +1361,19 @@ function updateBoilOutputs() {
   document.getElementById('boilSpeedOut').value = Number(document.getElementById('boilSpeed').value).toFixed(1) + '×';
 }
 
+/** Speed only applies to smooth motion; the rhythm only matters when the line moves. */
+function syncMotionRhythmUi() {
+  const speed = document.getElementById('vectorMotionSpeed');
+  const step = document.getElementById('vectorMotionStep');
+  if (!speed || !step) return;
+  if (document.activeElement !== speed) speed.value = vectorMotionSpeed;
+  document.getElementById('vectorMotionSpeedOut').value = vectorMotionSpeed.toFixed(2).replace(/0$/, '') + '×';
+  step.value = String(vectorMotionStep);
+  const moving = vectorMotionStyle !== 'none';
+  step.disabled = !moving;
+  speed.disabled = !moving || vectorMotionStep > 0;
+}
+
 function hasAnimatedVectorStrokes() {
   return vectorStrokes.some(stroke => stroke.motionStyle && stroke.motionStyle !== 'none');
 }
@@ -1435,6 +1457,8 @@ function updateLineInspector() {
   vectorPressureProfile = normalizeStrokeWidthProfile(stroke.pressureProfile);
   vectorMotionStyle = stroke.motionStyle || 'none';
   vectorMotionStrength = stroke.motionStrength ?? 3;
+  vectorMotionSpeed = stroke.motionSpeed ?? 1;
+  vectorMotionStep = stroke.motionStep ?? 0;
   const lineColor = document.getElementById('lineColor');
   const lineWidth = document.getElementById('lineWidth');
   if (document.activeElement !== lineColor) lineColor.value = stroke.color;
@@ -1448,6 +1472,7 @@ function updateLineInspector() {
   if (document.activeElement !== document.getElementById('vectorMotionStyle')) document.getElementById('vectorMotionStyle').value = stroke.motionStyle || 'none';
   if (document.activeElement !== document.getElementById('vectorMotionStrength')) document.getElementById('vectorMotionStrength').value = stroke.motionStrength ?? 3;
   document.getElementById('vectorMotionStrengthOut').value = (stroke.motionStrength ?? 3) + 'px';
+  syncMotionRhythmUi();
   if (document.activeElement !== lineWidth) lineWidth.value = stroke.width;
   document.getElementById('lineWidthOut').value = stroke.width + 'px';
   const nodeStatus = document.getElementById('lineNodeStatus');
@@ -1773,7 +1798,22 @@ function bindControls() {
   const finishProfileDrag = () => { pressureProfileDrag = false; finishLineStyleEdit(); };
   profileCanvas.addEventListener('pointerup', finishProfileDrag);
   profileCanvas.addEventListener('pointercancel', finishProfileDrag);
-  document.getElementById('vectorMotionStyle').onchange = event => { vectorMotionStyle = event.target.value; if (selectedStrokeIds.size || selectedStrokeId) applySelectedStyle({ motionStyle: vectorMotionStyle }); };
+  document.getElementById('vectorMotionStyle').onchange = event => { vectorMotionStyle = event.target.value; syncMotionRhythmUi(); if (selectedStrokeIds.size || selectedStrokeId) applySelectedStyle({ motionStyle: vectorMotionStyle }); };
+  document.getElementById('vectorMotionStep').onchange = event => {
+    vectorMotionStep = normalizeMotionStep(event.target.value);
+    syncMotionRhythmUi();
+    if (selectedStrokeIds.size || selectedStrokeId) applySelectedStyle({ motionStep: vectorMotionStep });
+  };
+  const motionSpeedInput = document.getElementById('vectorMotionSpeed');
+  motionSpeedInput.addEventListener('pointerdown', beginLineStyleEdit);
+  motionSpeedInput.addEventListener('pointerup', finishLineStyleEdit);
+  motionSpeedInput.addEventListener('pointercancel', finishLineStyleEdit);
+  motionSpeedInput.addEventListener('change', finishLineStyleEdit);
+  motionSpeedInput.oninput = event => {
+    vectorMotionSpeed = normalizeMotionSpeed(event.target.value);
+    syncMotionRhythmUi();
+    if (selectedStrokeIds.size || selectedStrokeId) { beginLineStyleEdit(); applySelectedStyle({ motionSpeed: vectorMotionSpeed }, false); }
+  };
   const opacityInput = document.getElementById('vectorBrushOpacity');
   opacityInput.addEventListener('pointerdown', beginLineStyleEdit);
   opacityInput.addEventListener('pointerup', finishLineStyleEdit);
@@ -2351,6 +2391,7 @@ function paintMode() {
 }
 
 function syncBrushUi() {
+  syncMotionRhythmUi();
   const mode = paintMode();
   const brushPopover = document.getElementById('brushPopover');
   if (brushPopover) brushPopover.dataset.mode = mode;
@@ -2813,6 +2854,8 @@ function previewVectorDrawing() {
     pressureProfile: vectorPressureProfile,
     motionStyle: vectorMotionStyle,
     motionStrength: vectorMotionStrength,
+    motionSpeed: vectorMotionSpeed,
+    motionStep: vectorMotionStep,
   });
   // Animate the preview only when the committed line will animate too; a static
   // line must not wobble while drawing and then snap straight on pen-up.
@@ -2820,8 +2863,7 @@ function previewVectorDrawing() {
     renderer.previewVectorStroke(previewStroke);
     return;
   }
-  const previewPhase = lineBoilPhase(performance.now() - boilStartedAt, Number(document.getElementById('boilSpeed').value));
-  renderer.previewVectorStroke(animateLineStrokes([previewStroke], { phase: previewPhase, amplitude: Number(document.getElementById('boilAmplitude').value) })[0]);
+  renderer.previewVectorStroke(animateLineStrokes([previewStroke], lineMotionSettings(performance.now() - boilStartedAt))[0]);
 }
 
 function createShapePoints(kind, start, end) {
@@ -3693,7 +3735,7 @@ function bindCanvasEvents() {
     if (tool === 'shape') {
       const points = createShapePoints(shapeKind, lineStartPoint, point);
       commitLineHistory(lineSnapshot());
-      const created = createLineStroke({ id: 'line-' + nextLineId++, points: points.map(p => ({ ...p, pressure: 0.5 })), color, width: size, brushPreset: vectorBrushPreset, pressureCurve: vectorPressureCurve, opacity: vectorBrushOpacity, pressureProfile: vectorPressureProfile, motionStyle: vectorMotionStyle, motionStrength: vectorMotionStrength });
+      const created = createLineStroke({ id: 'line-' + nextLineId++, points: points.map(p => ({ ...p, pressure: 0.5 })), color, width: size, brushPreset: vectorBrushPreset, pressureCurve: vectorPressureCurve, opacity: vectorBrushOpacity, pressureProfile: vectorPressureProfile, motionStyle: vectorMotionStyle, motionStrength: vectorMotionStrength, motionSpeed: vectorMotionSpeed, motionStep: vectorMotionStep });
       vectorStrokes.push(assignStrokeToActiveLayer(created));
       selectedStrokeId = created.id;
       selectedStrokeIds.clear(); selectedStrokeIds.add(created.id);
@@ -3716,6 +3758,8 @@ function bindCanvasEvents() {
         pressureProfile: vectorPressureProfile,
         motionStyle: vectorMotionStyle,
         motionStrength: vectorMotionStrength,
+        motionSpeed: vectorMotionSpeed,
+        motionStep: vectorMotionStep,
       });
       vectorStrokes.push(assignStrokeToActiveLayer(created));
       // Freehand drawing should not leave the new line selected; otherwise the
@@ -3731,7 +3775,7 @@ function bindCanvasEvents() {
 
     if (tool === 'line') {
       commitLineHistory(lineSnapshot());
-      const created = createLineStroke({ id: 'line-' + nextLineId++, points: [{ ...lineStartPoint, pressure: 0.5 }, { ...point, pressure: 0.5 }], color, width: size, brushPreset: vectorBrushPreset, pressureCurve: vectorPressureCurve, opacity: vectorBrushOpacity, pressureProfile: vectorPressureProfile, motionStyle: vectorMotionStyle, motionStrength: vectorMotionStrength });
+      const created = createLineStroke({ id: 'line-' + nextLineId++, points: [{ ...lineStartPoint, pressure: 0.5 }, { ...point, pressure: 0.5 }], color, width: size, brushPreset: vectorBrushPreset, pressureCurve: vectorPressureCurve, opacity: vectorBrushOpacity, pressureProfile: vectorPressureProfile, motionStyle: vectorMotionStyle, motionStrength: vectorMotionStrength, motionSpeed: vectorMotionSpeed, motionStep: vectorMotionStep });
       vectorStrokes.push(assignStrokeToActiveLayer(created));
       selectedStrokeId = created.id;
       selectedStrokeIds.clear(); selectedStrokeIds.add(created.id);
@@ -4301,12 +4345,10 @@ function setExportProgress(done, total, label) {
 async function renderExportFrame(tick, plan, { transparent }) {
   timeline.playhead = tick;
   await syncClipsToPlayhead({ save: false });
-  const strokes = boilEnabled
-    ? animateLineStrokes(vectorStrokes, {
-      phase: lineBoilPhase(tick * plan.frameDurationMs, Number(document.getElementById('boilSpeed').value)),
-      amplitude: Number(document.getElementById('boilAmplitude').value),
-      frequency: Number(document.getElementById('boilFrequency').value),
-    })
+  // Lines with their own motion style animate in the export even when the
+  // global Line Boil switch is off, exactly as they do on screen.
+  const strokes = boilEnabled || hasAnimatedVectorStrokes()
+    ? animateLineStrokes(vectorStrokes, lineMotionSettings(tick * plan.frameDurationMs))
     : vectorStrokes;
   const full = composite({ background: !transparent, strokes }).canvas;
   if (plan.width === W && plan.height === H) return full;
