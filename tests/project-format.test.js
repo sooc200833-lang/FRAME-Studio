@@ -11,7 +11,7 @@ const timeline = {
   nextClipId: 5,
   tracks: {
     'layer-1': { clips: [{ id: 'clip-1', hold: 2, cel: 'data:image/png;base64,AAA', transformCel: [] }, { id: 'clip-2', hold: 1, cel: null, transformCel: [] }] },
-    vector: { clips: [{ id: 'clip-3', hold: 4, cel: null, transformCel: [], strokes: [{ id: 'line-1', points: [{ x: 1, y: 2 }] }] }] },
+    'layer-2': { clips: [{ id: 'clip-3', hold: 4, cel: null, transformCel: [], strokes: [{ id: 'line-1', points: [{ x: 1, y: 2 }] }] }] },
   },
 };
 const layers = [
@@ -34,7 +34,7 @@ test('build keeps images out of the JSON and lists them by key', () => {
   assert.deepEqual(images.map(image => image.key).sort(), ['p1/clip/clip-1', 'p1/mask/layer-1']);
   assert.equal(doc.tracks['layer-1'].clips[0].celImage, clipImageKey('p1', 'clip-1'));
   assert.equal(doc.tracks['layer-1'].clips[1].celImage, null);
-  assert.deepEqual(doc.tracks.vector.clips[0].strokes[0].points, [{ x: 1, y: 2 }]);
+  assert.deepEqual(doc.tracks['layer-2'].clips[0].strokes[0].points, [{ x: 1, y: 2 }]);
   assert.deepEqual(referencedImageKeys(doc), new Set(images.map(image => image.key)));
 });
 
@@ -45,14 +45,13 @@ test('a built document survives a JSON round trip and parses back', () => {
   assert.equal(parsed.fps, 8);
   assert.equal(parsed.playhead, 3);
   assert.equal(parsed.active, 1);
-  assert.equal(parsed.activeTrackId, 'vector');
   assert.equal(parsed.layers[0].opacity, 0.8);
   assert.equal(parsed.layers[0].blendMode, 'multiply');
   assert.equal(parsed.layers[0].groupId, 'group-1');
   assert.equal(parsed.layers[1].visible, false);
   assert.deepEqual(parsed.layers[0].motionTrack, [{ tick: 2, x: 10 }]);
   assert.equal(parsed.tracks['layer-1'].clips[0].hold, 2);
-  assert.equal(parsed.tracks.vector.clips[0].strokes.length, 1);
+  assert.equal(parsed.tracks['layer-2'].clips[0].strokes.length, 1);
 });
 
 test('id counters stay above every saved id', () => {
@@ -87,4 +86,31 @@ test('rejects foreign, future-version, empty and wrong-size documents', () => {
   const { doc } = build();
   assert.throws(() => parseProjectDocument({ ...doc, layers: [] }));
   assert.throws(() => parseProjectDocument(doc, { width: 800, height: 600 }));
+});
+
+test('v1 shared vector track becomes a "벡터 선" layer with the same timing', () => {
+  const { doc } = build();
+  const v1 = JSON.parse(JSON.stringify(doc));
+  v1.version = 1;
+  v1.tracks.vector = v1.tracks['layer-2'];
+  delete v1.tracks['layer-2'];
+  const parsed = parseProjectDocument(v1);
+  const added = parsed.layers.at(-1);
+  assert.equal(added.name, '벡터 선');
+  assert.equal(added.id, 'layer-3');
+  assert.equal(parsed.tracks.vector, undefined);
+  assert.equal(parsed.tracks[added.id].clips[0].hold, 4);
+  assert.equal(parsed.tracks[added.id].clips[0].strokes[0].id, 'line-1');
+  assert.ok(parsed.nextLayerId >= 4);
+});
+
+test('v1 empty vector track is dropped without adding a layer, orphan tracks are dropped', () => {
+  const { doc } = build();
+  const v1 = JSON.parse(JSON.stringify(doc));
+  v1.version = 1;
+  v1.tracks.vector = { clips: [{ id: 'clip-9', hold: 1, celImage: null, transformCel: [], strokes: [] }] };
+  v1.tracks['layer-77'] = { clips: [{ id: 'clip-10', hold: 1 }] };
+  const parsed = parseProjectDocument(v1);
+  assert.equal(parsed.layers.length, 2);
+  assert.equal(parsed.tracks['layer-77'], undefined);
 });

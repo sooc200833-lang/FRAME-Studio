@@ -7,11 +7,10 @@ This document tracks components FRAME Studio uses and projects reviewed for arch
 | Project | License | Use in FRAME Studio |
 |---|---|---|
 | [PixiJS](https://github.com/pixijs/pixijs) | MIT | Stage rendering, textures, vector display and layer compositing |
-| [perfect-freehand](https://github.com/steveruizok/perfect-freehand) | MIT | Pressure-sensitive raster brush outlines, tapering and streamlining |
 
 ## Brush engine and color-mixing work
 
-- The raster outline path continues to use the MIT-licensed `perfect-freehand` package for pressure-shaped stroke geometry.
+- perfect-freehand was removed in v1.8; the raster brush is now an in-house stamp engine.
 - PixiJS is used for live brush preview; the preview and committed Canvas 2D stroke share a constrained blend-mode mapping (`normal`, `multiply`, `screen`, `overlay`).
 - `apps/web/src/brush/smudge-engine.js` is a small, local ImageData smudge implementation with pressure-scaled radius, configurable spacing, alpha-aware color mixing, and bounded per-dab pixel work.
 - The smudge interaction is informed by the MIT-licensed [Klecks](https://github.com/bitbof/klecks) brush workflow. Its upstream smudge and blend modules were inspected, but not copied: they depend on Klecks-specific history, tile, selection-mask, and canvas abstractions.
@@ -54,4 +53,4 @@ This document tracks components FRAME Studio uses and projects reviewed for arch
 
 ## Current status
 
-PixiJS 8.20.1 and perfect-freehand 1.2.3 are integrated. Klecks, Quickdraw, Graphite, miniPaint, Pencil2D, MyPaint, and libmypaint have been reviewed as references. No upstream source code from these reference projects is copied or bundled. The local smudge engine is an independent implementation.
+PixiJS 8.20.1 is integrated (perfect-freehand was used until v1.8). Klecks, Quickdraw, Graphite, miniPaint, Pencil2D, MyPaint, and libmypaint have been reviewed as references. No upstream source code from these reference projects is copied or bundled. The local smudge engine is an independent implementation.

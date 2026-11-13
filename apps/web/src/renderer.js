@@ -1,11 +1,9 @@
 import { sampleLineStrokePath } from './line/line-engine.js';
 import { buildVectorStrokeSegments } from './line/vector-rendering.js';
-import { Application, Container, Graphics, Matrix, Sprite, Texture } from 'pixi.js';
-import { applyBrushTexture } from './brush/brush-engine.js';
+import { AlphaFilter, Application, Container, Graphics, Matrix, Sprite, Texture } from 'pixi.js';
 import { getVectorGraphicsCacheEntry, pruneVectorGraphicsCache } from './renderer/vector-graphics-cache.js';
 import { getPolygonBounds, getPolygonTransformHandles } from './selection/selection.js';
 import { createRendererInitOptions, initializeWithBackendFallback } from './renderer/renderer-options.js';
-import { toPixiBrushBlendMode } from './brush/blend-modes.js';
 
 export class PixiStageRenderer {
   constructor(width, height) {
@@ -14,10 +12,6 @@ export class PixiStageRenderer {
     this.app = null;
     this.background = null;
     this.preview = null;
-    this.previewTextureCanvas = null;
-    this.previewTextureContext = null;
-    this.previewTexture = null;
-    this.previewTextureSprite = null;
     this.entries = new Map();
     this.layerPreviews = new Map();
     this.strokeGraphics = [];
@@ -58,17 +52,10 @@ export class PixiStageRenderer {
 
     this.background = new Graphics().rect(0, 0, this.width, this.height).fill(0xf4f0e8);
     this.preview = new Graphics();
-    this.previewTextureCanvas = document.createElement('canvas');
-    this.previewTextureCanvas.width = 1;
-    this.previewTextureCanvas.height = 1;
-    this.previewTextureContext = this.previewTextureCanvas.getContext('2d');
-    this.previewTexture = Texture.from(this.previewTextureCanvas);
-    this.previewTextureSprite = new Sprite(this.previewTexture);
-    this.previewTextureSprite.visible = false;
     // Live stroke previews share one container so they can follow the active
     // layer's movement transform while painting on a moved layer.
     this.previewContainer = new Container();
-    this.previewContainer.addChild(this.preview, this.previewTextureSprite);
+    this.previewContainer.addChild(this.preview);
     app.stage.addChild(this.background, this.previewContainer);
     return app.canvas;
   }
@@ -118,8 +105,25 @@ export class PixiStageRenderer {
     // Rebuild transient overlays, but keep committed vector paths attached to their cache entries.
     for (const graphics of this.strokeGraphics) this.releaseGraphics(graphics);
     this.strokeGraphics = [];
-    for (const entry of this.vectorGraphicsCache.values()) this.app.stage.removeChild(entry.graphics);
+    for (const entry of this.vectorGraphicsCache.values()) entry.graphics.parent?.removeChild(entry.graphics);
 
+    // Drop display objects of layers that no longer exist (deleted layers,
+    // or every layer after switching projects).
+    const current = new Set(layers);
+    for (const [layer, entry] of this.entries) {
+      if (current.has(layer)) continue;
+      entry.group.parent?.removeChild(entry.group);
+      entry.vectors.destroy({ children: false });
+      entry.group.destroy({ children: false });
+      entry.sprite.destroy();
+      entry.texture.destroy(true);
+      this.entries.delete(layer);
+      this.layerPreviews.delete(layer);
+    }
+
+    // Each layer is one container: its raster sprite with its vector lines
+    // on top, so visibility, opacity, blend mode, order and movement apply to
+    // both.
     layers.forEach((layer, index) => {
       let entry = this.entries.get(layer);
       if (!entry) {
@@ -129,15 +133,20 @@ export class PixiStageRenderer {
         const sprite = new Sprite(texture);
         sprite.width = this.width;
         sprite.height = this.height;
-        entry = { texture, sprite, displayCanvas };
+        const vectors = new Container();
+        const group = new Container();
+        group.addChild(sprite, vectors);
+        entry = { texture, sprite, displayCanvas, vectors, group };
         this.entries.set(layer, entry);
-        this.app.stage.addChildAt(sprite, this.app.stage.children.length - 1);
+        this.app.stage.addChildAt(group, this.app.stage.children.length - 1);
       }
 
-      entry.sprite.visible = layer.renderVisible ?? layer.visible;
-      entry.sprite.alpha = layer.renderOpacity ?? layer.opacity ?? 1;
-      setDisplayMatrix(entry.sprite, layer.renderMatrix);
-      entry.sprite.blendMode = layer.renderBlendMode || layer.blendMode || 'normal';
+      const blendMode = layer.renderBlendMode || layer.blendMode || 'normal';
+      entry.group.visible = layer.renderVisible ?? layer.visible;
+      setGroupOpacity(entry, layer.renderOpacity ?? layer.opacity ?? 1);
+      setDisplayMatrix(entry.group, layer.renderMatrix);
+      entry.sprite.blendMode = blendMode;
+      entry.vectors.blendMode = blendMode;
       if (dirtyIndices.includes(index) || !entry.initialized) {
         const context = entry.displayCanvas.getContext('2d');
         context.clearRect(0, 0, this.width, this.height);
@@ -156,21 +165,28 @@ export class PixiStageRenderer {
     });
 
     layers.forEach((layer, index) => {
-      const sprite = this.entries.get(layer)?.sprite;
-      if (sprite) this.app.stage.setChildIndex(sprite, 1 + index);
+      const group = this.entries.get(layer)?.group;
+      if (group) this.app.stage.setChildIndex(group, 1 + index);
     });
+
+    const layerById = new Map(layers.map(layer => [layer.id, layer]));
+    const vectorsFor = stroke => {
+      const layer = layerById.get(stroke.layerId) || layers.at(-1);
+      return this.entries.get(layer)?.vectors || this.app.stage;
+    };
 
     for (const ghost of onionSkin) {
       for (const stroke of ghost.strokes) {
         const graphics = this.acquireGraphics();
         this.drawVectorStroke(graphics, { ...stroke, color: ghost.tint }, null, ghost.alpha);
-        this.app.stage.addChildAt(graphics, this.app.stage.children.length - 1);
+        vectorsFor(stroke).addChild(graphics);
         this.strokeGraphics.push(graphics);
       }
     }
 
     const activeStrokeIds = new Set();
     for (const stroke of strokes) {
+      const target = vectorsFor(stroke);
       activeStrokeIds.add(stroke.id);
       const cached = getVectorGraphicsCacheEntry(
         this.vectorGraphicsCache,
@@ -184,10 +200,10 @@ export class PixiStageRenderer {
       if (showSelectedHighlight && (stroke.id === selectedStrokeId || selectedStrokeIds.has(stroke.id))) {
         const highlight = this.acquireGraphics();
         this.drawVectorStroke(highlight, { ...stroke, color: '#e5b85c', width: stroke.width + 8, opacity: 1 }, null, 0.55);
-        this.app.stage.addChildAt(highlight, this.app.stage.children.length - 1);
+        target.addChild(highlight);
         this.strokeGraphics.push(highlight);
       }
-      this.app.stage.addChildAt(cached.graphics, this.app.stage.children.length - 1);
+      target.addChild(cached.graphics);
       if (stroke.id === selectedStrokeId && showNodeHandles && stroke.bezierPath) {
         const handles = this.acquireGraphics();
         stroke.bezierPath.segments.forEach((segment, index) => {
@@ -210,7 +226,7 @@ export class PixiStageRenderer {
             .fill(selected ? 0xe5b85c : (smooth ? 0x9bcfff : 0xf8f6f0))
             .stroke({ color: 0x24242a, width: (selected ? 1.8 : 1.1) * k });
         });
-        this.app.stage.addChildAt(handles, this.app.stage.children.length - 1);
+        target.addChild(handles);
         this.strokeGraphics.push(handles);
       } else if (stroke.id === selectedStrokeId && showNodeHandles) {
         const nodes = this.acquireGraphics();
@@ -220,7 +236,7 @@ export class PixiStageRenderer {
             .fill(selected ? 0xe5b85c : 0xf8f6f0)
             .stroke({ color: selected ? 0x24242a : 0x6d7785, width: (selected ? 2 : 1.5) * k });
         });
-        this.app.stage.addChildAt(nodes, this.app.stage.children.length - 1);
+        target.addChild(nodes);
         this.strokeGraphics.push(nodes);
       }
     }
@@ -340,78 +356,24 @@ export class PixiStageRenderer {
     this.drawPath(this.preview, points, color, width, 0.85);
   }
 
+  /** Live preview of a vector stroke with the same pressure widths as the committed line. */
+  previewVectorStroke(stroke) {
+    if (!this.preview || !stroke?.points?.length) return;
+    this.clearPreview();
+    this.drawVectorStroke(this.preview, stroke);
+  }
+
   previewLine(from, to, color, width) {
     this.previewStroke([from, to], color, width);
-  }
-
-  previewPolygon(points, color, alpha = 1) {
-    if (!this.preview) return;
-    this.clearPreview();
-    this.preview.clear();
-    if (!points || points.length < 3) return;
-    this.preview.moveTo(points[0][0], points[0][1]);
-    for (let index = 1; index < points.length; index++) {
-      this.preview.lineTo(points[index][0], points[index][1]);
-    }
-    this.preview.closePath();
-    this.preview.fill({ color, alpha });
-  }
-
-  previewBrush(outline, color, alpha, samples, options = {}) {
-    if (!this.previewTextureContext || !this.previewTexture) return;
-    this.preview?.clear();
-    const context = this.previewTextureContext;
-    if (!Array.isArray(outline) || outline.length < 3) {
-      this.previewTextureSprite.visible = false;
-      return;
-    }
-
-    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-    for (const point of outline) {
-      if (point[0] < minX) minX = point[0];
-      if (point[0] > maxX) maxX = point[0];
-      if (point[1] < minY) minY = point[1];
-      if (point[1] > maxY) maxY = point[1];
-    }
-    const padding = 3;
-    const left = Math.max(0, Math.floor(minX - padding));
-    const top = Math.max(0, Math.floor(minY - padding));
-    const right = Math.min(this.width, Math.ceil(maxX + padding));
-    const bottom = Math.min(this.height, Math.ceil(maxY + padding));
-    const canvasWidth = Math.max(1, right - left);
-    const canvasHeight = Math.max(1, bottom - top);
-
-    if (this.previewTextureCanvas.width !== canvasWidth) this.previewTextureCanvas.width = canvasWidth;
-    if (this.previewTextureCanvas.height !== canvasHeight) this.previewTextureCanvas.height = canvasHeight;
-    context.clearRect(0, 0, canvasWidth, canvasHeight);
-    context.save();
-    context.translate(-left, -top);
-    context.globalAlpha = alpha;
-    context.fillStyle = color;
-    context.beginPath();
-    context.moveTo(outline[0][0], outline[0][1]);
-    for (let index = 1; index < outline.length; index++) context.lineTo(outline[index][0], outline[index][1]);
-    context.closePath();
-    context.fill();
-    applyBrushTexture(context, outline, samples, options);
-    context.restore();
-
-    this.previewTextureSprite.blendMode = toPixiBrushBlendMode(options.blendMode);
-    this.previewTextureSprite.x = left;
-    this.previewTextureSprite.y = top;
-    this.previewTextureSprite.width = canvasWidth;
-    this.previewTextureSprite.height = canvasHeight;
-    this.previewTexture.source.update();
-    this.previewTextureSprite.visible = true;
   }
 
   /** Cheap per-frame update of layer movement during playback (no texture work). */
   updateLayerTransforms(layers) {
     for (const layer of layers) {
-      const sprite = this.entries.get(layer)?.sprite;
-      if (!sprite) continue;
-      sprite.alpha = layer.renderOpacity ?? layer.opacity ?? 1;
-      setDisplayMatrix(sprite, layer.renderMatrix);
+      const group = this.entries.get(layer)?.group;
+      if (!group) continue;
+      setGroupOpacity(this.entries.get(layer), layer.renderOpacity ?? layer.opacity ?? 1);
+      setDisplayMatrix(group, layer.renderMatrix);
     }
   }
 
@@ -426,12 +388,6 @@ export class PixiStageRenderer {
 
   clearPreview() {
     this.preview?.clear();
-    if (this.previewTextureContext && this.previewTextureSprite) {
-      this.previewTextureContext.clearRect(0, 0, this.previewTextureCanvas.width, this.previewTextureCanvas.height);
-      this.previewTexture.source.update();
-      this.previewTextureSprite.visible = false;
-      this.previewTextureSprite.blendMode = 'normal';
-    }
   }
 
   destroy() {
@@ -444,10 +400,6 @@ export class PixiStageRenderer {
     this.strokeGraphics = [];
     for (const graphics of this.graphicsPool) graphics.destroy();
     this.graphicsPool = [];
-    this.previewTexture = null;
-    this.previewTextureCanvas = null;
-    this.previewTextureContext = null;
-    this.previewTextureSprite = null;
     this.app = null;
   }
 }
@@ -458,4 +410,21 @@ const IDENTITY = [1, 0, 0, 1, 0, 0];
 function setDisplayMatrix(displayObject, matrix) {
   const [a, b, c, d, e, f] = Array.isArray(matrix) && matrix.length === 6 ? matrix : IDENTITY;
   displayObject.setFromMatrix(new Matrix(a, b, c, d, e, f));
+}
+
+/**
+ * Layer opacity is applied to the layer as a whole (raster + lines flattened
+ * first), like a painting app, instead of fading each line segment separately
+ * where overlapping segments would show darker joints.
+ */
+function setGroupOpacity(entry, alpha) {
+  const value = Math.max(0, Math.min(1, Number(alpha)));
+  entry.group.alpha = 1;
+  if (value >= 0.999) {
+    if (entry.group.filters?.length) entry.group.filters = null;
+    return;
+  }
+  entry.alphaFilter ||= new AlphaFilter({ alpha: value });
+  entry.alphaFilter.alpha = value;
+  if (entry.group.filters?.[0] !== entry.alphaFilter) entry.group.filters = [entry.alphaFilter];
 }

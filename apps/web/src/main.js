@@ -2,9 +2,11 @@ import './styles.css';
 import { PixiStageRenderer } from './renderer.js';
 import { applyScreentoneToCanvas } from './tone/screentone.js';
 import { canvasUnitsPerCssPixel, clientToCanvasPoint, parseCssTransformMatrix } from './viewport/coordinates.js';
-import { classifyMultiTouchTap, pinchViewport, snapViewportRotation } from './viewport/gestures.js';
+import { classifyMultiTouchTap, classifyTouchStart, pinchViewport, snapViewportRotation } from './viewport/gestures.js';
 import { hexToHsv, hsvToHex, sampleImageDataColor } from './color/color-utils.js';
-import { applyBrushTexture, coalescedPointerEvents, createBrushOutline, createFrameScheduler, getBrushPreset, normalizePointerPressure, resolveBrushStrokeOptions, stabilizePoint } from './brush/brush-engine.js';
+import { coalescedPointerEvents, createFrameScheduler, normalizePointerPressure, stabilizePoint } from './brush/brush-engine.js';
+import { createRasterStroke, getRasterBrush } from './brush/raster-brush.js';
+import { StrokeBuffer } from './brush/raster-brush-canvas.js';
 import { createSmudgeSession } from './brush/smudge-engine.js';
 import { normalizeBrushBlendMode } from './brush/blend-modes.js';
 import { expandRegionMask, findConnectedRegion } from './fill/flood-fill.js';
@@ -57,7 +59,7 @@ let smudgeSession = null;
 let smudgeOriginalData = null;
 let smudgeUndoBefore = null;
 let smudgeRedoBefore = null;
-let pressureCurve = getBrushPreset('ink').pressureCurve;
+let pressureCurve = getRasterBrush('ink').pressureCurve;
 let maskEditing = false;
 let selectionRect = null;
 let selectionPolygon = null;
@@ -123,9 +125,7 @@ const lineRedo = [];
 // track. `loadedClips` remembers which clip each live layer canvas (and the
 // live vectorStrokes array) currently holds.
 const timeline = createTimelineDocument({ fps: 12 });
-const VECTOR_TRACK = 'vector';
 const loadedClips = new Map();
-let activeTrackId = null;
 let nextLayerId = 1;
 let onionEnabled = true;
 let loadingFrame = false;
@@ -229,14 +229,110 @@ function ensureEditableLayerAfterTransform() {
   return true;
 }
 
-function currentBrushPreset() { return getBrushPreset(brushPreset); }
+function currentBrushPreset() { return getRasterBrush(brushPreset); }
 
-function currentStrokeOptions(complete = false) {
-  return resolveBrushStrokeOptions({
-    size, stylus: strokeIsStylus, pressureEnabled, preset: brushPreset,
-    pressureCurve, smoothing: currentBrushPreset().smoothing,
-    streamline: brushSmoothing, complete,
+// ── Raster brush v2 state (one stroke at a time) ──
+let rasterStroke = null;
+let strokeBuffer = null;
+let rasterStrokeTarget = null;
+let rasterStrokeSeed = 1;
+
+function currentSelectionClip() {
+  return { polygon: selectionPolygon, rect: selectionRect };
+}
+
+/** How the stroke buffer lands on its target, shared by preview and commit. */
+function rasterStrokeMode(target) {
+  if (target.mask) {
+    // Mask: painting hides (removes white), erasing reveals (adds white).
+    return { operation: tool === 'eraser' ? 'source-over' : 'destination-out', alpha: 1, selection: currentSelectionClip() };
+  }
+  if (tool === 'eraser') return { operation: 'destination-out', alpha: Math.max(0.05, brushOpacity), selection: currentSelectionClip() };
+  return {
+    operation: normalizeBrushBlendMode(brushBlendMode),
+    alpha: currentBrushPreset().opacity * brushOpacity,
+    selection: currentSelectionClip(),
+  };
+}
+
+function beginRasterStroke(event, point) {
+  const layer = layers[active];
+  const mask = Boolean(maskEditing && layer.maskEnabled && layer.maskCanvas);
+  strokeBuffer ||= new StrokeBuffer(W, H);
+  const brush = currentBrushPreset();
+  strokeBuffer.begin(brush, mask ? '#ffffff' : color);
+  const targetCanvas = mask ? layer.maskCanvas : (layer.presentationCanvas || layer.canvas);
+  const base = document.createElement('canvas');
+  base.width = W;
+  base.height = H;
+  base.getContext('2d').drawImage(targetCanvas, 0, 0);
+  if (mask) {
+    layer.maskUndo.push(layer.maskCanvas.toDataURL());
+    if (layer.maskUndo.length > 25) layer.maskUndo.shift();
+    layer.maskRedo = [];
+  }
+  rasterStrokeTarget = { layer, mask, base };
+  rasterStroke = createRasterStroke({
+    brush,
+    size,
+    stylus: event.pointerType === 'pen' && pressureEnabled,
+    pressureCurve,
+    streamline: Math.min(0.9, brush.streamline + brushSmoothing * 0.75),
+    seed: rasterStrokeSeed++,
   });
+  strokeBuffer.stamp(rasterStroke.add({ ...point, pressure: normalizePointerPressure(event, pressureEnabled) }));
+  showRasterStroke();
+}
+
+/** Shows base + stroke on screen without touching the layer pixels yet. */
+function showRasterStroke() {
+  if (!rasterStrokeTarget || !strokeBuffer) return;
+  const { layer, mask, base } = rasterStrokeTarget;
+  const mode = rasterStrokeMode(rasterStrokeTarget);
+  if (mask) {
+    const context = layer.maskCanvas.getContext('2d');
+    context.save();
+    context.globalCompositeOperation = 'copy';
+    context.drawImage(base, 0, 0);
+    context.restore();
+    strokeBuffer.compositeOnto(context, mode);
+    renderer.refreshLayerEntry(layer, layer.presentationCanvas || layer.canvas);
+    return;
+  }
+  renderer.setLayerPreview(layer, strokeBuffer.renderPreview(base, mode));
+  renderer.refreshLayerEntry(layer, strokeBuffer.preview);
+}
+
+function commitRasterStroke(event) {
+  if (!rasterStroke || !rasterStrokeTarget) return;
+  strokeBuffer.stamp(rasterStroke.finish());
+  const { layer, mask } = rasterStrokeTarget;
+  if (mask) {
+    showRasterStroke();
+  } else {
+    strokeBuffer.compositeOnto(layer.canvas.getContext('2d'), rasterStrokeMode(rasterStrokeTarget));
+    renderer.clearLayerPreview(layer);
+  }
+  rasterStroke = null;
+  rasterStrokeTarget = null;
+  render([layers.indexOf(layer)]);
+}
+
+function cancelRasterStroke() {
+  if (!rasterStrokeTarget) return;
+  const { layer, mask, base } = rasterStrokeTarget;
+  if (mask) {
+    const context = layer.maskCanvas.getContext('2d');
+    context.save();
+    context.globalCompositeOperation = 'copy';
+    context.drawImage(base, 0, 0);
+    context.restore();
+    layer.maskUndo.pop();
+  } else {
+    renderer.clearLayerPreview(layer);
+  }
+  rasterStroke = null;
+  rasterStrokeTarget = null;
 }
 
 function normalizeHex(value) {
@@ -447,6 +543,9 @@ function drawVectorStrokes(context, strokes = vectorStrokes) {
 }
 function refreshLayerPresentation(layer) {
   if (!layer?.canvas || !layer?.presentationCanvas) return;
+  // Every visible pixel change goes through here, so it marks the layer's
+  // clip as needing a fresh PNG encode on the next save.
+  layer.celDirty = true;
   composeRasterTransformStack(layer.canvas, layer.transformRecords || [], layer.presentationCanvas);
 }
 
@@ -475,13 +574,27 @@ function composite() {
     } else {
       context.drawImage(layer.presentationCanvas || layer.canvas, 0, 0);
     }
+    // The layer's vector lines share its transform, opacity and blend mode.
+    drawVectorStrokes(context, strokesOfLayer(layer.id));
     context.restore();
   });
-  drawVectorStrokes(context);
   return context;
 }
 
-function render(dirtyIndices = [], displayStrokes = vectorStrokes) {
+function boiledStrokes(timestamp = performance.now()) {
+  return animateLineStrokes(vectorStrokes, {
+    phase: lineBoilPhase(timestamp - boilStartedAt, Number(document.getElementById('boilSpeed').value)),
+    amplitude: Number(document.getElementById('boilAmplitude').value),
+    frequency: Number(document.getElementById('boilFrequency').value),
+  });
+}
+
+function render(dirtyIndices = [], displayStrokes = null) {
+  // Lines without a layer (older data) join the active layer.
+  for (const stroke of vectorStrokes) {
+    if (!stroke.layerId || !layers.some(layer => layer.id === stroke.layerId)) stroke.layerId = layers[active]?.id;
+  }
+  displayStrokes ||= boilEnabled ? boiledStrokes() : vectorStrokes;
   for (const index of dirtyIndices) {
     if (layers[index]) refreshLayerPresentation(layers[index]);
   }
@@ -514,24 +627,23 @@ function cloneLineStroke(stroke) {
   };
 }
 
+// Every layer track holds both raster pixels (`cel`) and the layer's vector
+// lines (`strokes`). Live vector lines of all layers share `vectorStrokes`;
+// each line carries the id of the layer it belongs to.
 function layerTrack(layer) {
-  return ensureTrack(timeline, layer.id);
-}
-
-function vectorTrack() {
-  return ensureTrack(timeline, VECTOR_TRACK, { vector: true });
+  return ensureTrack(timeline, layer.id, { vector: true });
 }
 
 function currentTrackId() {
-  return activeTrackId === VECTOR_TRACK ? VECTOR_TRACK : layers[active]?.id;
+  return layers[active]?.id;
 }
 
 function currentTrack() {
-  return currentTrackId() === VECTOR_TRACK ? vectorTrack() : layerTrack(layers[active]);
+  return layerTrack(layers[active]);
 }
 
 function trackLabel(trackId) {
-  return trackId === VECTOR_TRACK ? '벡터 선' : (layers.find(layer => layer.id === trackId)?.name || '레이어');
+  return layers.find(layer => layer.id === trackId)?.name || '레이어';
 }
 
 function loadedClip(trackId) {
@@ -539,23 +651,47 @@ function loadedClip(trackId) {
   return timeline.tracks[trackId]?.clips.find(clip => clip.id === clipId) || null;
 }
 
+function strokesOfLayer(layerId, strokes = vectorStrokes) {
+  return strokes.filter(stroke => stroke.layerId === layerId);
+}
+
+/** Lines on hidden layers can't be picked or edited. */
+function isStrokeEditable(stroke) {
+  const layer = layers.find(item => item.id === stroke.layerId);
+  return Boolean(layer && (layer.renderVisible ?? layer.visible));
+}
+
+/** Visible lines ordered bottom layer → top layer (hit tests scan from the end). */
+function editableStrokesInStackOrder() {
+  const order = new Map(layers.map((layer, index) => [layer.id, index]));
+  return vectorStrokes.filter(isStrokeEditable)
+    .map((stroke, index) => ({ stroke, index }))
+    .sort((a, b) => (order.get(a.stroke.layerId) - order.get(b.stroke.layerId)) || (a.index - b.index))
+    .map(item => item.stroke);
+}
+
+/** Tags a newly created vector line with the active layer. */
+function assignStrokeToActiveLayer(stroke) {
+  stroke.layerId = layers[active]?.id;
+  return stroke;
+}
+
 function persistVectorClip() {
-  const clip = loadedClip(VECTOR_TRACK);
-  if (clip) clip.strokes = vectorStrokes.map(cloneLineStroke);
+  for (const layer of layers) {
+    const clip = loadedClip(layer.id);
+    if (clip) clip.strokes = strokesOfLayer(layer.id).map(cloneLineStroke);
+  }
 }
 
 /**
- * Called before an edit: makes sure the edited track has a clip at the
- * playhead (creating one past the track end) and that it is the loaded clip.
+ * Called before an edit: makes sure the active layer's track has a clip at
+ * the playhead (creating one past the track end) and that it is loaded.
  */
-function ensureEditableClip(kind) {
-  const isVector = kind === 'vector';
-  const track = isVector ? vectorTrack() : layerTrack(layers[active]);
-  const trackId = isVector ? VECTOR_TRACK : layers[active].id;
-  activeTrackId = isVector ? VECTOR_TRACK : null;
-  if (loadedClip(trackId)) return;
-  const found = ensureClipAt(timeline, track, timeline.playhead, isVector ? { strokes: [] } : {});
-  loadedClips.set(trackId, found.clip.id);
+function ensureEditableClip() {
+  const layer = layers[active];
+  if (!layer || loadedClip(layer.id)) return;
+  const found = ensureClipAt(timeline, layerTrack(layer), timeline.playhead, { strokes: [] });
+  loadedClips.set(layer.id, found.clip.id);
 }
 
 function saveActiveFrame() {
@@ -564,11 +700,17 @@ function saveActiveFrame() {
     if (!clip) {
       // A newly created layer adopts its blank clip at the playhead.
       const found = clipAt(layerTrack(layer), timeline.playhead);
-      if (!found || found.clip.cel) continue;
+      if (!found || found.clip.cel || found.clip.strokes?.length) continue;
       loadedClips.set(layer.id, found.clip.id);
       clip = found.clip;
     }
-    clip.cel = layer.canvas.toDataURL('image/png');
+    // Re-encode only when the pixels changed since this clip was last saved
+    // or loaded; PNG encoding is the most expensive part of saving.
+    if (layer.celDirty !== false || layer.celClipId !== clip.id) {
+      clip.cel = layer.canvas.toDataURL('image/png');
+      layer.celDirty = false;
+      layer.celClipId = clip.id;
+    }
     clip.transformCel = cloneRasterTransformRecords(layer.transformRecords || []);
   }
   persistVectorClip();
@@ -610,9 +752,7 @@ async function syncClipsToPlayhead({ save = true } = {}) {
     if (loadedClips.has(layer.id) && loadedClips.get(layer.id) === (clip?.id || null)) continue;
     changes.push({ layer, clip });
   }
-  const vectorClip = clipAt(vectorTrack(), tick)?.clip || null;
-  const vectorChanged = !loadedClips.has(VECTOR_TRACK) || loadedClips.get(VECTOR_TRACK) !== (vectorClip?.id || null);
-  if (!changes.length && !vectorChanged) {
+  if (!changes.length) {
     render();
     return;
   }
@@ -631,32 +771,42 @@ async function syncClipsToPlayhead({ save = true } = {}) {
       sourceCanvas: decoded[index].transformSources[recordIndex] || null,
     })).filter(record => record.sourceCanvas);
     refreshLayerPresentation(layer);
+    // Freshly loaded pixels equal the clip's stored image.
+    layer.celDirty = !clip;
+    layer.celClipId = clip?.id || null;
     // Pixel undo snapshots belong to the previous clip; never replay them here.
     layer.undo = [];
     layer.redo = [];
     loadedClips.set(layer.id, clip?.id || null);
   });
-  if (vectorChanged) {
-    vectorStrokes.splice(0, vectorStrokes.length, ...(vectorClip?.strokes || []).map(cloneLineStroke));
-    loadedClips.set(VECTOR_TRACK, vectorClip?.id || null);
-    lineUndo.length = 0;
-    lineRedo.length = 0;
-    selectedStrokeId = null;
-    selectedStrokeIds.clear();
-  }
+  // Swap in the vector lines of every layer whose clip changed, keeping the
+  // lines of other layers untouched.
+  const changedIds = new Set(changes.map(change => change.layer.id));
+  const kept = vectorStrokes.filter(stroke => !changedIds.has(stroke.layerId) && layers.some(layer => layer.id === stroke.layerId));
+  const loaded = changes.flatMap(({ layer, clip }) => (clip?.strokes || []).map(stroke => ({ ...cloneLineStroke(stroke), layerId: layer.id })));
+  vectorStrokes.splice(0, vectorStrokes.length, ...kept, ...loaded);
+  // Line undo snapshots span all layers; they no longer match after a swap.
+  lineUndo.length = 0;
+  lineRedo.length = 0;
+  selectedStrokeId = null;
+  selectedStrokeIds.clear();
   loadingFrame = false;
   render(changes.map(change => layers.indexOf(change.layer)));
 }
 
 function vectorOnionSkin(opacity = 0.22) {
-  const track = vectorTrack();
+  // Neighbouring drawings of the active layer, drawn in that layer.
+  const layer = layers[active];
+  if (!layer) return [];
+  const track = layerTrack(layer);
   const found = clipAt(track, timeline.playhead);
   if (!found) return [];
   const result = [];
   const previous = track.clips[found.index - 1];
   const next = track.clips[found.index + 1];
-  if (previous?.strokes?.length) result.push({ side: 'previous', tint: 0x55aaff, alpha: opacity, strokes: previous.strokes });
-  if (next?.strokes?.length) result.push({ side: 'next', tint: 0xff6b8a, alpha: opacity, strokes: next.strokes });
+  const tag = strokes => strokes.map(stroke => ({ ...stroke, layerId: layer.id }));
+  if (previous?.strokes?.length) result.push({ side: 'previous', tint: 0x55aaff, alpha: opacity, strokes: tag(previous.strokes) });
+  if (next?.strokes?.length) result.push({ side: 'next', tint: 0xff6b8a, alpha: opacity, strokes: tag(next.strokes) });
   return result;
 }
 
@@ -667,10 +817,8 @@ function timelineTickWidth() {
 const TRACK_LABEL_WIDTH = 86;
 
 function timelineRows() {
-  // Vector lines are drawn above every raster layer, so their track is first;
-  // raster tracks follow top layer first, like the layers panel.
-  return [{ trackId: VECTOR_TRACK, track: vectorTrack(), layerIndex: -1 }]
-    .concat(layers.map((layer, index) => ({ trackId: layer.id, track: layerTrack(layer), layerIndex: index })).reverse());
+  // Top layer first, like the layers panel.
+  return layers.map((layer, index) => ({ trackId: layer.id, track: layerTrack(layer), layerIndex: index })).reverse();
 }
 
 function drawTimeline() {
@@ -715,7 +863,7 @@ function drawTimeline() {
       const hold = normalizeHold(clip.hold);
       const cell = document.createElement('div');
       const isCurrent = trackId === currentId && timeline.playhead >= cursor && timeline.playhead < cursor + hold;
-      const empty = trackId === VECTOR_TRACK ? !clip.strokes?.length : !clip.cel;
+      const empty = !clip.strokes?.length && !clip.cel;
       cell.className = 'frame-cell' + (isCurrent ? ' active' : '') + (empty && !clipThumbnails.has(clip.id) ? ' empty' : '');
       cell.dataset.clipId = clip.id;
       cell.style.left = (TRACK_LABEL_WIDTH + cursor * tickWidth) + 'px';
@@ -764,7 +912,6 @@ function drawTimeline() {
 }
 
 function selectTrack(trackId) {
-  activeTrackId = trackId === VECTOR_TRACK ? VECTOR_TRACK : null;
   const index = layers.findIndex(layer => layer.id === trackId);
   if (index >= 0) active = index;
   render();
@@ -807,7 +954,6 @@ function setPlaybackEnabled(enabled) {
   button.classList.toggle('active', enabled);
 
   if (enabled) {
-    if (boilEnabled) setBoilEnabled(false);
     saveActiveFrame();
     playbackStartTick = timeline.playhead;
     playbackTickPosition = timeline.playhead;
@@ -875,7 +1021,7 @@ function cssToCanvasUnits(cssPixels) {
 }
 
 function paintsInLayerSpace() {
-  return ['pen', 'eraser', 'smudge'].includes(tool) && Boolean(layers[active]?.renderMatrix);
+  return ['pen', 'eraser', 'smudge', 'vector', 'line', 'shape'].includes(tool) && Boolean(layers[active]?.renderMatrix);
 }
 
 function position(event) {
@@ -996,7 +1142,7 @@ function applyMangaTone() {
     return;
   }
   ensureEditableLayerAfterTransform();
-  ensureEditableClip('raster');
+  ensureEditableClip();
   const layer = layers[active];
   const selection = selectionOutlinePolygon();
   const settings = {
@@ -1133,7 +1279,6 @@ function appendLayerRow(list, layer, index, nested) {
     item.onclick = event => {
       if (event.target !== visibility && event.target !== target) {
         active = index;
-        activeTrackId = null;
         activeGroupId = layer.groupId || null;
         maskEditing = false;
         document.getElementById('maskEdit')?.classList.remove('active');
@@ -1188,13 +1333,7 @@ function animationTick(timestamp) {
     return;
   }
   if (timestamp - lastAnimationPaint >= 1000 / 30) {
-    const elapsed = timestamp - boilStartedAt;
-    const phase = lineBoilPhase(elapsed, Number(document.getElementById('boilSpeed').value));
-    const displayStrokes = animateLineStrokes(vectorStrokes, {
-      phase,
-      amplitude: Number(document.getElementById('boilAmplitude').value),
-      frequency: Number(document.getElementById('boilFrequency').value),
-    });
+    const displayStrokes = boiledStrokes(timestamp);
     renderer.sync(layers, [], displayStrokes, selectedStrokeId, onionEnabled ? vectorOnionSkin() : [], selectionRect, selectionPolygon, selectedNodeIndex, nodeEditEnabled, null, null, showSelectedVectorHighlight, selectedStrokeIds);
     lastAnimationPaint = timestamp;
   }
@@ -1204,7 +1343,7 @@ function animationTick(timestamp) {
 function setBoilEnabled(enabled) {
   boilEnabled = enabled;
   const button = document.getElementById('boilToggle');
-  button.textContent = enabled ? '미리보기 중지' : 'Line Boil 미리보기';
+  button.textContent = enabled ? '선 흔들림 끄기' : '선 흔들림 켜기';
   button.classList.toggle('active', enabled);
   if (enabled) {
     boilStartedAt = performance.now();
@@ -1451,7 +1590,11 @@ function updateSelectionDragPreview(drag) {
   const transform = getSelectionDragTransform(drag);
   if ((!sources.length && !drag?.vectorBefore) || !transform?.matrix) return;
   if (drag.vectorBefore) {
-    const previewStrokes = transformLineStrokesByMatrix(drag.vectorBefore, transform.clipPolygon, transform.matrix);
+    // Only lines on the layers being transformed move with the selection.
+    const targetIds = new Set(resolveSelectionTargets(layers, selectedTransformLayers, layers[active]).map(layer => layer.id));
+    const previewStrokes = drag.vectorBefore.map(stroke => (targetIds.has(stroke.layerId)
+      ? transformLineStrokesByMatrix([stroke], transform.clipPolygon, transform.matrix)[0]
+      : stroke));
     vectorStrokes.splice(0, vectorStrokes.length, ...previewStrokes);
   }
   for (const source of sources) {
@@ -1484,9 +1627,10 @@ function applySelectionTransform() {
 
   const transformedPolygon = transformPolygon(polygon, angle, scale);
   const vectorBefore = lineSnapshot();
-  const hasSelectedVectors = vectorStrokes.some(stroke => lineStrokeIntersectsPolygon(stroke, polygon));
+  const targetIds = new Set(targets.map(layer => layer.id));
+  const hasSelectedVectors = vectorStrokes.some(stroke => targetIds.has(stroke.layerId) && lineStrokeIntersectsPolygon(stroke, polygon));
   const transformedVectors = hasSelectedVectors
-    ? transformLineStrokes(vectorStrokes, polygon, angle, scale)
+    ? vectorStrokes.map(stroke => (targetIds.has(stroke.layerId) ? transformLineStrokes([stroke], polygon, angle, scale)[0] : stroke))
     : null;
   const center = getPolygonCentroid(polygon);
   const radians = angle * Math.PI / 180;
@@ -1726,8 +1870,16 @@ function bindControls() {
     // The copy gets its own track with the same drawings and timing.
     saveActiveFrame();
     const copyTrack = duplicateTrack(timeline, layerTrack(source), copy.id);
+    // Line ids must stay unique across layers (renderer caches and selection
+    // are keyed by id), so every copied line gets a new id.
+    for (const clip of copyTrack.clips) {
+      for (const stroke of clip.strokes || []) stroke.id = 'line-' + nextLineId++;
+    }
     const copyClip = clipAt(copyTrack, timeline.playhead)?.clip;
-    if (copyClip) loadedClips.set(copy.id, copyClip.id);
+    if (copyClip) {
+      loadedClips.set(copy.id, copyClip.id);
+      vectorStrokes.push(...(copyClip.strokes || []).map(stroke => ({ ...cloneLineStroke(stroke), layerId: copy.id })));
+    }
     layers.push(copy);
     active = layers.length - 1;
     saveActiveFrame();
@@ -1743,6 +1895,12 @@ function bindControls() {
     const [removed] = layers.splice(active, 1);
     delete timeline.tracks[removed.id];
     loadedClips.delete(removed.id);
+    // The layer's vector lines go with it.
+    vectorStrokes.splice(0, vectorStrokes.length, ...vectorStrokes.filter(stroke => stroke.layerId !== removed.id));
+    lineUndo.length = 0;
+    lineRedo.length = 0;
+    selectedStrokeId = null;
+    selectedStrokeIds.clear();
     active = Math.min(active, layers.length - 1);
     saveActiveFrame();
     render(layers.map((_, index) => index));
@@ -1921,7 +2079,7 @@ function bindControls() {
     const source = clipAt(track, timeline.playhead)?.clip;
     const { clip, start } = insertClipAfter(timeline, track, timeline.playhead, {
       duplicate,
-      blank: track.id === VECTOR_TRACK ? { strokes: [] } : {},
+      blank: { strokes: [] },
     });
     if (duplicate && source && clipThumbnails.has(source.id)) clipThumbnails.set(clip.id, clipThumbnails.get(source.id));
     timeline.playhead = start;
@@ -2068,6 +2226,31 @@ const TOOL_HOST_BUTTONS = { pen: 'paintTool', vector: 'paintTool', marquee: 'sel
 const TOOL_LABELS = { vector: '벡터 브러시', pen: '래스터 브러시', smudge: '스머지', eraser: '지우개', marquee: '사각형 선택', lasso: '올가미 선택', select: '벡터 변형', fill: '채우기', line: '직선', shape: '도형', hand: '손 도구' };
 let openPopoverId = null;
 let eyedropperArmed = false;
+const PENCIL_ONLY_KEY = 'frame-studio:pencil-only';
+const PENCIL_HINT_KEY = 'frame-studio:pencil-hint-shown';
+let pencilOnly = readStoredFlag(PENCIL_ONLY_KEY);
+
+function readStoredFlag(key) {
+  try { return localStorage.getItem(key) === '1'; } catch { return false; }
+}
+
+function writeStoredFlag(key, value) {
+  try { localStorage.setItem(key, value ? '1' : '0'); } catch { /* storage unavailable */ }
+}
+
+function setPencilOnly(enabled, { announce = true } = {}) {
+  pencilOnly = enabled;
+  writeStoredFlag(PENCIL_ONLY_KEY, enabled);
+  const toggle = document.getElementById('pencilOnlyToggle');
+  if (toggle) toggle.checked = enabled;
+  if (announce) showToast(enabled ? '펜으로만 그려요 · 손가락은 화면 이동' : '손가락으로도 그릴 수 있어요');
+}
+
+function suggestPencilOnly() {
+  if (pencilOnly || readStoredFlag(PENCIL_HINT_KEY)) return;
+  writeStoredFlag(PENCIL_HINT_KEY, true);
+  showToast('Apple Pencil이 감지됐어요. 손가락은 화면 이동에만 쓸까요?', { label: '켜기', run: () => setPencilOnly(true) });
+}
 let toastTimer = 0;
 
 function showToast(message, action = null) {
@@ -2297,10 +2480,13 @@ function scheduleFrameThumbnail() {
     };
     for (const layer of layers) {
       const clip = loadedClip(layer.id);
-      if (clip) clipThumbnails.set(clip.id, make(context => context.drawImage(layer.presentationCanvas || layer.canvas, 0, 0)));
+      if (clip) {
+        clipThumbnails.set(clip.id, make(context => {
+          context.drawImage(layer.presentationCanvas || layer.canvas, 0, 0);
+          drawVectorStrokes(context, strokesOfLayer(layer.id));
+        }));
+      }
     }
-    const vectorClip = loadedClip(VECTOR_TRACK);
-    if (vectorClip) clipThumbnails.set(vectorClip.id, make(context => drawVectorStrokes(context)));
     document.querySelectorAll('#frameStrip .frame-cell').forEach(cell => applyClipThumbnail(cell, cell.dataset.clipId));
   }, 380);
 }
@@ -2367,7 +2553,6 @@ function bindTimelineScrub() {
   const selectRowFromEvent = event => {
     const row = event.target.closest('.track-row');
     if (!row || row.dataset.trackId === currentTrackId()) return false;
-    activeTrackId = row.dataset.trackId === VECTOR_TRACK ? VECTOR_TRACK : null;
     const index = layers.findIndex(layer => layer.id === row.dataset.trackId);
     if (index >= 0) active = index;
     return true;
@@ -2456,6 +2641,9 @@ function bindWorkspaceUi() {
   document.getElementById('vectorBrushPreset').addEventListener('change', () => syncBrushUi());
 
   document.getElementById('eyedropper').onclick = () => setEyedropperArmed(!eyedropperArmed);
+  const pencilToggle = document.getElementById('pencilOnlyToggle');
+  pencilToggle.checked = pencilOnly;
+  pencilToggle.addEventListener('change', () => setPencilOnly(pencilToggle.checked));
   document.getElementById('zoomLevel').onclick = () => document.getElementById('resetViewport').click();
   const currentHold = () => normalizeHold(clipAt(currentTrack(), timeline.playhead)?.clip.hold);
   document.getElementById('holdMinus').onclick = () => changeActiveHold(currentHold() - 1);
@@ -2586,6 +2774,23 @@ function currentLayerMotionFrom(track) {
   return evaluateMotionTrack(track, timeline.playhead);
 }
 
+// Builds the in-progress vector line with the current brush so the live
+// preview shows the same pressure widths, taper and opacity as the result.
+function previewVectorDrawing() {
+  if (!drawingPoints?.length) return;
+  const points = drawingPoints.length > 1 ? drawingPoints : [drawingPoints[0], { ...drawingPoints[0], x: drawingPoints[0].x + 0.1 }];
+  renderer.previewVectorStroke(createLineStroke({
+    id: 'preview-line',
+    points,
+    color,
+    width: size,
+    brushPreset: vectorBrushPreset,
+    pressureCurve: vectorPressureCurve,
+    opacity: vectorBrushOpacity,
+    pressureProfile: vectorPressureProfile,
+  }));
+}
+
 function createShapePoints(kind, start, end) {
   const left = Math.min(start.x, end.x), right = Math.max(start.x, end.x);
   const top = Math.min(start.y, end.y), bottom = Math.max(start.y, end.y);
@@ -2604,22 +2809,15 @@ function selectVectorStrokesInPolygon(polygon) {
   selectedStrokeIds.clear();
   if (!polygon || polygon.length < 3) { selectedStrokeId = null; return; }
   for (const stroke of vectorStrokes) {
-    if (lineStrokeIntersectsPolygon(stroke, polygon)) selectedStrokeIds.add(stroke.id);
+    if (isStrokeEditable(stroke) && lineStrokeIntersectsPolygon(stroke, polygon)) selectedStrokeIds.add(stroke.id);
   }
   selectedStrokeId = [...selectedStrokeIds].at(-1) || null;
 }
 
 function bindCanvasEvents() {
-  const drawBrushPreview = () => {
-    if (!strokeSamples.length) return;
-    const outline = createBrushOutline(strokeSamples, currentStrokeOptions(true));
-    if (!maskEditing && tool === 'pen') {
-      renderer.previewBrush(outline, color, currentBrushPreset().opacity * brushOpacity, strokeSamples, { preset: brushPreset, size, color, blendMode: brushBlendMode });
-    } else {
-      renderer.previewPolygon(outline, maskEditing ? (tool === 'eraser' ? 0xffffff : 0x171719) : 0xf4f0e8, 0.9);
-    }
-  };
-  const brushPreviewScheduler = createFrameScheduler(drawBrushPreview);
+  // New dabs are stamped as samples arrive; the screen refresh is batched to
+  // at most one per animation frame.
+  const brushPreviewScheduler = createFrameScheduler(showRasterStroke);
   const smudgeRenderScheduler = createFrameScheduler(() => {
     if (!smudgeSession) return;
     const context = layers[active].canvas.getContext('2d');
@@ -2646,6 +2844,11 @@ function bindCanvasEvents() {
     render();
   };
   let pendingTouchFill = null;
+  // Pencil-only mode: the pen pointer currently drawing, a one-finger canvas
+  // pan, and touches rejected as palm contact while the pen is down.
+  let penPointerId = null;
+  let fingerPan = null;
+  const ignoredTouches = new Set();
   const firstTwoTouches = () => [...touches.values()].slice(0, 2).map(touch => ({ x: touch.x, y: touch.y }));
   const cancelActiveInput = event => {
     if (!down && !panDrag) return;
@@ -2658,39 +2861,78 @@ function bindCanvasEvents() {
       setEyedropperArmed(false);
       return;
     }
+    if (event.pointerType === 'pen') {
+      penPointerId = event.pointerId;
+      fingerPan = null;
+      if (pencilOnly && gesture) gesture = null;
+      suggestPencilOnly();
+    }
     if (motionEditing && event.button === 0 && event.pointerType !== 'touch' && !loadingFrame) {
       event.stopImmediatePropagation();
       startMotionDrag(event);
       return;
     }
     if (event.pointerType !== 'touch') return;
+    const role = classifyTouchStart({
+      pencilOnly,
+      penActive: penPointerId !== null,
+      touchCount: touches.size + 1,
+      motionEditing: motionEditing && !loadingFrame,
+      tool,
+    });
+    if (role === 'ignore') {
+      ignoredTouches.add(event.pointerId);
+      event.stopImmediatePropagation();
+      return;
+    }
     touches.set(event.pointerId, { x: event.clientX, y: event.clientY, startX: event.clientX, startY: event.clientY });
-    if (motionEditing && touches.size === 1 && !loadingFrame) {
+    if (role === 'motion') {
       event.stopImmediatePropagation();
       startMotionDrag(event);
       return;
     }
-    if (touches.size === 1 && tool === 'fill') {
+    if (role === 'pan') {
+      fingerPan = { pointerId: event.pointerId, x: event.clientX, y: event.clientY };
+      event.stopImmediatePropagation();
+      return;
+    }
+    if (role === 'deferred-fill') {
       // Defer touch fills until release so the first finger of a two-finger
       // undo tap does not fill a region first.
       pendingTouchFill = { pointerId: event.pointerId, point: position(event) };
       event.stopImmediatePropagation();
       return;
     }
-    if (touches.size < 2) return;
+    if (role !== 'gesture') return;
+    fingerPan = null;
     event.stopImmediatePropagation();
     pendingTouchFill = null;
     try { inputSurface.setPointerCapture(event.pointerId); } catch { /* pointer already released */ }
     if (!gesture) {
       revertMotionDrag();
       cancelActiveInput(event);
-      gesture = { fingers: touches.size, startedAt: performance.now(), maxTravel: 0, last: firstTwoTouches() };
+      // A finger that was already drawing before the gesture started has
+      // travelled, so this can't be a quick undo/redo tap.
+      const travelledSoFar = Math.max(0, ...[...touches.values()].map(touch => Math.hypot(touch.x - touch.startX, touch.y - touch.startY)));
+      gesture = { fingers: touches.size, startedAt: performance.now(), maxTravel: travelledSoFar, last: firstTwoTouches() };
     } else {
       gesture.fingers = Math.max(gesture.fingers, touches.size);
       gesture.last = firstTwoTouches();
     }
   });
   inputSurface.addEventListener('pointermove', event => {
+    if (ignoredTouches.has(event.pointerId)) {
+      event.stopImmediatePropagation();
+      return;
+    }
+    if (fingerPan?.pointerId === event.pointerId && !gesture) {
+      event.stopImmediatePropagation();
+      viewport.x += event.clientX - fingerPan.x;
+      viewport.y += event.clientY - fingerPan.y;
+      fingerPan.x = event.clientX;
+      fingerPan.y = event.clientY;
+      applyViewport();
+    }
     if (motionDrag?.pointerId === event.pointerId && !gesture) {
       event.stopImmediatePropagation();
       const point = stagePosition(event);
@@ -2720,6 +2962,17 @@ function bindCanvasEvents() {
     gesture.last = current;
   });
   const releaseTouch = event => {
+    if (event.pointerId === penPointerId) penPointerId = null;
+    if (ignoredTouches.delete(event.pointerId)) {
+      event.stopImmediatePropagation();
+      return;
+    }
+    if (fingerPan?.pointerId === event.pointerId) {
+      fingerPan = null;
+      touches.delete(event.pointerId);
+      event.stopImmediatePropagation();
+      return;
+    }
     if (motionDrag?.pointerId === event.pointerId) {
       event.stopImmediatePropagation();
       if (event.type === 'pointercancel') revertMotionDrag();
@@ -2738,7 +2991,7 @@ function bindCanvasEvents() {
       if (event.type === 'pointerup' && !gesture && !loadingFrame) {
         if (playbackActive) setPlaybackEnabled(false);
         ensureEditableLayerAfterTransform();
-        ensureEditableClip('raster');
+        ensureEditableClip();
         floodFill(fill.point.x, fill.point.y);
         render([active]);
       }
@@ -2774,8 +3027,7 @@ function bindCanvasEvents() {
     if (boilEnabled) setBoilEnabled(false);
     try { inputSurface.setPointerCapture(event.pointerId); } catch { /* pointer already released */ }
     if (['pen', 'eraser', 'smudge', 'line', 'fill'].includes(tool)) ensureEditableLayerAfterTransform();
-    if (['pen', 'eraser', 'smudge', 'fill'].includes(tool)) ensureEditableClip('raster');
-    if (['vector', 'line', 'shape'].includes(tool)) ensureEditableClip('vector');
+    if (['pen', 'eraser', 'smudge', 'fill', 'vector', 'line', 'shape'].includes(tool)) ensureEditableClip();
     const point = position(event);
 
     if (tool === 'hand') {
@@ -2842,7 +3094,12 @@ function bindCanvasEvents() {
     }
 
     if (tool === 'select') {
-      const hit = hitTestLineStrokes(vectorStrokes, point, 9);
+      const hit = hitTestLineStrokes(editableStrokesInStackOrder(), point, 9);
+      // Picking a line makes its layer the active layer.
+      if (hit) {
+        const hitLayerIndex = layers.findIndex(layer => layer.id === hit.layerId);
+        if (hitLayerIndex >= 0 && hitLayerIndex !== active) active = hitLayerIndex;
+      }
       const nodeMode = nodeEditEnabled;
       if (nodeMode && selectedStroke() && selectedStrokeId && (hit?.id === selectedStrokeId || (!hit && selectedStroke().bezierPath))) {
         const stroke = selectedStroke();
@@ -2960,8 +3217,8 @@ function bindCanvasEvents() {
     if (tool === 'vector') {
       down = true;
       lastVectorSampleTime = Number(event.timeStamp) || 0;
-      drawingPoints = [{ ...point, pressure: event.pointerType === 'pen' ? normalizePointerPressure(event, pressureEnabled) : 1 }];
-      renderer.previewStroke(drawingPoints, Number.parseInt(color.slice(1), 16), size);
+      drawingPoints = [{ ...point, pressure: event.pointerType === 'pen' ? normalizePointerPressure(event, pressureEnabled) : 0.5 }];
+      previewVectorDrawing();
       return;
     }
 
@@ -2991,11 +3248,9 @@ function bindCanvasEvents() {
     down = true;
     lineStartPoint = last = point;
     strokeIsStylus = event.pointerType === 'pen';
-    strokeSamples = (tool === 'pen' || tool === 'eraser')
-      ? [{ ...point, pressure: normalizePointerPressure(event, pressureEnabled) }]
-      : [];
+    strokeSamples = [];
     if (!maskEditing) save(layers[active]);
-    if (tool === 'pen' || tool === 'eraser') drawBrushPreview();
+    if (tool === 'pen' || tool === 'eraser') beginRasterStroke(event, point);
   });
 
   inputSurface.addEventListener('pointermove', event => {
@@ -3141,7 +3396,7 @@ function bindCanvasEvents() {
           lastVectorSampleTime = sampleTime;
         }
       }
-      renderer.previewStroke(drawingPoints, Number.parseInt(color.slice(1), 16), size);
+      previewVectorDrawing();
       return;
     }
 
@@ -3165,19 +3420,12 @@ function bindCanvasEvents() {
       return;
     }
 
-    if (tool === 'pen' || tool === 'eraser') {
-      const samples = coalescedPointerEvents(event);
-      for (const sample of samples) {
-        const rawPoint = position(sample);
-        const smoothPoint = stabilizePoint(last, rawPoint, brushSmoothing);
-        strokeSamples.push({
-          ...smoothPoint,
-          pressure: normalizePointerPressure(sample, pressureEnabled),
-        });
-        last = smoothPoint;
+    if ((tool === 'pen' || tool === 'eraser') && rasterStroke) {
+      // Every coalesced sample becomes dabs right away (cheap: only new dabs
+      // are stamped); the screen updates once per frame.
+      for (const sample of coalescedPointerEvents(event)) {
+        strokeBuffer.stamp(rasterStroke.add({ ...position(sample), pressure: normalizePointerPressure(sample, pressureEnabled) }));
       }
-      // Pointer events can arrive faster than the display refresh rate. Keep
-      // every coalesced sample, but rebuild the full outline only once per frame.
       brushPreviewScheduler.schedule();
     }
   });
@@ -3398,6 +3646,7 @@ function bindCanvasEvents() {
       // stroke: discard it instead of committing a partial line, and drop the
       // undo snapshot that pointerdown recorded for raster tools.
       if (tool !== 'vector' && !maskEditing) layers[active].undo.pop();
+      if (tool === 'pen' || tool === 'eraser') cancelRasterStroke();
       strokeSamples = [];
       strokeIsStylus = false;
       drawingPoints = null;
@@ -3412,7 +3661,7 @@ function bindCanvasEvents() {
       const points = createShapePoints(shapeKind, lineStartPoint, point);
       commitLineHistory(lineSnapshot());
       const created = createLineStroke({ id: 'line-' + nextLineId++, points: points.map(p => ({ ...p, pressure: 0.5 })), color, width: size, brushPreset: vectorBrushPreset, pressureCurve: vectorPressureCurve, opacity: vectorBrushOpacity, pressureProfile: vectorPressureProfile, motionStyle: vectorMotionStyle, motionStrength: vectorMotionStrength });
-      vectorStrokes.push(created);
+      vectorStrokes.push(assignStrokeToActiveLayer(created));
       selectedStrokeId = created.id;
       selectedStrokeIds.clear(); selectedStrokeIds.add(created.id);
       renderer.clearPreview(); drawingPoints = null; down = false; render(); return;
@@ -3435,7 +3684,7 @@ function bindCanvasEvents() {
         motionStyle: vectorMotionStyle,
         motionStrength: vectorMotionStrength,
       });
-      vectorStrokes.push(created);
+      vectorStrokes.push(assignStrokeToActiveLayer(created));
       // Freehand drawing should not leave the new line selected; otherwise the
       // next brush/color change would silently restyle the line just drawn.
       selectedStrokeId = null;
@@ -3450,52 +3699,19 @@ function bindCanvasEvents() {
     if (tool === 'line') {
       commitLineHistory(lineSnapshot());
       const created = createLineStroke({ id: 'line-' + nextLineId++, points: [{ ...lineStartPoint, pressure: 0.5 }, { ...point, pressure: 0.5 }], color, width: size, brushPreset: vectorBrushPreset, pressureCurve: vectorPressureCurve, opacity: vectorBrushOpacity, pressureProfile: vectorPressureProfile, motionStyle: vectorMotionStyle, motionStrength: vectorMotionStrength });
-      vectorStrokes.push(created);
+      vectorStrokes.push(assignStrokeToActiveLayer(created));
       selectedStrokeId = created.id;
       selectedStrokeIds.clear(); selectedStrokeIds.add(created.id);
       renderer.clearPreview();
       down = false;
       render();
     } else if (tool === 'pen' || tool === 'eraser') {
-      const finalPressure = strokeIsStylus && Number(event.pressure) > 0
-        ? normalizePointerPressure(event, pressureEnabled)
-        : (strokeSamples.at(-1)?.pressure ?? 0.5);
-      const finalPoint = strokeSamples.at(-1);
-      if (!finalPoint || Math.hypot(point.x - finalPoint.x, point.y - finalPoint.y) > 0.1) {
-        strokeSamples.push({ ...point, pressure: finalPressure });
-      }
-      const outline = createBrushOutline(strokeSamples, currentStrokeOptions(true));
-      if (outline.length >= 3) {
-        const targetLayer = layers[active];
-        const drawingMask = maskEditing && targetLayer.maskEnabled && targetLayer.maskCanvas;
-        const context = (drawingMask ? targetLayer.maskCanvas : targetLayer.canvas).getContext('2d');
-        if (drawingMask) {
-          targetLayer.maskUndo.push(targetLayer.maskCanvas.toDataURL());
-          if (targetLayer.maskUndo.length > 25) targetLayer.maskUndo.shift();
-          targetLayer.maskRedo = [];
-        }
-        context.save();
-        context.globalCompositeOperation = drawingMask
-          ? (tool === 'eraser' ? 'source-over' : 'destination-out')
-          : (tool === 'eraser' ? 'destination-out' : normalizeBrushBlendMode(brushBlendMode));
-        context.globalAlpha = drawingMask ? 1 : (tool === 'eraser' ? 1 : currentBrushPreset().opacity * brushOpacity);
-        context.fillStyle = drawingMask ? '#fff' : color;
-        context.beginPath();
-        context.moveTo(outline[0][0], outline[0][1]);
-        for (let index = 1; index < outline.length; index++) {
-          context.lineTo(outline[index][0], outline[index][1]);
-        }
-        context.closePath();
-        context.fill();
-        if (!drawingMask && tool === 'pen') {
-          applyBrushTexture(context, outline, strokeSamples, { preset: brushPreset, size, color, opacity: currentBrushPreset().opacity * brushOpacity });
-        }
-        context.restore();
-      }
+      // The pen-up event often reports pressure 0, so the stroke ends at the
+      // last move sample instead of adding a misleading final point.
+      if (rasterStroke) commitRasterStroke(event);
       strokeSamples = [];
       strokeIsStylus = false;
       renderer.clearPreview();
-      render([active]);
     }
     down = false;
   };
@@ -3511,6 +3727,11 @@ function bindKeyboardShortcuts() {
       target.isContentEditable
       || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName)
     );
+    // Escape still closes panels while a slider, checkbox or text field has focus.
+    if (event.key === 'Escape' && openPopoverId) {
+      closePopovers();
+      return;
+    }
     if (isTextEntry) return;
     if ((event.ctrlKey || event.metaKey) && !event.altKey && event.key.toLowerCase() === 'z') {
       event.preventDefault();
@@ -3639,7 +3860,7 @@ async function saveProjectNow() {
     groups: layerGroups,
     timeline,
     active,
-    activeTrackId,
+    activeTrackId: null,
     nextLayerId,
     thumbnail: projectThumbnail(),
   });
@@ -3723,7 +3944,6 @@ async function applyProjectState(parsed, imageData = new Map()) {
   timeline.nextClipId = parsed.nextClipId;
   timeline.playhead = parsed.playhead;
   active = parsed.active;
-  activeTrackId = parsed.activeTrackId;
   activeGroupId = null;
   maskEditing = false;
   selectedStrokeId = null;
@@ -3740,8 +3960,11 @@ async function applyProjectState(parsed, imageData = new Map()) {
   updateTimelineFPS(parsed.fps);
   savedImageRefs = new Map();
   for (const [key, dataUrl] of imageData) if (dataUrl) savedImageRefs.set(key, dataUrl);
-  vectorTrack();
   for (const layer of layers) layerTrack(layer);
+  // Keep new line ids above every saved one so ids never collide.
+  const savedLineIds = Object.values(timeline.tracks).flatMap(track => track.clips)
+    .flatMap(clip => clip.strokes || []).map(stroke => Number(/^line-(\d+)$/.exec(stroke.id)?.[1]) || 0);
+  nextLineId = Math.max(nextLineId, 1, ...savedLineIds.map(id => id + 1));
   await syncClipsToPlayhead({ save: false });
   updateProjectUi();
 }
@@ -3868,9 +4091,7 @@ async function start() {
   bindKeyboardShortcuts();
   bindProjectControls();
 
-  vectorTrack();
   for (const layer of layers) loadedClips.set(layer.id, clipAt(layerTrack(layer), 0).clip.id);
-  loadedClips.set(VECTOR_TRACK, clipAt(vectorTrack(), 0).clip.id);
   saveActiveFrame();
   render(layers.map((_, index) => index));
   updateProjectUi();

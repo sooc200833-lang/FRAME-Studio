@@ -79,7 +79,7 @@
 
 ## Current status — v1.0
 
-The browser drawing engine uses perfect-freehand 1.2.3 to generate pressure-aware variable-width raster pen and eraser polygons, with pencil, ink, marker, and brush profiles. It applies adjustable speed-responsive stabilization and consumes coalesced stylus samples where available. PixiJS displays the live brush outline. Line Boil uses arc-length sampling and local centerline normals. The stage supports smooth vector paths, custom colors, layer opacity/blend modes, independent raster cels, playback, and onion skin. Native PencilKit, tilt, advanced brush textures, isolated/nested layer groups, per-frame group and mask metadata, keyframes, and interpolation remain future work.
+The browser drawing engine uses an in-house stamp (dab) raster brush with pencil, ink, marker, and brush profiles (v1.8; perfect-freehand was used before). It applies adjustable speed-responsive stabilization and consumes coalesced stylus samples where available. PixiJS displays the live brush outline. Line Boil uses arc-length sampling and local centerline normals. The stage supports smooth vector paths, custom colors, layer opacity/blend modes, independent raster cels, playback, and onion skin. Native PencilKit, tilt, advanced brush textures, isolated/nested layer groups, per-frame group and mask metadata, keyframes, and interpolation remain future work.
 
 ## Workspace UI — v1.1
 - [x] Full-bleed canvas workspace: top tool bar, floating size/opacity sidebar, contextual popovers, bottom timeline track.

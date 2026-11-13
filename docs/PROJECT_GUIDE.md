@@ -23,7 +23,7 @@ Use other creative apps only as broad workflow inspiration. Keep FRAME Studio's 
 - Canvas/document coordinates: 1200 × 900.
 - Stage presentation: PixiJS 8.20.1.
 - Raster paint buffers: HTML Canvas 2D.
-- Brush outline generation: perfect-freehand 1.2.3.
+- Raster brush: in-house stamp (dab) engine (`brush/raster-brush.js`, `brush/raster-brush-canvas.js`); perfect-freehand was removed in v1.8.
 - App entry point: `apps/web/src/main.js`.
 - Current project scripts: `npm run dev`, `npm test`, `npm run build`.
 - Node requirement from package metadata: Node.js 20.19+ or 22.12+.
@@ -44,6 +44,19 @@ Always distinguish code-level tests from visual browser checks and physical iPad
 - Freehand vector strokes are no longer left selected after drawing, so brush/color changes apply to the next stroke rather than restyling the previous one.
 - Verified in headless Chrome (layout at 1180×820 and 390×844, synthetic touch pinch/undo, eyedropper). Not yet verified on a physical iPad.
 
+### Raster brush v2 (v1.8)
+- Rebuilt from scratch at the user's request. `brush/raster-brush.js` (pure, tested) turns pointer samples into evenly spaced dabs: spacing is a fraction of the dab diameter and carries across samples (independent of pointer sample rate); streamline smoothing; pressure curve; pressure→size and pressure→flow per preset; mouse/finger use full pressure; the stroke ends exactly at the last pen sample (pen-up pressure 0 is ignored).
+- Presets: 연필 (grain tip, pressure→opacity), 잉크 펜 (hard, pressure→size), 마커 (flat opacity cap per stroke), 브러시 (soft). 획 안정화 adds to each preset's streamline.
+- `brush/raster-brush-canvas.js`: tinted tip cache, `StrokeBuffer` stamps dabs; `rasterStrokeMode()` in main.js is the single source of composite operation/alpha/selection clip used by both the live preview (`renderer.setLayerPreview`) and the commit, so the preview equals the result. Strokes are clipped to the active selection. Mask editing stamps into the mask live (paint hides, erase reveals). Cancelled strokes (palm/gesture) leave no pixels and no undo entry.
+- Removed: perfect-freehand dependency, polygon outline/texture code, renderer brush preview texture.
+
+### Layers own their vector lines (v1.7)
+- Vector lines belong to a layer: each stroke has `layerId`, and every layer track clip stores both `cel` (pixels) and `strokes`. The shared vector track was removed; project format v2 migrates an old vector track into a new top layer "벡터 선" with the same timing.
+- Renderer: one container per layer (raster sprite + that layer's lines), so visibility, opacity (applied to the whole layer via `AlphaFilter`), blend mode, stacking order and movement keyframes apply to lines too. Display objects of deleted layers are now removed (previously they stayed on screen).
+- Live state: `vectorStrokes` holds the loaded lines of all layers; `syncClipsToPlayhead` swaps only the lines of layers whose clip changed; `persistVectorClip` writes each layer's lines into its loaded clip. Line ids stay unique (duplicated layers re-id lines; `nextLineId` is raised above saved ids after loading).
+- Lines on hidden layers can't be picked; picking a line activates its layer; selection transforms only move lines on the target layers. Vector drawing on a moved layer is mapped into layer space.
+- Known gaps: picking/node-editing lines on a layer with movement keyframes uses canvas space; 비우기 clears pixels only.
+
 ### Project saving (v1.5)
 - `document/project-format.js` (pure, tested): project JSON v1 — layers (id, name, visibility, opacity, blend, group, mask flag, movement keyframes), groups, tracks/clips (hold, transform records, vector strokes), fps, playhead, id counters, thumbnail. Clip cels and layer masks are stored separately by image key (`<projectId>/clip/<clipId>`, `<projectId>/mask/<layerId>`). `parseProjectDocument` validates, drops broken parts and keeps id counters above saved ids; `migrateProjectDocument` is the hook for future versions.
 - `document/project-store.js` (browser): IndexedDB `frame-studio` with `projects`, `images` (Blobs), `meta` (`lastProjectId`). One transaction per save writes the document, changed images and deletes unreferenced images. Requests persistent storage.
@@ -53,7 +66,7 @@ Always distinguish code-level tests from visual browser checks and physical iPad
 ### Multi-track timeline (v1.4)
 - `animation/tracks.js` (pure) replaces the old single frame list. `timeline.tracks[trackId].clips` — one track per raster layer (`layer.id`, stable `layer-N`) plus the shared vector-line track (`'vector'`). Clips lie end to end from tick 0; each has `hold` (1–240 ticks), raster `cel`/`transformCel` or vector `strokes`. Tracks are independent: a background clip can hold 24 frames while a character track changes every 2.
 - `timeline.playhead` is the current tick; timeline length is the longest track. Past a track's end that layer shows nothing; drawing there creates a clip (`ensureEditableClip` → `ensureClipAt`).
-- `loadedClips` maps track → clip currently held by the live layer canvas / `vectorStrokes`. `saveActiveFrame()` writes the live canvases back into those clips; `syncClipsToPlayhead()` loads only tracks whose clip changed (decoded images cached per clip). New layers adopt their blank clip on the next save.
+- `loadedClips` maps track → clip currently held by the live layer canvas / `vectorStrokes`. `saveActiveFrame()` writes the live canvases back into those clips, re-encoding PNG only for layers marked `celDirty` (set by `refreshLayerPresentation`, cleared after encode or clip load); `syncClipsToPlayhead()` loads only tracks whose clip changed (decoded images cached per clip). New layers adopt their blank clip on the next save.
 - Layer pixel undo stacks and vector line undo are cleared when that track's clip changes (snapshots belong to one clip).
 - Timeline UI (`drawTimeline`): ruler, one row per track (vector first, then layers top-first), clip cells sized by hold with thumbnails, playhead. Selecting a row (or drawing on it) makes it the current track; ＋ / 복제 / 삭제 / − ＋ / grip / prev-next act on the current track only.
 - Playback advances a fractional tick and loads clips without re-saving; layer movement transforms update every animation frame.
@@ -67,10 +80,11 @@ Always distinguish code-level tests from visual browser checks and physical iPad
 - Raster pixels, cels and transform records are never modified by movement.
 
 ### Drawing and input
+- Pencil-only mode (작업 → 입력, stored in `localStorage` `frame-studio:pencil-only`): one finger pans the canvas instead of drawing, two/three-finger gestures still work, and touches that land while the pen is drawing are ignored (palm rejection). The first pen contact offers to turn it on. Role decision is the pure `classifyTouchStart` in `viewport/gestures.js`.
 - Vector node/Bezier handles and their hit targets are sized in CSS pixels (`canvasUnitsPerCssPixel`, `cssToCanvasUnits`, `renderer.setHandleScale`) so they stay the same physical size at every zoom (ported from #29).
 - Raster pen and eraser on Canvas-backed layers.
 - Brush profiles: pencil, ink, marker, and brush.
-- perfect-freehand variable-width stroke polygons.
+- Stamp-based raster brush: evenly spaced round dabs with hardness, grain, pressure→size/flow, streamline; one stroke buffer used for both live preview and commit.
 - Pointer pressure when the browser supplies pen pressure; fallback behavior for mouse/touch.
 - Coalesced pointer samples and configurable stroke stabilization.
 - Brush texture support and frame-scheduled preview rendering.
@@ -131,7 +145,9 @@ Always distinguish code-level tests from visual browser checks and physical iPad
 | `apps/web/src/main.js` | App state, input events, UI bindings, layer/frame operations, export |
 | `apps/web/src/renderer.js` | PixiJS stage and raster/vector presentation |
 | `apps/web/src/renderer/vector-graphics-cache.js` | Stable vector Graphics cache |
-| `apps/web/src/brush/brush-engine.js` | Brush presets, pressure, smoothing, pointer sampling |
+| `apps/web/src/brush/brush-engine.js` | Pointer helpers: pressure, smoothing, coalesced samples, frame scheduler |
+| `apps/web/src/brush/raster-brush.js` | Raster brush v2: presets and dab placement (pure) |
+| `apps/web/src/brush/raster-brush-canvas.js` | Raster brush v2: tips, stroke buffer, preview/commit compositing |
 | `apps/web/src/fill/flood-fill.js` | Renderer-independent fill algorithms |
 | `apps/web/src/line/line-engine.js` | Vector stroke geometry and editing helpers |
 | `apps/web/src/line/line-boil.js` | Deterministic line deformation |

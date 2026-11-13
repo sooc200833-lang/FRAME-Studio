@@ -68,3 +68,13 @@ test('phase follows playback speed and clamps negative elapsed time', () => {
   assert.equal(lineBoilPhase(-10, 1), 0);
   assert.equal(lineBoilPhase(1000, 1), Math.PI * 2);
 });
+
+test('lines left at the fixed style follow the global boil amplitude', () => {
+  const fixed = { ...structuredClone(stroke), id: 'fixed-line', motionStyle: 'none', motionStrength: 3 };
+  const moved = animateLineStrokes([fixed], { phase: 1.3, amplitude: 6 })[0];
+  assert.notDeepEqual(moved.points, fixed.points, 'global boil moves a fixed line');
+  const still = animateLineStrokes([fixed], { phase: 1.3, amplitude: 0 })[0];
+  assert.deepEqual(still.points, fixed.points, 'amplitude 0 leaves it still');
+  const own = { ...structuredClone(stroke), id: 'own-line', motionStyle: 'redraw', motionStrength: 4 };
+  assert.equal(animateLineStrokes([own], { phase: 1, amplitude: 0 })[0].motionPasses.length, 3, 'a line with its own style keeps its own strength');
+});

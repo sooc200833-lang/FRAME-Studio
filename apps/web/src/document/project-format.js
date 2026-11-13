@@ -5,7 +5,7 @@
 // drawings do not have to be rewritten on every save.
 
 export const PROJECT_FORMAT = 'frame-studio-project';
-export const PROJECT_VERSION = 1;
+export const PROJECT_VERSION = 2;
 
 const finite = (value, fallback) => (Number.isFinite(Number(value)) ? Number(value) : fallback);
 const text = (value, fallback = '') => (typeof value === 'string' ? value : fallback);
@@ -88,14 +88,34 @@ export function buildProjectDocument({
   };
 }
 
+/**
+ * v1 → v2: vector lines used to live in one shared 'vector' track drawn above
+ * all layers. In v2 every layer track holds its own lines, so the old vector
+ * track becomes a new top layer named "벡터 선" with the same timing.
+ */
+function migrateV1VectorTrack(doc) {
+  const tracks = { ...(doc.tracks || {}) };
+  const vector = tracks.vector;
+  delete tracks.vector;
+  const hasLines = (vector?.clips || []).some(clip => Array.isArray(clip?.strokes) && clip.strokes.length);
+  if (!hasLines) return { ...doc, tracks };
+  const layers = Array.isArray(doc.layers) ? [...doc.layers] : [];
+  const highest = Math.max(0, ...layers.map(layer => Number(/^layer-(\d+)$/.exec(layer?.id || '')?.[1]) || 0));
+  const id = `layer-${highest + 1}`;
+  layers.push({ id, name: '벡터 선', visible: true, opacity: 1, blendMode: 'normal', groupId: null, maskEnabled: false, maskImage: null, motionTrack: [] });
+  tracks[id] = vector;
+  return { ...doc, layers, tracks, nextLayerId: Math.max(Number(doc.nextLayerId) || 1, highest + 2), activeTrackId: null };
+}
+
 /** Upgrades older documents to the current version. */
 export function migrateProjectDocument(raw) {
   if (!raw || typeof raw !== 'object') throw new Error('프로젝트 데이터가 비어 있어요');
   if (raw.format !== PROJECT_FORMAT) throw new Error('FRAME Studio 프로젝트가 아니에요');
   const version = Math.floor(finite(raw.version, 0));
   if (version > PROJECT_VERSION) throw new Error('더 새로운 버전에서 만든 프로젝트예요');
-  // Version 1 is the first format; future migrations go here in order.
-  return { ...raw, version: PROJECT_VERSION };
+  let doc = { ...raw };
+  if (version < 2) doc = migrateV1VectorTrack(doc);
+  return { ...doc, version: PROJECT_VERSION };
 }
 
 /**
@@ -137,7 +157,8 @@ export function parseProjectDocument(raw, { width, height } = {}) {
         transformCel: Array.isArray(clip.transformCel) ? clip.transformCel : [],
         ...(Array.isArray(clip.strokes) ? { strokes: clip.strokes } : {}),
       }));
-    if (clips.length) tracks[trackId] = { id: trackId, clips };
+    // Tracks belong to layers; a track without its layer is dropped.
+    if (clips.length && layers.some(layer => layer.id === trackId)) tracks[trackId] = { id: trackId, clips };
   }
   // Clip ids must stay unique after restore, so the counter is kept above every saved id.
   const highestClip = Math.max(0, ...Object.values(tracks).flatMap(track => track.clips)
