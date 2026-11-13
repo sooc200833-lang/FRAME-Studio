@@ -1,3 +1,4 @@
+import { resolve } from 'node:path';
 import { defineConfig } from 'vite';
 
 export default defineConfig({
@@ -10,6 +11,12 @@ export default defineConfig({
     strictPort: true,
   },
   build: {
+    rollupOptions: {
+      input: {
+        main: resolve(process.cwd(), 'apps/web/index.html'),
+        backgroundStudio: resolve(process.cwd(), 'apps/web/background-studio.html'),
+      },
+    },
     outDir: '../../dist',
     emptyOutDir: true,
   },
