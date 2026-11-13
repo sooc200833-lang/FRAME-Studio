@@ -18,6 +18,10 @@ export const RASTER_BRUSHES = Object.freeze({
   pencil: Object.freeze({ id: 'pencil', label: '연필', hardness: 0.82, grain: 0.55, spacing: 0.1, sizePressure: 0.35, flow: 0.42, flowPressure: 0.85, opacity: 1, sizeScale: 0.8, streamline: 0.12, pressureCurve: 1.15 }),
   ink: Object.freeze({ id: 'ink', label: '잉크 펜', hardness: 0.97, grain: 0, spacing: 0.05, sizePressure: 0.85, flow: 1, flowPressure: 0, opacity: 1, sizeScale: 1, streamline: 0.3, pressureCurve: 0.95 }),
   marker: Object.freeze({ id: 'marker', label: '마커', hardness: 0.72, grain: 0, spacing: 0.06, sizePressure: 0.12, flow: 0.7, flowPressure: 0.2, opacity: 0.7, sizeScale: 1.4, streamline: 0.22, pressureCurve: 1 }),
+  // Texture brushes: `paper` names a canvas-anchored grain (see paperGrain),
+  // so overlapping strokes reveal the same paper tooth, like real chalk/crayon.
+  chalk: Object.freeze({ id: 'chalk', label: '분필', hardness: 0.55, grain: 0, paper: 'chalk', spacing: 0.07, sizePressure: 0.45, flow: 0.9, flowPressure: 0.45, opacity: 1, sizeScale: 1.5, streamline: 0.18, pressureCurve: 1 }),
+  crayon: Object.freeze({ id: 'crayon', label: '크레용', hardness: 0.88, grain: 0, paper: 'crayon', spacing: 0.06, sizePressure: 0.3, flow: 0.95, flowPressure: 0.35, opacity: 1, sizeScale: 1.2, streamline: 0.2, pressureCurve: 1 }),
   brush: Object.freeze({ id: 'brush', label: '브러시', hardness: 0.32, grain: 0, spacing: 0.08, sizePressure: 0.6, flow: 0.3, flowPressure: 0.6, opacity: 1, sizeScale: 1.2, streamline: 0.28, pressureCurve: 1.05 }),
 });
 
@@ -167,4 +171,66 @@ export function tipFalloff(distance, hardness) {
   if (d <= core) return 1;
   const t = (d - core) / (1 - core);
   return 1 - t * t * (3 - 2 * t);
+}
+
+
+// ── Paper grain for texture brushes ──────────────────────────────────────────
+
+export const PAPER_TILE = 256;
+
+function latticeValue(ix, iy, seed) {
+  let h = Math.imul(ix, 374761393) ^ Math.imul(iy, 668265263) ^ Math.imul(seed, 2147483647);
+  h = Math.imul(h ^ (h >>> 13), 1274126177);
+  return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
+}
+
+/** Value noise that tiles every `periodX`×`periodY` lattice cells. */
+function tiledNoise(x, y, cellW, cellH, periodX, periodY, seed) {
+  const fx = x / cellW;
+  const fy = y / cellH;
+  const x0 = Math.floor(fx);
+  const y0 = Math.floor(fy);
+  const tx = fx - x0;
+  const ty = fy - y0;
+  const sx = tx * tx * (3 - 2 * tx);
+  const sy = ty * ty * (3 - 2 * ty);
+  const wrap = (value, period) => ((value % period) + period) % period;
+  const v = (ix, iy) => latticeValue(wrap(ix, periodX), wrap(iy, periodY), seed);
+  const top = lerp(v(x0, y0), v(x0 + 1, y0), sx);
+  const bottom = lerp(v(x0, y0 + 1), v(x0 + 1, y0 + 1), sx);
+  return lerp(top, bottom, sy);
+}
+
+const smooth = (edge0, edge1, value) => {
+  const t = clamp((value - edge0) / (edge1 - edge0), 0, 1);
+  return t * t * (3 - 2 * t);
+};
+
+const PAPERS = Object.freeze({
+  // Chalk: open, speckled tooth; coarse clumps plus fine grit.
+  chalk: { octaves: [[8, 8, 0.6], [2, 2, 0.4]], low: 0.34, high: 0.6 },
+  // Crayon: waxy, slightly streaky tooth (cells stretched horizontally).
+  crayon: { octaves: [[16, 4, 0.55], [4, 2, 0.45]], low: 0.26, high: 0.5 },
+});
+
+export const PAPER_KINDS = Object.freeze(Object.keys(PAPERS));
+
+/**
+ * Seamless paper-tooth alpha tile (PAPER_TILE² bytes, 0 = hole, 255 = paint).
+ * Deterministic for a kind, so every stroke and every reload shows the same paper.
+ */
+export function paperGrain(kind, size = PAPER_TILE) {
+  const paper = PAPERS[kind];
+  if (!paper) throw new RangeError(`unknown paper: ${kind}`);
+  const alpha = new Uint8ClampedArray(size * size);
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      let value = 0;
+      paper.octaves.forEach(([cellW, cellH, weight], octave) => {
+        value += weight * tiledNoise(x, y, cellW, cellH, size / cellW, size / cellH, octave + 1);
+      });
+      alpha[y * size + x] = Math.round(smooth(paper.low, paper.high, value) * 255);
+    }
+  }
+  return alpha;
 }

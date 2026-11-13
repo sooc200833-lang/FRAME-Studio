@@ -6,12 +6,13 @@ import { classifyMultiTouchTap, classifyTouchStart, pinchViewport, snapViewportR
 import { hexToHsv, hsvToHex, sampleImageDataColor } from './color/color-utils.js';
 import { BACKGROUND_SLOT, containRect, takeHandoff } from './handoff/handoff-store.js';
 import { coalescedPointerEvents, createFrameScheduler, normalizePointerPressure, stabilizePoint } from './brush/brush-engine.js';
+import { finishVectorPoints, shouldKeepVectorSample, vectorSampleSpacing } from './line/vector-input.js';
 import { createRasterStroke, getRasterBrush } from './brush/raster-brush.js';
 import { StrokeBuffer } from './brush/raster-brush-canvas.js';
 import { createSmudgeSession } from './brush/smudge-engine.js';
 import { normalizeBrushBlendMode } from './brush/blend-modes.js';
 import { expandRegionMask, findConnectedRegion } from './fill/flood-fill.js';
-import { animateLineStrokes, lineBoilPhase } from './line/line-boil.js';
+import { animateLineStrokes, lineBoilPhase, normalizeMotionSpeed, normalizeMotionStep } from './line/line-boil.js';
 import { EXPORT_FORMATS, resolveExportPlan } from './export/export-plan.js';
 import { buildProjectDocument, duplicateProjectName, parseProjectDocument, referencedImageKeys, retargetProjectDocument } from './document/project-format.js';
 import { deleteProjectRecord, duplicateProjectRecord, isProjectStorageAvailable, listProjects, loadImageDataUrls, loadProjectRecord, getMeta, requestPersistentStorage, restoreProjectSnapshot, saveProjectRecord, setMeta } from './document/project-store.js';
@@ -186,6 +187,8 @@ let pressureProfileDrag = false;
 let lineStyleEditSnapshot = null;
 let vectorMotionStyle = 'none';
 let vectorMotionStrength = 3;
+let vectorMotionSpeed = 1;
+let vectorMotionStep = 0;
 let selectedNodeIndex = null;
 let nodeDragging = false;
 let nodeMoveSnapshot = null;
@@ -603,11 +606,18 @@ function composite({ background = true, strokes = vectorStrokes } = {}) {
 }
 
 function boiledStrokes(timestamp = performance.now()) {
-  return animateLineStrokes(vectorStrokes, {
-    phase: lineBoilPhase(timestamp - boilStartedAt, Number(document.getElementById('boilSpeed').value)),
+  return animateLineStrokes(vectorStrokes, lineMotionSettings(timestamp - boilStartedAt));
+}
+
+/** Settings for animateLineStrokes at `elapsedMs` (screen, preview and export share them). */
+function lineMotionSettings(elapsedMs) {
+  return {
+    phase: lineBoilPhase(elapsedMs, Number(document.getElementById('boilSpeed').value)),
     amplitude: Number(document.getElementById('boilAmplitude').value),
     frequency: Number(document.getElementById('boilFrequency').value),
-  });
+    globalBoil: boilEnabled,
+    elapsedMs,
+  };
 }
 
 function render(dirtyIndices = [], displayStrokes = null) {
@@ -1353,6 +1363,19 @@ function updateBoilOutputs() {
   document.getElementById('boilSpeedOut').value = Number(document.getElementById('boilSpeed').value).toFixed(1) + '×';
 }
 
+/** Speed only applies to smooth motion; the rhythm only matters when the line moves. */
+function syncMotionRhythmUi() {
+  const speed = document.getElementById('vectorMotionSpeed');
+  const step = document.getElementById('vectorMotionStep');
+  if (!speed || !step) return;
+  if (document.activeElement !== speed) speed.value = vectorMotionSpeed;
+  document.getElementById('vectorMotionSpeedOut').value = vectorMotionSpeed.toFixed(2).replace(/0$/, '') + '×';
+  step.value = String(vectorMotionStep);
+  const moving = vectorMotionStyle !== 'none';
+  step.disabled = !moving;
+  speed.disabled = !moving || vectorMotionStep > 0;
+}
+
 function hasAnimatedVectorStrokes() {
   return vectorStrokes.some(stroke => stroke.motionStyle && stroke.motionStyle !== 'none');
 }
@@ -1436,6 +1459,8 @@ function updateLineInspector() {
   vectorPressureProfile = normalizeStrokeWidthProfile(stroke.pressureProfile);
   vectorMotionStyle = stroke.motionStyle || 'none';
   vectorMotionStrength = stroke.motionStrength ?? 3;
+  vectorMotionSpeed = stroke.motionSpeed ?? 1;
+  vectorMotionStep = stroke.motionStep ?? 0;
   const lineColor = document.getElementById('lineColor');
   const lineWidth = document.getElementById('lineWidth');
   if (document.activeElement !== lineColor) lineColor.value = stroke.color;
@@ -1449,6 +1474,7 @@ function updateLineInspector() {
   if (document.activeElement !== document.getElementById('vectorMotionStyle')) document.getElementById('vectorMotionStyle').value = stroke.motionStyle || 'none';
   if (document.activeElement !== document.getElementById('vectorMotionStrength')) document.getElementById('vectorMotionStrength').value = stroke.motionStrength ?? 3;
   document.getElementById('vectorMotionStrengthOut').value = (stroke.motionStrength ?? 3) + 'px';
+  syncMotionRhythmUi();
   if (document.activeElement !== lineWidth) lineWidth.value = stroke.width;
   document.getElementById('lineWidthOut').value = stroke.width + 'px';
   const nodeStatus = document.getElementById('lineNodeStatus');
@@ -1774,7 +1800,22 @@ function bindControls() {
   const finishProfileDrag = () => { pressureProfileDrag = false; finishLineStyleEdit(); };
   profileCanvas.addEventListener('pointerup', finishProfileDrag);
   profileCanvas.addEventListener('pointercancel', finishProfileDrag);
-  document.getElementById('vectorMotionStyle').onchange = event => { vectorMotionStyle = event.target.value; if (selectedStrokeIds.size || selectedStrokeId) applySelectedStyle({ motionStyle: vectorMotionStyle }); };
+  document.getElementById('vectorMotionStyle').onchange = event => { vectorMotionStyle = event.target.value; syncMotionRhythmUi(); if (selectedStrokeIds.size || selectedStrokeId) applySelectedStyle({ motionStyle: vectorMotionStyle }); };
+  document.getElementById('vectorMotionStep').onchange = event => {
+    vectorMotionStep = normalizeMotionStep(event.target.value);
+    syncMotionRhythmUi();
+    if (selectedStrokeIds.size || selectedStrokeId) applySelectedStyle({ motionStep: vectorMotionStep });
+  };
+  const motionSpeedInput = document.getElementById('vectorMotionSpeed');
+  motionSpeedInput.addEventListener('pointerdown', beginLineStyleEdit);
+  motionSpeedInput.addEventListener('pointerup', finishLineStyleEdit);
+  motionSpeedInput.addEventListener('pointercancel', finishLineStyleEdit);
+  motionSpeedInput.addEventListener('change', finishLineStyleEdit);
+  motionSpeedInput.oninput = event => {
+    vectorMotionSpeed = normalizeMotionSpeed(event.target.value);
+    syncMotionRhythmUi();
+    if (selectedStrokeIds.size || selectedStrokeId) { beginLineStyleEdit(); applySelectedStyle({ motionSpeed: vectorMotionSpeed }, false); }
+  };
   const opacityInput = document.getElementById('vectorBrushOpacity');
   opacityInput.addEventListener('pointerdown', beginLineStyleEdit);
   opacityInput.addEventListener('pointerup', finishLineStyleEdit);
@@ -2352,6 +2393,7 @@ function paintMode() {
 }
 
 function syncBrushUi() {
+  syncMotionRhythmUi();
   const mode = paintMode();
   const brushPopover = document.getElementById('brushPopover');
   if (brushPopover) brushPopover.dataset.mode = mode;
@@ -2814,6 +2856,8 @@ function previewVectorDrawing() {
     pressureProfile: vectorPressureProfile,
     motionStyle: vectorMotionStyle,
     motionStrength: vectorMotionStrength,
+    motionSpeed: vectorMotionSpeed,
+    motionStep: vectorMotionStep,
   });
   // Animate the preview only when the committed line will animate too; a static
   // line must not wobble while drawing and then snap straight on pen-up.
@@ -2821,8 +2865,7 @@ function previewVectorDrawing() {
     renderer.previewVectorStroke(previewStroke);
     return;
   }
-  const previewPhase = lineBoilPhase(performance.now() - boilStartedAt, Number(document.getElementById('boilSpeed').value));
-  renderer.previewVectorStroke(animateLineStrokes([previewStroke], { phase: previewPhase, amplitude: Number(document.getElementById('boilAmplitude').value) })[0]);
+  renderer.previewVectorStroke(animateLineStrokes([previewStroke], lineMotionSettings(performance.now() - boilStartedAt))[0]);
 }
 
 function createShapePoints(kind, start, end) {
@@ -2852,6 +2895,9 @@ function bindCanvasEvents() {
   // New dabs are stamped as samples arrive; the screen refresh is batched to
   // at most one per animation frame.
   const brushPreviewScheduler = createFrameScheduler(showRasterStroke);
+  // Pen events can arrive several times per display frame; redraw the vector
+  // preview once per frame with every sample collected so far.
+  const vectorPreviewScheduler = createFrameScheduler(previewVectorDrawing);
   const smudgeRenderScheduler = createFrameScheduler(() => {
     if (!smudgeSession) return;
     const context = layers[active].canvas.getContext('2d');
@@ -3418,19 +3464,21 @@ function bindCanvasEvents() {
     }
 
     if (tool === 'vector') {
+      const minDistance = vectorSampleSpacing(cssToCanvasUnits(1));
       for (const sample of coalescedPointerEvents(event)) {
         const samplePoint = position(sample);
         const previous = drawingPoints[drawingPoints.length - 1];
         const sampleTime = Number(sample.timeStamp ?? event.timeStamp) || lastVectorSampleTime + 16;
-        if (Math.hypot(samplePoint.x - previous.x, samplePoint.y - previous.y) >= 1.25) {
-          const pressure = sample.pointerType === 'pen'
-            ? normalizePointerPressure(sample, pressureEnabled)
-            : estimateVectorMousePressure(previous, samplePoint, sampleTime - lastVectorSampleTime, size);
-          drawingPoints.push({ ...samplePoint, pressure });
+        const pressure = sample.pointerType === 'pen'
+          ? normalizePointerPressure(sample, pressureEnabled)
+          : estimateVectorMousePressure(previous, samplePoint, sampleTime - lastVectorSampleTime, size);
+        const candidate = { ...samplePoint, pressure };
+        if (shouldKeepVectorSample(previous, candidate, { minDistance })) {
+          drawingPoints.push(candidate);
           lastVectorSampleTime = sampleTime;
         }
       }
-      previewVectorDrawing();
+      vectorPreviewScheduler.schedule();
       return;
     }
 
@@ -3681,6 +3729,7 @@ function bindCanvasEvents() {
       // undo snapshot that pointerdown recorded for raster tools.
       if (tool !== 'vector' && !maskEditing) layers[active].undo.pop();
       if (tool === 'pen' || tool === 'eraser') cancelRasterStroke();
+      vectorPreviewScheduler.cancel();
       strokeSamples = [];
       strokeIsStylus = false;
       drawingPoints = null;
@@ -3694,7 +3743,7 @@ function bindCanvasEvents() {
     if (tool === 'shape') {
       const points = createShapePoints(shapeKind, lineStartPoint, point);
       commitLineHistory(lineSnapshot());
-      const created = createLineStroke({ id: 'line-' + nextLineId++, points: points.map(p => ({ ...p, pressure: 0.5 })), color, width: size, brushPreset: vectorBrushPreset, pressureCurve: vectorPressureCurve, opacity: vectorBrushOpacity, pressureProfile: vectorPressureProfile, motionStyle: vectorMotionStyle, motionStrength: vectorMotionStrength });
+      const created = createLineStroke({ id: 'line-' + nextLineId++, points: points.map(p => ({ ...p, pressure: 0.5 })), color, width: size, brushPreset: vectorBrushPreset, pressureCurve: vectorPressureCurve, opacity: vectorBrushOpacity, pressureProfile: vectorPressureProfile, motionStyle: vectorMotionStyle, motionStrength: vectorMotionStrength, motionSpeed: vectorMotionSpeed, motionStep: vectorMotionStep });
       vectorStrokes.push(assignStrokeToActiveLayer(created));
       selectedStrokeId = created.id;
       selectedStrokeIds.clear(); selectedStrokeIds.add(created.id);
@@ -3702,13 +3751,14 @@ function bindCanvasEvents() {
     }
 
     if (tool === 'vector') {
-      const previous = drawingPoints[drawingPoints.length - 1];
-      if (Math.hypot(point.x - previous.x, point.y - previous.y) > 0.1) drawingPoints.push({ ...point, pressure: event.pointerType === 'pen' ? normalizePointerPressure(event, pressureEnabled) : 0.5 });
-      if (drawingPoints.length === 1) drawingPoints.push({ x: point.x + 0.1, y: point.y + 0.1 });
+      vectorPreviewScheduler.cancel();
+      // A lifting pen reports pressure 0 and a mouse none: the end point keeps
+      // the last real pressure so the line end doesn't blob or thin on pen-up.
+      const finishedPoints = finishVectorPoints(drawingPoints, point);
       commitLineHistory(lineSnapshot());
       const created = createLineStroke({
         id: 'line-' + nextLineId++,
-        points: drawingPoints,
+        points: finishedPoints,
         color,
         width: size,
         brushPreset: vectorBrushPreset,
@@ -3717,6 +3767,8 @@ function bindCanvasEvents() {
         pressureProfile: vectorPressureProfile,
         motionStyle: vectorMotionStyle,
         motionStrength: vectorMotionStrength,
+        motionSpeed: vectorMotionSpeed,
+        motionStep: vectorMotionStep,
       });
       vectorStrokes.push(assignStrokeToActiveLayer(created));
       // Freehand drawing should not leave the new line selected; otherwise the
@@ -3732,7 +3784,7 @@ function bindCanvasEvents() {
 
     if (tool === 'line') {
       commitLineHistory(lineSnapshot());
-      const created = createLineStroke({ id: 'line-' + nextLineId++, points: [{ ...lineStartPoint, pressure: 0.5 }, { ...point, pressure: 0.5 }], color, width: size, brushPreset: vectorBrushPreset, pressureCurve: vectorPressureCurve, opacity: vectorBrushOpacity, pressureProfile: vectorPressureProfile, motionStyle: vectorMotionStyle, motionStrength: vectorMotionStrength });
+      const created = createLineStroke({ id: 'line-' + nextLineId++, points: [{ ...lineStartPoint, pressure: 0.5 }, { ...point, pressure: 0.5 }], color, width: size, brushPreset: vectorBrushPreset, pressureCurve: vectorPressureCurve, opacity: vectorBrushOpacity, pressureProfile: vectorPressureProfile, motionStyle: vectorMotionStyle, motionStrength: vectorMotionStrength, motionSpeed: vectorMotionSpeed, motionStep: vectorMotionStep });
       vectorStrokes.push(assignStrokeToActiveLayer(created));
       selectedStrokeId = created.id;
       selectedStrokeIds.clear(); selectedStrokeIds.add(created.id);
@@ -3752,6 +3804,14 @@ function bindCanvasEvents() {
 
   inputSurface.addEventListener('pointerup', end);
   inputSurface.addEventListener('pointercancel', end);
+  // Switching apps or windows mid-stroke may never deliver pointerup; discard
+  // the unfinished stroke instead of leaving the tool stuck in "drawing".
+  const abandonStroke = () => {
+    if (!down || !['vector', 'pen', 'eraser', 'shape', 'line'].includes(tool)) return;
+    end({ type: 'pointercancel', pointerId: penPointerId ?? -1, clientX: 0, clientY: 0, pressure: 0, button: 0 });
+  };
+  window.addEventListener('blur', abandonStroke);
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') abandonStroke(); });
 }
 
 function bindKeyboardShortcuts() {
@@ -4302,12 +4362,10 @@ function setExportProgress(done, total, label) {
 async function renderExportFrame(tick, plan, { transparent }) {
   timeline.playhead = tick;
   await syncClipsToPlayhead({ save: false });
-  const strokes = boilEnabled
-    ? animateLineStrokes(vectorStrokes, {
-      phase: lineBoilPhase(tick * plan.frameDurationMs, Number(document.getElementById('boilSpeed').value)),
-      amplitude: Number(document.getElementById('boilAmplitude').value),
-      frequency: Number(document.getElementById('boilFrequency').value),
-    })
+  // Lines with their own motion style animate in the export even when the
+  // global Line Boil switch is off, exactly as they do on screen.
+  const strokes = boilEnabled || hasAnimatedVectorStrokes()
+    ? animateLineStrokes(vectorStrokes, lineMotionSettings(tick * plan.frameDurationMs))
     : vectorStrokes;
   const full = composite({ background: !transparent, strokes }).canvas;
   if (plan.width === W && plan.height === H) return full;

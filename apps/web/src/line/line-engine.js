@@ -2,7 +2,7 @@ import { sampleBezierPath, cloneBezierPath } from './bezier-path.js';
 
 import { createVectorBrushStyle, normalizeVectorPressure, normalizeStrokeWidthProfile } from './vector-brush.js';
 
-export function createLineStroke({ id, points, color = '#24242a', width = 7, brushPreset = 'ink', pressureCurve = 1, opacity, motionStyle = 'none', motionStrength = 3, pressureProfile }) {
+export function createLineStroke({ id, points, color = '#24242a', width = 7, brushPreset = 'ink', pressureCurve = 1, opacity, motionStyle = 'none', motionStrength = 3, motionSpeed = 1, motionStep = 0, pressureProfile }) {
   if (!id) throw new TypeError('A stable line id is required.');
   if (!Array.isArray(points) || points.length < 2) throw new RangeError('A line needs at least two points.');
   return {
@@ -10,7 +10,7 @@ export function createLineStroke({ id, points, color = '#24242a', width = 7, bru
     points: points.map(point => ({ x: Number(point.x), y: Number(point.y), pressure: Number.isFinite(Number(point.pressure)) ? normalizeVectorPressure(point.pressure) : 0.5 })),
     color,
     width: Math.max(0.5, Number(width) || 1),
-    ...createVectorBrushStyle({ brushPreset, pressureCurve, opacity, motionStyle, motionStrength }),
+    ...createVectorBrushStyle({ brushPreset, pressureCurve, opacity, motionStyle, motionStrength, motionSpeed, motionStep }),
     pressureProfile: normalizeStrokeWidthProfile(pressureProfile),
   };
 }

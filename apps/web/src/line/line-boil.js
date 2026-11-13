@@ -89,18 +89,61 @@ export function computeLineBoilPoints(stroke, {
   });
 }
 
+/** Hand-drawn rhythms: 0 = smooth, otherwise redraws per second ("on twos" at 12 fps = 6). */
+export const LINE_MOTION_STEPS = Object.freeze([0, 12, 8, 6, 4]);
+
+const GOLDEN_ANGLE = 2.399963229728653;
+
+export function normalizeMotionSpeed(value) {
+  const speed = Number(value);
+  return Number.isFinite(speed) ? Math.max(0.25, Math.min(4, speed)) : 1;
+}
+
+export function normalizeMotionStep(value) {
+  const step = Math.round(Number(value) || 0);
+  return LINE_MOTION_STEPS.includes(step) ? step : 0;
+}
+
+/**
+ * Phase of a line's own motion at `elapsedMs`. Smooth lines drift continuously
+ * at their own speed. Stepped lines hold each drawing and then jump to a
+ * clearly different one (golden-angle phase steps never repeat a pattern
+ * soon), like a hand-redrawn boil. Deterministic, so export frames match.
+ */
+export function lineMotionPhase(elapsedMs, { speed = 1, step = 0 } = {}) {
+  const seconds = Math.max(0, Number(elapsedMs) || 0) / 1000;
+  const safeStep = normalizeMotionStep(step);
+  if (safeStep) return Math.floor(seconds * safeStep + 1e-9) * GOLDEN_ANGLE;
+  return seconds * normalizeMotionSpeed(speed) * Math.PI * 2;
+}
+
+/**
+ * Display geometry for animated lines. Never changes the source strokes.
+ * settings:
+ *   phase, amplitude, frequency – the global Line Boil panel
+ *   globalBoil (default true)   – whether lines left at "고정" follow that panel
+ *   elapsedMs                   – when given, lines with their own style use
+ *                                 their own speed/rhythm via lineMotionPhase
+ */
 export function animateLineStrokes(strokes, settings = {}) {
-  const phase = Number(settings.phase) || 0;
+  const globalPhase = Number(settings.phase) || 0;
+  const globalBoil = settings.globalBoil !== false;
+  const hasClock = Number.isFinite(Number(settings.elapsedMs)) && settings.elapsedMs !== null;
   return strokes.map(stroke => {
-    // Per-stroke animation styles work independently of the global boil toggle.
-    // "none" still follows the global Line Boil panel for backward compatibility.
+    // A line's own motion style works without the global switch. Lines left at
+    // "고정" (none) only move when the global Line Boil is on.
     const ownStyle = stroke.motionStyle && stroke.motionStyle !== 'none' ? stroke.motionStyle : null;
+    if (!ownStyle && !globalBoil) return stroke;
+    const phase = ownStyle && hasClock
+      ? lineMotionPhase(settings.elapsedMs, { speed: stroke.motionSpeed, step: stroke.motionStep })
+      : globalPhase;
+    const strokeSettings = { ...settings, phase };
     const mode = ownStyle || 'wave';
-    const strength = Math.max(0, Math.min(16, Number(ownStyle ? (stroke.motionStrength ?? settings.amplitude) : settings.amplitude) || 0));
+    const strength = Math.max(0, Math.min(16, Number(ownStyle ? (stroke.motionStrength ?? strokeSettings.amplitude) : strokeSettings.amplitude) || 0));
     if (strength === 0) return { ...stroke, motionPasses: null };
     const source = stroke.bezierPath ? sampleBezierPath(stroke.bezierPath).points : stroke.points;
     if (mode === 'wave') {
-      const moved = computeLineBoilPoints(stroke, { ...settings, amplitude: strength });
+      const moved = computeLineBoilPoints(stroke, { ...strokeSettings, amplitude: strength });
       return { ...stroke, points: moved.map((point, index) => ({ ...point, pressure: stroke.points[Math.min(index, stroke.points.length - 1)]?.pressure ?? 0.5 })), bezierPath: undefined, motionPasses: null };
     }
 
@@ -111,7 +154,7 @@ export function animateLineStrokes(strokes, settings = {}) {
         // Three phase-shifted redraws create a hand-drawn boiling contour.
         const phaseOffset = (pass - 1) * 0.92;
         const passPoints = computeLineBoilPoints(stroke, {
-          ...settings,
+          ...strokeSettings,
           phase: phase + phaseOffset,
           amplitude: strength * (pass === 1 ? 0.72 : 0.88),
         });

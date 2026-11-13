@@ -3,7 +3,7 @@
 // commit. Both use the same buffer and the same composite settings, so the
 // picture while drawing equals the picture after release.
 
-import { tipFalloff } from './raster-brush.js';
+import { PAPER_TILE, paperGrain, tipFalloff } from './raster-brush.js';
 
 const TIP_SIZE = 128;
 const baseTips = new Map();
@@ -62,6 +62,26 @@ export function tintedTip(brush, color) {
   return canvas;
 }
 
+const paperTiles = new Map();
+
+/** White tile whose alpha is the paper tooth, cached per kind. */
+export function paperTile(kind) {
+  if (paperTiles.has(kind)) return paperTiles.get(kind);
+  const alpha = paperGrain(kind, PAPER_TILE);
+  const canvas = makeCanvas(PAPER_TILE, PAPER_TILE);
+  const context = canvas.getContext('2d');
+  const image = context.createImageData(PAPER_TILE, PAPER_TILE);
+  for (let index = 0; index < alpha.length; index++) {
+    image.data[index * 4] = 255;
+    image.data[index * 4 + 1] = 255;
+    image.data[index * 4 + 2] = 255;
+    image.data[index * 4 + 3] = alpha[index];
+  }
+  context.putImageData(image, 0, 0);
+  paperTiles.set(kind, canvas);
+  return canvas;
+}
+
 /** Adds the current selection as a clip path, if there is one. */
 export function clipToSelection(context, selection) {
   if (selection?.polygon?.length > 2) {
@@ -87,6 +107,9 @@ export class StrokeBuffer {
     this.previewContext = this.preview.getContext('2d');
     this.tip = null;
     this.dabCount = 0;
+    this.paper = null;
+    this.masked = null;
+    this.bounds = null;
   }
 
   begin(brush, color) {
@@ -94,12 +117,50 @@ export class StrokeBuffer {
     this.context.clearRect(0, 0, this.width, this.height);
     this.tip = tintedTip(brush, color);
     this.dabCount = 0;
+    this.bounds = null;
+    // Texture brushes: the paper tooth is anchored to the canvas (pattern at
+    // the origin), applied to the whole stroke at composite time.
+    this.paper = brush.paper ? this.context.createPattern(paperTile(brush.paper), 'repeat') : null;
+    if (this.paper && !this.masked) {
+      this.masked = makeCanvas(this.width, this.height);
+      this.maskedContext = this.masked.getContext('2d');
+    }
+    // Bounds only grow during a stroke, so later frames clear just the bounds.
+    if (this.paper) this.maskedContext.clearRect(0, 0, this.width, this.height);
+  }
+
+  /** The stroke as it will be composited: with the paper tooth cut out, if any. */
+  strokeImage() {
+    if (!this.paper || !this.bounds) return this.canvas;
+    const x = Math.max(0, Math.floor(this.bounds.x0));
+    const y = Math.max(0, Math.floor(this.bounds.y0));
+    const w = Math.min(this.width, Math.ceil(this.bounds.x1)) - x;
+    const h = Math.min(this.height, Math.ceil(this.bounds.y1)) - y;
+    const context = this.maskedContext;
+    context.save();
+    if (w > 0 && h > 0) {
+      context.clearRect(x, y, w, h);
+      context.drawImage(this.canvas, x, y, w, h, x, y, w, h);
+      context.globalCompositeOperation = 'destination-in';
+      context.fillStyle = this.paper;
+      context.fillRect(x, y, w, h);
+    }
+    context.restore();
+    return this.masked;
   }
 
   stamp(dabs) {
     const context = this.context;
     for (const dab of dabs) {
       const size = Math.max(1, dab.radius * 2);
+      const reach = size * 0.75; // covers rotated tips
+      if (!this.bounds) this.bounds = { x0: dab.x - reach, y0: dab.y - reach, x1: dab.x + reach, y1: dab.y + reach };
+      else {
+        this.bounds.x0 = Math.min(this.bounds.x0, dab.x - reach);
+        this.bounds.y0 = Math.min(this.bounds.y0, dab.y - reach);
+        this.bounds.x1 = Math.max(this.bounds.x1, dab.x + reach);
+        this.bounds.y1 = Math.max(this.bounds.y1, dab.y + reach);
+      }
       // Dabs smaller than a pixel keep their visual weight through alpha.
       const coverage = dab.radius * 2 < 1 ? dab.radius * 2 : 1;
       context.globalAlpha = Math.min(1, dab.alpha * coverage);
@@ -127,7 +188,7 @@ export class StrokeBuffer {
     clipToSelection(context, selection);
     context.globalCompositeOperation = operation;
     context.globalAlpha = alpha;
-    context.drawImage(this.canvas, 0, 0);
+    context.drawImage(this.strokeImage(), 0, 0);
     context.restore();
   }
 

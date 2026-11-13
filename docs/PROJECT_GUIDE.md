@@ -55,6 +55,23 @@ Always distinguish code-level tests from visual browser checks and physical iPad
   - PNG export, opaque or transparent.
   - 그리기로 보내기: the image becomes the bottom layer of the open drawing.
 - Not yet: snapping walls together, imported models, perspective guides, camera keyframes, editable vector line export, and a linked (re-editable) 3D layer in the drawing document.
+### Doodraw-style brushes, 2nd pass (v1.12)
+- Each moving line has its own **움직임 리듬** and **움직임 속도** (`motionStep`, `motionSpeed` on the stroke).
+  - Rhythm 0 is smooth; speed only applies there.
+  - 12/8/6/4 redraws per second hold each drawing and then jump to a clearly different one (golden-angle phase steps). This is the hand-redrawn boil look.
+  - `lineMotionPhase` is deterministic, and export uses the same `lineMotionSettings`, so exported frames match the screen.
+- Fix: static lines (고정) no longer wobble when another line has a motion style and Line Boil is off (`animateLineStrokes(..., { globalBoil })`).
+- Fix: export animates per-line motion styles even with Line Boil off (it used to export them frozen).
+- Raster **분필 Chalk** and **크레용 Crayon**:
+  - `paper` names a seamless 256² paper tooth (`paperGrain`, pure and tested), anchored to the canvas.
+  - `StrokeBuffer` cuts the tooth out of the stroke at composite time, only inside the painted bounds. Preview and commit therefore stay the same picture, and erasing with these brushes is grainy too.
+  - Grain does not yet fill in with harder pressure.
+### Live pressure vector lines (v1.11)
+- Input sampling is in `line/vector-input.js` (pure, tested). The live preview and the committed line use the same point list and the same `createLineStroke` → `drawVectorStroke` path, so pen-up changes nothing except the final pen-up position.
+- Pen-up: a lifting pen reports pressure 0, and a mouse reports none. The end point therefore inherits the last real pressure. Previously it fell back to 0.5, which put a blob on light lines and a nub on heavy ones. A tap becomes a dot at the tap pressure.
+- Sampling: about 1.5 screen px of spacing (follows zoom, 0.35–2.5 canvas units). Closer samples are still kept when pressure changes by ≥ 0.06, so slow pressure changes are not dropped.
+- The preview redraws once per display frame (rAF), not on every pointer event. Losing window focus or hiding the tab mid-stroke discards the unfinished line, the same as pointercancel.
+- Not done: `getPredictedEvents()`. The brief asks to measure it on a device first, and it would stay display-only.
 
 ### Project gallery (v1.10)
 - 작업 → 작품 목록: each project row has 복제 and 삭제. Duplicate copies the saved record under a new id (`retargetProjectDocument` remaps the project-scoped image keys; images are copied as Blobs). Duplicating the open project saves it first so the copy matches the screen. Names avoid clashes ("A 사본", "A 사본 2").
