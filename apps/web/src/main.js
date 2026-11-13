@@ -614,7 +614,7 @@ function render(dirtyIndices = [], displayStrokes = null) {
   for (const stroke of vectorStrokes) {
     if (!stroke.layerId || !layers.some(layer => layer.id === stroke.layerId)) stroke.layerId = layers[active]?.id;
   }
-  displayStrokes ||= boilEnabled ? boiledStrokes() : vectorStrokes;
+  displayStrokes ||= (boilEnabled || vectorStrokes.some(stroke => stroke.motionStyle && stroke.motionStyle !== 'none')) ? boiledStrokes() : vectorStrokes;
   for (const index of dirtyIndices) {
     if (layers[index]) refreshLayerPresentation(layers[index]);
   }
@@ -631,6 +631,11 @@ function render(dirtyIndices = [], displayStrokes = null) {
   drawTimeline();
   scheduleFrameThumbnail();
   scheduleAutosave();
+  if ((boilEnabled || vectorStrokes.some(stroke => stroke.motionStyle && stroke.motionStyle !== 'none')) && !animationFrame) {
+    boilStartedAt = performance.now();
+    lastAnimationPaint = 0;
+    animationFrame = requestAnimationFrame(animationTick);
+  }
 }
 
 function cloneLineStroke(stroke) {
@@ -1347,8 +1352,12 @@ function updateBoilOutputs() {
   document.getElementById('boilSpeedOut').value = Number(document.getElementById('boilSpeed').value).toFixed(1) + '×';
 }
 
+function hasAnimatedVectorStrokes() {
+  return vectorStrokes.some(stroke => stroke.motionStyle && stroke.motionStyle !== 'none');
+}
+
 function animationTick(timestamp) {
-  if (!boilEnabled) {
+  if (!boilEnabled && !hasAnimatedVectorStrokes()) {
     animationFrame = 0;
     return;
   }
@@ -1370,8 +1379,12 @@ function setBoilEnabled(enabled) {
     lastAnimationPaint = 0;
     if (!animationFrame) animationFrame = requestAnimationFrame(animationTick);
   } else {
-    if (animationFrame) cancelAnimationFrame(animationFrame);
-    animationFrame = 0;
+    if (hasAnimatedVectorStrokes()) {
+      if (!animationFrame) animationFrame = requestAnimationFrame(animationTick);
+    } else {
+      if (animationFrame) cancelAnimationFrame(animationFrame);
+      animationFrame = 0;
+    }
     render();
   }
 }
@@ -2789,7 +2802,7 @@ function currentLayerMotionFrom(track) {
 function previewVectorDrawing() {
   if (!drawingPoints?.length) return;
   const points = drawingPoints.length > 1 ? drawingPoints : [drawingPoints[0], { ...drawingPoints[0], x: drawingPoints[0].x + 0.1 }];
-  renderer.previewVectorStroke(createLineStroke({
+  const previewStroke = createLineStroke({
     id: 'preview-line',
     points,
     color,
@@ -2798,7 +2811,17 @@ function previewVectorDrawing() {
     pressureCurve: vectorPressureCurve,
     opacity: vectorBrushOpacity,
     pressureProfile: vectorPressureProfile,
-  }));
+    motionStyle: vectorMotionStyle,
+    motionStrength: vectorMotionStrength,
+  });
+  // Animate the preview only when the committed line will animate too; a static
+  // line must not wobble while drawing and then snap straight on pen-up.
+  if (!boilEnabled && vectorMotionStyle === 'none') {
+    renderer.previewVectorStroke(previewStroke);
+    return;
+  }
+  const previewPhase = lineBoilPhase(performance.now() - boilStartedAt, Number(document.getElementById('boilSpeed').value));
+  renderer.previewVectorStroke(animateLineStrokes([previewStroke], { phase: previewPhase, amplitude: Number(document.getElementById('boilAmplitude').value) })[0]);
 }
 
 function createShapePoints(kind, start, end) {

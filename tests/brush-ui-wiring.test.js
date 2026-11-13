@@ -88,3 +88,16 @@ test('brush library cards cover every raster and vector preset option', async ()
   assert.deepEqual(cards('vector'), optionValues('vectorBrushPreset'));
   assert.deepEqual(cards('raster'), optionValues('brushPreset'));
 });
+
+
+test('Doodraw-inspired animated vector brush modes are selectable and wired to live rendering', async () => {
+  const html = await read('apps/web/index.html');
+  const main = await read('apps/web/src/main.js');
+  for (const value of ['none', 'wave', 'boil', 'redraw', 'flicker']) {
+    assert.match(html, new RegExp(`<option value="${value}"`), `missing motion style ${value}`);
+  }
+  assert.match(main, /hasAnimatedVectorStrokes\(\)/);
+  assert.match(main, /motionStyle: vectorMotionStyle/);
+  assert.match(main, /animateLineStrokes\(\[previewStroke\]/);
+  assert.match(main, /motionStyle && stroke\.motionStyle !== 'none'/);
+});

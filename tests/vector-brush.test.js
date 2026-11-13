@@ -48,3 +48,11 @@ test('mouse vector pressure is stable for missing or zero-duration samples', asy
   assert.ok(Number.isFinite(value));
   assert.ok(value >= 0.12 && value <= 1);
 });
+
+
+test('boiling is a supported serializable per-stroke motion style', () => {
+  const style = createVectorBrushStyle({ brushPreset: 'ink', motionStyle: 'boil', motionStrength: 6 });
+  assert.equal(style.motionStyle, 'boil');
+  assert.equal(style.motionStrength, 6);
+  assert.equal(createVectorBrushStyle({ motionStyle: 'unknown' }).motionStyle, 'none');
+});

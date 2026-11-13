@@ -365,6 +365,9 @@ export class PixiStageRenderer {
     if (!this.preview || !stroke?.points?.length) return;
     this.clearPreview();
     this.drawVectorStroke(this.preview, stroke);
+    for (const pass of stroke.motionPasses || []) {
+      this.drawVectorStroke(this.preview, stroke, pass.points, pass.alpha);
+    }
   }
 
   previewLine(from, to, color, width) {

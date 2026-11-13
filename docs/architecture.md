@@ -108,3 +108,12 @@ The web prototype includes raster drawing, connected-region fill, PixiJS renderi
 - Selected stroke points are transformed around the same selection centroid as raster pixels. Stroke width scales with the selected scale factor; color and other stroke metadata remain unchanged.
 - Raster and vector snapshots are stored in one grouped transform undo/redo record so the operation can be reverted together. The vector selection is evaluated against the polygon at apply time.
 - Vector stroke selection currently uses centerline intersection, not stroke-width-aware edge overlap; partially intersecting strokes move in full. Transform changes are committed immediately rather than shown as a live preview.
+
+
+## Animated vector brush rendering (Doodraw-inspired)
+- Vector strokes keep immutable source geometry and store a per-stroke motion style and strength.
+- Wobbly/Wave deforms sampled path points along their local centerline normal; Boiling draws three deterministic phase-shifted contour passes; Trio/Redraw and Frame Echo/Flicker draw offset passes.
+- Animated geometry is presentation-only. It is not written back into the source stroke, selection geometry, or document history.
+- Per-stroke animated styles run without enabling the global Line Boil switch. The global switch remains available for applying the shared wave treatment to otherwise-static strokes.
+- The in-progress vector preview uses the same motion pass renderer as committed strokes.
+- This first slice does not yet provide texture/particle tips, per-brush speed, or a full raster-stroke animation model.
