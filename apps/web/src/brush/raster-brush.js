@@ -22,6 +22,12 @@ export const RASTER_BRUSHES = Object.freeze({
   // so overlapping strokes reveal the same paper tooth, like real chalk/crayon.
   chalk: Object.freeze({ id: 'chalk', label: '분필', hardness: 0.55, grain: 0, paper: 'chalk', spacing: 0.07, sizePressure: 0.45, flow: 0.9, flowPressure: 0.45, opacity: 1, sizeScale: 1.5, streamline: 0.18, pressureCurve: 1 }),
   crayon: Object.freeze({ id: 'crayon', label: '크레용', hardness: 0.88, grain: 0, paper: 'crayon', spacing: 0.06, sizePressure: 0.3, flow: 0.95, flowPressure: 0.35, opacity: 1, sizeScale: 1.2, streamline: 0.2, pressureCurve: 1 }),
+  // Particle brushes: each spacing step scatters `count` particles within
+  // `scatter` × size of the path; `particle` scales their size, with jitter.
+  // Seeded per stroke, so preview and result are the same picture.
+  spray: Object.freeze({ id: 'spray', label: '스프레이', hardness: 0.5, grain: 0, spacing: 0.22, sizePressure: 0.2, flow: 0.8, flowPressure: 0.6, opacity: 1, sizeScale: 1.6, streamline: 0.15, pressureCurve: 1, scatter: 1, count: 6, particle: 0.11, sizeJitter: 0.6, alphaJitter: 0.5 }),
+  sparkle: Object.freeze({ id: 'sparkle', label: '반짝이', hardness: 0.85, grain: 0, tip: 'star', spacing: 0.9, sizePressure: 0.4, flow: 1, flowPressure: 0.3, opacity: 1, sizeScale: 1.4, streamline: 0.2, pressureCurve: 1, scatter: 1.1, count: 1, particle: 0.55, sizeJitter: 0.75, alphaJitter: 0.25, rotate: true }),
+  stipple: Object.freeze({ id: 'stipple', label: '점묘', hardness: 0.95, grain: 0, spacing: 0.35, sizePressure: 0.3, flow: 1, flowPressure: 0.4, opacity: 1, sizeScale: 1.3, streamline: 0.2, pressureCurve: 1, scatter: 0.8, count: 3, particle: 0.16, sizeJitter: 0.45, alphaJitter: 0 }),
   brush: Object.freeze({ id: 'brush', label: '브러시', hardness: 0.32, grain: 0, spacing: 0.08, sizePressure: 0.6, flow: 0.3, flowPressure: 0.6, opacity: 1, sizeScale: 1.2, streamline: 0.28, pressureCurve: 1.05 }),
 });
 
@@ -88,6 +94,32 @@ export function createRasterStroke({ brush = RASTER_BRUSHES.ink, size = 7, stylu
     pressure,
   });
 
+  // Particle brushes replace each path dab by scattered particles.
+  const particlesAt = (x, y, pressure) => {
+    const centre = makeDab(x, y, pressure);
+    const reach = centre.radius * brush.scatter;
+    const particles = [];
+    for (let index = 0; index < brush.count; index++) {
+      // Uniform over the disc (sqrt), so particles don't bunch in the middle.
+      const distance = Math.sqrt(random()) * reach;
+      const direction = random() * Math.PI * 2;
+      particles.push({
+        x: x + Math.cos(direction) * distance,
+        y: y + Math.sin(direction) * distance,
+        radius: Math.max(0.35, centre.radius * brush.particle * (1 - (brush.sizeJitter || 0) * random())),
+        alpha: centre.alpha * (1 - (brush.alphaJitter || 0) * random()),
+        angle: brush.rotate ? random() * Math.PI * 2 : 0,
+        pressure,
+      });
+    }
+    return particles;
+  };
+  const emit = (dabs, x, y, pressure) => {
+    lastDab = makeDab(x, y, pressure);
+    if (brush.scatter) dabs.push(...particlesAt(x, y, pressure));
+    else dabs.push(lastDab);
+  };
+
   // Walk from the end of the previous segment towards (x, y, p), stamping a
   // dab every `spacing` × diameter. `carry` is the distance already covered
   // since the last dab, so spacing stays even across segment boundaries.
@@ -96,8 +128,7 @@ export function createRasterStroke({ brush = RASTER_BRUSHES.ink, size = 7, stylu
     const dabs = [];
     if (!cursor) {
       cursor = { x, y, p: pressure };
-      lastDab = makeDab(x, y, pressure);
-      dabs.push(lastDab);
+      emit(dabs, x, y, pressure);
       return dabs;
     }
     const from = cursor;
@@ -117,8 +148,7 @@ export function createRasterStroke({ brush = RASTER_BRUSHES.ink, size = 7, stylu
       travelled += needed;
       carry = 0;
       const u = travelled / length;
-      lastDab = makeDab(from.x + dx * u, from.y + dy * u, lerp(from.p, pressure, u));
-      dabs.push(lastDab);
+      emit(dabs, from.x + dx * u, from.y + dy * u, lerp(from.p, pressure, u));
     }
     cursor = { x, y, p: pressure };
     return dabs;
@@ -233,4 +263,17 @@ export function paperGrain(kind, size = PAPER_TILE) {
     }
   }
   return alpha;
+}
+
+/**
+ * Tip opacity at an offset (dx, dy) from the centre, in tip radii (|d| = 1 is
+ * the edge). Round tips use tipFalloff; the star tip is a soft four-point
+ * sparkle whose arms reach the edge and whose waist is a quarter of it.
+ */
+export function tipAlpha(dx, dy, brush) {
+  const distance = Math.hypot(dx, dy);
+  if (brush.tip !== 'star') return tipFalloff(distance, brush.hardness);
+  const angle = Math.atan2(dy, dx);
+  const reach = 0.22 + 0.78 * Math.pow(Math.abs(Math.cos(2 * angle)), 6);
+  return tipFalloff(distance / reach, brush.hardness);
 }
