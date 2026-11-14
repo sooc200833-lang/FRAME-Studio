@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { Box3, MeshBasicMaterial, Vector3 } from 'three';
 import { BUILDER_TYPES, buildSceneObject } from '../apps/web/src/studio3d/builders.js';
-import { OBJECT_TYPES, OBJECT_TYPE_IDS, createSceneDocument } from '../apps/web/src/studio3d/scene-document.js';
+import { OBJECT_TYPES, OBJECT_TYPE_IDS, SCENE_PRESETS, createSceneDocument } from '../apps/web/src/studio3d/scene-document.js';
 import { containRect } from '../apps/web/src/handoff/handoff-store.js';
 
 const read = path => readFile(new URL(`../${path}`, import.meta.url), 'utf8');
@@ -24,7 +24,7 @@ test('every object type has a builder whose shape fits its base size', () => {
 });
 
 test('preset objects sit on or above the ground', () => {
-  for (const preset of ['room', 'corridor', 'street']) {
+  for (const preset of Object.keys(SCENE_PRESETS)) {
     for (const item of createSceneDocument(preset).objects) {
       const group = buildSceneObject(item, new MeshBasicMaterial());
       group.updateMatrixWorld(true);
