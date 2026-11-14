@@ -44,6 +44,18 @@ Always distinguish code-level tests from visual browser checks and physical iPad
 - Freehand vector strokes are no longer left selected after drawing, so brush/color changes apply to the next stroke rather than restyling the previous one.
 - Verified in headless Chrome (layout at 1180×820 and 390×844, synthetic touch pinch/undo, eyedropper). Not yet verified on a physical iPad.
 
+### 3D studio: walls, openings, perspective guides (v1.14)
+- Doors and windows cut their wall. A door or window that faces along a level wall (within 5°) and sits in it gets an opening.
+  - A door standing on the floor becomes a notch in the wall outline; other openings are holes.
+  - `wallOpenings` is pure and tested. The wall rebuilds as an extruded shape only when its openings change.
+- **벽에 붙이기** (on by default), applied when a drag ends or an object is added:
+  - A wall end joins the nearest other wall end within 0.5 m.
+  - A door or window within 0.6 m of a wall is seated in it: centred in the thickness, turned along the wall, doors on the floor.
+- **투시 가이드:** vanishing-point rays per axis (X red, Z blue, Y green) and a dashed horizon.
+  - Lines run parallel when a vanishing point is far away or the camera is orthographic.
+  - The guides are a 2D overlay and never part of the PNG.
+  - **투시선 레이어도 보내기** sends them with the background as a 60 % layer named 투시선 above it.
+
 ### Lobby and 3D Background Studio (v1.13)
 - The site opens at a lobby (`index.html`). The drawing editor moved to `drawing.html` with unchanged code; its logo and the 작업 menu link back to the lobby and to the 3D studio.
 - 3D Background Studio (`background-studio.html`, three.js 0.187 from npm):

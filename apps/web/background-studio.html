@@ -2,6 +2,7 @@
 <html lang="ko">
 <head>
 <meta charset="utf-8">
+<link rel="icon" href="data:,">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
 <meta name="theme-color" content="#121214">
 <title>FRAME · 3D 배경 스튜디오</title>
@@ -52,7 +53,9 @@
         <button data-mode="scale" title="크기 (R)">크기</button>
       </div>
       <label class="check"><input id="snap" type="checkbox"> 스냅</label>
+      <label class="check" title="벽 끝끼리 붙이고, 문·창문을 가까운 벽에 끼워요"><input id="wallSnap" type="checkbox" checked> 벽에 붙이기</label>
       <label class="check"><input id="gridToggle" type="checkbox" checked> 그리드</label>
+      <label class="check" title="소실점으로 모이는 투시선과 지평선(점선)을 보여 줘요"><input id="guides" type="checkbox"> 투시 가이드</label>
       <div class="segmented" role="group" aria-label="시점">
         <button data-view="front">정면</button>
         <button data-view="side">측면</button>
@@ -101,6 +104,7 @@
     <section>
       <h2>내보내기</h2>
       <label class="check"><input id="transparent" type="checkbox"> 투명 배경</label>
+      <label class="check" title="그리기로 보낼 때 배경 위에 투시선 레이어를 하나 더 만들어요"><input id="sendGuides" type="checkbox" checked> 투시선 레이어도 보내기</label>
       <div class="field"><label for="exportSize">PNG 크기 (긴 변)</label><select id="exportSize"><option value="1200">1200px</option><option value="2400" selected>2400px</option><option value="4000">4000px</option></select></div>
       <p class="hint">PNG는 그림에 쓰고, 장면 파일은 나중에 3D를 다시 고칠 때 써요. 그리기로 보내면 1200px로 맨 아래 레이어에 들어가요.</p>
     </section>

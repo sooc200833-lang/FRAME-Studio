@@ -4,7 +4,7 @@ import { applyScreentoneToCanvas } from './tone/screentone.js';
 import { canvasUnitsPerCssPixel, clientToCanvasPoint, parseCssTransformMatrix } from './viewport/coordinates.js';
 import { classifyMultiTouchTap, classifyTouchStart, pinchViewport, snapViewportRotation } from './viewport/gestures.js';
 import { hexToHsv, hsvToHex, sampleImageDataColor } from './color/color-utils.js';
-import { BACKGROUND_SLOT, containRect, takeHandoff } from './handoff/handoff-store.js';
+import { BACKGROUND_SLOT, GUIDES_SLOT, containRect, takeHandoff } from './handoff/handoff-store.js';
 import { coalescedPointerEvents, createFrameScheduler, normalizePointerPressure, stabilizePoint } from './brush/brush-engine.js';
 import { finishVectorPoints, shouldKeepVectorSample, vectorSampleSpacing } from './line/vector-input.js';
 import { createRasterStroke, getRasterBrush } from './brush/raster-brush.js';
@@ -4460,30 +4460,42 @@ async function start() {
  * and their pixels are untouched; the layer can be hidden or deleted as usual.
  */
 async function importPendingBackground() {
-  let handoff = null;
+  const take = slot => takeHandoff(slot).catch(error => {
+    console.warn('Hand-off could not be read:', slot, error);
+    return null;
+  });
+  const background = await take(BACKGROUND_SLOT);
+  const guides = await take(GUIDES_SLOT);
+  if (!background?.blob && !guides?.blob) return;
   try {
-    handoff = await takeHandoff(BACKGROUND_SLOT);
-  } catch (error) {
-    console.warn('Background hand-off could not be read:', error);
-  }
-  if (!handoff?.blob) return;
-  try {
-    const bitmap = await createImageBitmap(handoff.blob);
     if (playbackActive) setPlaybackEnabled(false);
-    const layer = makeLayer(handoff.name ? `3D 배경 · ${handoff.name}`.slice(0, 40) : '3D 배경');
-    const rect = containRect(bitmap.width, bitmap.height, W, H);
-    layer.canvas.getContext('2d').drawImage(bitmap, rect.x, rect.y, rect.width, rect.height);
-    bitmap.close?.();
-    layer.celDirty = true;
-    layers.unshift(layer);
-    active += 1; // keep the layer you were drawing on selected
+    // Guides go above the background, both below everything you drew.
+    const added = [];
+    if (background?.blob) added.push(await handoffLayer(background, background.name ? `3D 배경 · ${background.name}`.slice(0, 40) : '3D 배경'));
+    if (guides?.blob) {
+      const layer = await handoffLayer(guides, '투시선');
+      layer.opacity = 0.6;
+      added.push(layer);
+    }
+    layers.unshift(...added);
+    active += added.length; // keep the layer you were drawing on selected
     saveActiveFrame();
     render(layers.map((_, index) => index));
-    showToast('3D 배경을 맨 아래 레이어로 가져왔어요');
+    showToast(guides?.blob && background?.blob ? '3D 배경과 투시선을 맨 아래 레이어로 가져왔어요' : '3D 배경을 맨 아래 레이어로 가져왔어요');
   } catch (error) {
     console.error('Background import failed:', error);
     showToast('3D 배경을 가져오지 못했어요');
   }
+}
+
+async function handoffLayer(handoff, name) {
+  const bitmap = await createImageBitmap(handoff.blob);
+  const layer = makeLayer(name);
+  const rect = containRect(bitmap.width, bitmap.height, W, H);
+  layer.canvas.getContext('2d').drawImage(bitmap, rect.x, rect.y, rect.width, rect.height);
+  bitmap.close?.();
+  layer.celDirty = true;
+  return layer;
 }
 
 start().catch(error => {
