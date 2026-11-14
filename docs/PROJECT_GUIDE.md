@@ -44,6 +44,16 @@ Always distinguish code-level tests from visual browser checks and physical iPad
 - Freehand vector strokes are no longer left selected after drawing, so brush/color changes apply to the next stroke rather than restyling the previous one.
 - Verified in headless Chrome (layout at 1180×820 and 390×844, synthetic touch pinch/undo, eyedropper). Not yet verified on a physical iPad.
 
+### Re-editable 3D layers (v1.15)
+- A layer made by 그리기로 보내기 keeps its scene (`layer.source3d`, optional in the project format, ≤ 400 000 chars). A guide layer remembers its background (`guidesFor`).
+- In the drawing, select such a layer → **3D로 다시 편집**. The studio opens that scene with a banner, and the send button becomes **레이어 업데이트**.
+  - Sending replaces the same layer's picture (and its guide layer) instead of adding layers. That layer is selected, so 되돌리기 brings the previous picture back.
+  - The studio's own scene is kept apart (`frame-3d-edit-v1`) and is never overwritten. **편집 그만두기** returns to it.
+- If the original project or layer is gone, the image comes in as new layers with a note.
+- Limits:
+  - Only the clip at the playhead is replaced.
+  - Undoing the picture does not roll back the stored scene.
+
 ### 3D studio: walls, openings, perspective guides (v1.14)
 - Doors and windows cut their wall. A door or window that faces along a level wall (within 5°) and sits in it gets an opening.
   - A door standing on the floor becomes a notch in the wall outline; other openings are holes.

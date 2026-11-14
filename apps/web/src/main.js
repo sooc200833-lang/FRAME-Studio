@@ -4,7 +4,8 @@ import { applyScreentoneToCanvas } from './tone/screentone.js';
 import { canvasUnitsPerCssPixel, clientToCanvasPoint, parseCssTransformMatrix } from './viewport/coordinates.js';
 import { classifyMultiTouchTap, classifyTouchStart, pinchViewport, snapViewportRotation } from './viewport/gestures.js';
 import { hexToHsv, hsvToHex, sampleImageDataColor } from './color/color-utils.js';
-import { BACKGROUND_SLOT, GUIDES_SLOT, containRect, takeHandoff } from './handoff/handoff-store.js';
+import { BACKGROUND_SLOT, EDIT_SLOT, GUIDES_SLOT, containRect, putHandoff, takeHandoff } from './handoff/handoff-store.js';
+import { linkedScene } from './document/project-format.js';
 import { coalescedPointerEvents, createFrameScheduler, normalizePointerPressure, stabilizePoint } from './brush/brush-engine.js';
 import { finishVectorPoints, shouldKeepVectorSample, vectorSampleSpacing } from './line/vector-input.js';
 import { createRasterStroke, getRasterBrush } from './brush/raster-brush.js';
@@ -1353,6 +1354,8 @@ function updateLayerInspector() {
   if (opacity && document.activeElement !== opacity) opacity.value = Math.round((layer.opacity ?? 1) * 100);
   if (opacityOut) opacityOut.value = Math.round((layer.opacity ?? 1) * 100) + '%';
   if (blend && document.activeElement !== blend) blend.value = layer.blendMode || 'normal';
+  const edit3d = document.getElementById('layerEdit3d');
+  if (edit3d) edit3d.hidden = !layer.source3d;
   const remove = document.getElementById('layerDelete');
   if (remove) remove.disabled = layers.length <= 1;
 }
@@ -1981,6 +1984,7 @@ function bindControls() {
     render(layers.map((_, index) => index));
   };
 
+  document.getElementById('layerEdit3d').onclick = () => editLayerIn3d(layers[active]);
   document.getElementById('layerOpacity').oninput = event => {
     layers[active].opacity = Number(event.target.value) / 100;
     document.getElementById('layerOpacityOut').value = event.target.value + '%';
@@ -4011,6 +4015,8 @@ async function applyProjectState(parsed, imageData = new Map()) {
       groupId: saved.groupId,
       maskEnabled: saved.maskEnabled,
       motionTrack: saved.motionTrack.map(keyframe => ({ ...keyframe })),
+      source3d: saved.source3d || null,
+      guidesFor: saved.guidesFor || null,
     });
     if (masks[index]) {
       const context = layer.maskCanvas.getContext('2d');
@@ -4469,33 +4475,89 @@ async function importPendingBackground() {
   if (!background?.blob && !guides?.blob) return;
   try {
     if (playbackActive) setPlaybackEnabled(false);
-    // Guides go above the background, both below everything you drew.
-    const added = [];
-    if (background?.blob) added.push(await handoffLayer(background, background.name ? `3D 배경 · ${background.name}`.slice(0, 40) : '3D 배경'));
-    if (guides?.blob) {
-      const layer = await handoffLayer(guides, '투시선');
-      layer.opacity = 0.6;
-      added.push(layer);
-    }
-    layers.unshift(...added);
-    active += added.length; // keep the layer you were drawing on selected
+    const activeLayer = layers[active];
+    const result = await placeHandoffLayers(background, guides);
+    // Keep the layer you were drawing on selected, unless a layer was replaced
+    // (then select it, so 되돌리기 brings its previous picture back).
+    active = result.replaced ? layers.indexOf(result.replaced) : Math.max(0, layers.indexOf(activeLayer));
     saveActiveFrame();
     render(layers.map((_, index) => index));
-    showToast(guides?.blob && background?.blob ? '3D 배경과 투시선을 맨 아래 레이어로 가져왔어요' : '3D 배경을 맨 아래 레이어로 가져왔어요');
+    showToast(result.message);
   } catch (error) {
     console.error('Background import failed:', error);
     showToast('3D 배경을 가져오지 못했어요');
   }
 }
 
-async function handoffLayer(handoff, name) {
+/**
+ * Puts hand-off images into the layer stack. A hand-off with `replace` for
+ * this project updates that layer in place (undoable); otherwise new layers
+ * go to the bottom: the background, then its guides directly above it.
+ */
+async function placeHandoffLayers(background, guides) {
+  const replaceId = background?.replace?.projectId === project.id ? background.replace.layerId : null;
+  const target = replaceId ? layers.find(layer => layer.id === replaceId) : null;
+  let backgroundLayer = null;
+  let replaced = null;
+  if (background?.blob && target) {
+    await drawHandoffInto(target, background);
+    target.source3d = linkedScene(background.scene);
+    backgroundLayer = target;
+    replaced = target;
+  } else if (background?.blob) {
+    backgroundLayer = makeLayer(background.name ? `3D 배경 · ${background.name}`.slice(0, 40) : '3D 배경');
+    await drawHandoffInto(backgroundLayer, background, { undoable: false });
+    backgroundLayer.source3d = linkedScene(background.scene);
+    layers.unshift(backgroundLayer);
+  }
+  if (guides?.blob) {
+    const existing = backgroundLayer && layers.find(layer => layer.guidesFor === backgroundLayer.id);
+    if (existing) {
+      await drawHandoffInto(existing, guides);
+    } else {
+      const guideLayer = makeLayer('투시선');
+      guideLayer.opacity = 0.6;
+      guideLayer.guidesFor = backgroundLayer?.id || null;
+      await drawHandoffInto(guideLayer, guides, { undoable: false });
+      layers.splice(backgroundLayer ? layers.indexOf(backgroundLayer) + 1 : 0, 0, guideLayer);
+    }
+  }
+  const lostTarget = Boolean(background?.replace) && !target;
+  const message = replaced
+    ? '3D 배경 레이어를 바꿨어요 · 되돌리기로 이전 그림으로'
+    : lostTarget
+      ? '원래 레이어를 찾지 못해서 새 레이어로 가져왔어요'
+      : guides?.blob && background?.blob ? '3D 배경과 투시선을 맨 아래 레이어로 가져왔어요' : '3D 배경을 맨 아래 레이어로 가져왔어요';
+  return { replaced, message };
+}
+
+/** Draws a hand-off image into a layer (contain fit), replacing its pixels. */
+async function drawHandoffInto(layer, handoff, { undoable = true } = {}) {
   const bitmap = await createImageBitmap(handoff.blob);
-  const layer = makeLayer(name);
+  if (undoable) save(layer);
+  const context = layer.canvas.getContext('2d');
+  context.clearRect(0, 0, W, H);
   const rect = containRect(bitmap.width, bitmap.height, W, H);
-  layer.canvas.getContext('2d').drawImage(bitmap, rect.x, rect.y, rect.width, rect.height);
+  context.drawImage(bitmap, rect.x, rect.y, rect.width, rect.height);
   bitmap.close?.();
   layer.celDirty = true;
   return layer;
+}
+
+/** Opens the scene behind a layer in the 3D studio; sending it back replaces this layer. */
+async function editLayerIn3d(layer) {
+  if (!layer?.source3d) return;
+  const button = document.getElementById('layerEdit3d');
+  button.disabled = true;
+  try {
+    await saveProjectNow();
+    await putHandoff(EDIT_SLOT, { scene: layer.source3d, projectId: project.id, layerId: layer.id, layerName: layer.name });
+    window.location.href = './background-studio.html';
+  } catch (error) {
+    console.error('Could not open the layer in 3D:', error);
+    showToast('3D 스튜디오를 열지 못했어요');
+    button.disabled = false;
+  }
 }
 
 start().catch(error => {

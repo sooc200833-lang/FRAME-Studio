@@ -9,7 +9,7 @@ import {
 } from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { TransformControls } from 'three/examples/jsm/controls/TransformControls.js';
-import { BACKGROUND_SLOT, GUIDES_SLOT, putHandoff } from '../handoff/handoff-store.js';
+import { BACKGROUND_SLOT, EDIT_SLOT, GUIDES_SLOT, putHandoff, takeHandoff } from '../handoff/handoff-store.js';
 import { applyTransform, buildSceneObject } from './builders.js';
 import { MangaRenderer } from './manga-renderer.js';
 import { openingsKey, snapOpening, snapWall, wallOpenings } from './wall-layout.js';
@@ -20,6 +20,9 @@ import {
 } from './scene-document.js';
 
 const STORAGE_KEY = 'frame-3d-scene-v1';
+// While re-editing a drawing layer the scene is kept apart, so the studio's
+// own scene is not overwritten.
+const EDIT_KEY = 'frame-3d-edit-v1';
 const RAD = Math.PI / 180;
 const $ = id => document.getElementById(id);
 
@@ -29,6 +32,11 @@ let doc = loadStoredScene();
 const history = createSceneHistory();
 let selectedId = null;
 let needsRender = true;
+/** { projectId, layerId, layerName } while re-editing a drawing layer. */
+let editTarget = null;
+// Set once the page is leaving after a send: nothing may be saved after that
+// (pagehide would otherwise write the finished edit session back).
+let leaving = false;
 let saveTimer = 0;
 // Slider values while dragging; committed (with undo) on release. Documents
 // are shared with the undo history, so they are never mutated in place.
@@ -399,8 +407,10 @@ function scheduleSave() {
 
 function saveNow() {
   clearTimeout(saveTimer);
+  if (leaving) return;
   try {
-    localStorage.setItem(STORAGE_KEY, serializeScene(doc));
+    if (editTarget) localStorage.setItem(EDIT_KEY, JSON.stringify({ target: editTarget, scene: doc }));
+    else localStorage.setItem(STORAGE_KEY, serializeScene(doc));
     setSaveState('이 브라우저에 저장됨');
   } catch (error) {
     console.error('3D scene save failed:', error);
@@ -688,13 +698,21 @@ function bindControls() {
       saveNow();
       // The drawing canvas is 1200×900; render at that long side.
       const { blob, width, height } = await renderPng({ longSide: 1200, transparent: $('transparent').checked });
-      await putHandoff(BACKGROUND_SLOT, { blob, width, height, name: doc.name });
+      // The scene travels with the image, so the drawing layer can be re-edited.
+      const replace = editTarget ? { projectId: editTarget.projectId, layerId: editTarget.layerId } : null;
+      await putHandoff(BACKGROUND_SLOT, { blob, width, height, name: doc.name, scene: doc, replace });
       if ($('sendGuides').checked) {
         await putHandoff(GUIDES_SLOT, { blob: await renderGuidesPng(width, height), width, height, name: doc.name });
+      }
+      if (editTarget) {
+        // The layer edit is finished; the studio's own scene stays untouched.
+        localStorage.removeItem(EDIT_KEY);
+        leaving = true;
       }
       window.location.href = './drawing.html';
     } catch (error) {
       console.error('Hand-off to drawing failed:', error);
+      leaving = false;
       toast('그리기 화면으로 보내지 못했어요');
       button.disabled = false;
     }
@@ -744,13 +762,73 @@ function deleteSelected() {
 
 // ── Start ────────────────────────────────────────────────────────────────────
 
+// ── Re-editing a drawing layer ───────────────────────────────────────────────
+
+function showEditBanner() {
+  $('editBanner').hidden = !editTarget;
+  $('sendToDrawing').textContent = editTarget ? '레이어 업데이트' : '그리기로 보내기';
+  if (editTarget) $('editBannerText').textContent = `그리기 레이어 「${editTarget.layerName || '3D 배경'}」 편집 중 · 보내면 그 레이어를 바꿔요`;
+}
+
+function enterEditSession(target, scene) {
+  editTarget = target;
+  doc = parseSceneDocument(scene).doc;
+  history.clear();
+  selectedId = null;
+  syncScene({ rebuildMaterials: true });
+  applyCamera();
+  layout();
+  renderPanels();
+  showEditBanner();
+  saveNow();
+}
+
+async function startEditSession() {
+  let pending = null;
+  try {
+    pending = await takeHandoff(EDIT_SLOT);
+  } catch (error) {
+    console.warn('Edit hand-off could not be read:', error);
+  }
+  try {
+    if (pending?.scene) {
+      enterEditSession({ projectId: pending.projectId, layerId: pending.layerId, layerName: pending.layerName }, pending.scene);
+      toast('그리기 레이어의 3D 장면을 열었어요');
+      return;
+    }
+    // Reloaded in the middle of an edit: carry on.
+    const stored = JSON.parse(localStorage.getItem(EDIT_KEY) || 'null');
+    if (stored?.target && stored.scene) enterEditSession(stored.target, stored.scene);
+  } catch (error) {
+    console.error('Could not open the layer scene:', error);
+    localStorage.removeItem(EDIT_KEY);
+    toast('레이어의 3D 장면을 열지 못했어요');
+  }
+}
+
+function leaveEditSession() {
+  editTarget = null;
+  localStorage.removeItem(EDIT_KEY);
+  doc = loadStoredScene();
+  history.clear();
+  selectedId = null;
+  syncScene({ rebuildMaterials: true });
+  applyCamera();
+  layout();
+  renderPanels();
+  showEditBanner();
+  toast('레이어 편집을 그만두고 내 장면으로 돌아왔어요');
+}
+
 buildAddButtons();
 bindControls();
+$('editCancel').onclick = leaveEditSession;
 syncScene();
 applyCamera();
 layout();
 renderPanels();
 setSaveState('이 브라우저에 저장됨');
 loop();
+startEditSession();
 // For browser tests and debugging only.
 window.__frame3d = { get doc() { return doc; }, select, renderPng };

@@ -299,3 +299,5 @@ output{color:var(--accent);min-width:38px;text-align:right;font-size:12px;font-v
 }
 
 a.menu-row{background:var(--surface-2);border:1px solid var(--line);border-radius:9px;text-decoration:none;color:inherit;margin-top:6px;box-sizing:border-box}
+.wide-action{width:100%;margin-top:8px;padding:8px 10px;border-radius:9px;border:1px solid var(--accent);background:var(--accent-soft);color:var(--accent-text);font-weight:600}
+.wide-action[hidden]{display:none}

@@ -50,6 +50,8 @@ export async function takeHandoff(slot, { maxAgeMs = 10 * 60 * 1000 } = {}) {
 
 export const BACKGROUND_SLOT = 'background';
 export const GUIDES_SLOT = 'perspective-guides';
+/** Drawing → 3D studio: re-edit the scene behind a layer. */
+export const EDIT_SLOT = 'edit-3d-layer';
 
 /** Largest centred rectangle with the image's aspect ratio inside the canvas. */
 export function containRect(imageWidth, imageHeight, canvasWidth, canvasHeight) {
