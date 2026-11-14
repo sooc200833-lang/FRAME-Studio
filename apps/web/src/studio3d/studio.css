@@ -31,6 +31,9 @@ h3{font-size:11px;font-weight:600;color:var(--muted);margin:10px 0 6px}
 .s3-file{position:relative;overflow:hidden;display:inline-block}
 .s3-file input{position:absolute;inset:0;opacity:0;cursor:pointer}
 
+.s3-edit-banner{display:flex;align-items:center;gap:12px;padding:8px 12px;background:var(--accent-soft);color:var(--accent-text);border-bottom:1px solid var(--accent);font-size:13px}
+.s3-edit-banner[hidden]{display:none}
+.s3-edit-banner button{margin-left:auto}
 .s3-layout{flex:1;min-height:0;display:grid;grid-template-columns:230px minmax(0,1fr) 250px}
 .s3-panel{overflow-y:auto;padding:12px;background:var(--surface);display:flex;flex-direction:column;gap:18px}
 .s3-left{border-right:1px solid var(--line)}

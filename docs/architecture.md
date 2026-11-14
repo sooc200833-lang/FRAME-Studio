@@ -23,7 +23,7 @@
 - 3D scenes are a versioned JSON document (`studio3d/scene-document.js`, pure and tested). Objects are a catalog type plus transform and colour; geometry is rebuilt from the type. The studio keeps whole-document undo snapshots and autosaves to localStorage (`frame-3d-scene-v1`).
 - Manga look (`studio3d/manga-renderer.js`): toon materials, then a full-screen pass that inks depth jumps and normal creases (one-sided, so lines are `inkWidth` wide) and can turn darker tones into a 45° dot screen. The grid and gizmo are drawn afterwards against scene depth only, so they get no ink and never appear in exports. Exports render to a target and encode sRGB in the shader.
 - Walls and guides: `studio3d/wall-layout.js` (openings, wall/opening snapping) and `studio3d/perspective.js` (vanishing points, horizon, Canvas 2D painter) are pure and tested; the guide overlay is a separate 2D canvas.
-- Hand-off to drawing: the studio stores a PNG Blob in a separate IndexedDB (`frame-handoff`) and opens `drawing.html`. The drawing app takes it once and adds it as a new bottom raster layer (contain fit). The drawing project format is unchanged.
+- Hand-off to drawing: the studio stores a PNG Blob in a separate IndexedDB (`frame-handoff`) and opens `drawing.html`. The drawing app takes it once and adds it as a new bottom raster layer (contain fit). Layers may carry `source3d` (the scene) and `guidesFor`; both are optional, so older projects load unchanged. Re-editing goes the other way through `EDIT_SLOT`, and a send with `replace` updates that layer in place with a normal layer undo snapshot.
 
 ## Rendering boundary
 - PixiJS owns visible stage presentation.

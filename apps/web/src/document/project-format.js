@@ -43,6 +43,9 @@ export function buildProjectDocument({
       maskEnabled: Boolean(layer.maskEnabled),
       maskImage,
       motionTrack: (layer.motionTrack || []).map(keyframe => ({ ...keyframe })),
+      // Optional link to a 3D Background Studio scene (re-editable layer).
+      source3d: linkedScene(layer.source3d),
+      guidesFor: typeof layer.guidesFor === 'string' ? layer.guidesFor : null,
     };
   });
   const tracks = {};
@@ -140,7 +143,12 @@ export function parseProjectDocument(raw, { width, height } = {}) {
       maskEnabled: Boolean(layer.maskEnabled),
       maskImage: typeof layer.maskImage === 'string' ? layer.maskImage : null,
       motionTrack: Array.isArray(layer.motionTrack) ? layer.motionTrack.filter(keyframe => keyframe && Number.isFinite(Number(keyframe.tick))) : [],
+      source3d: linkedScene(layer.source3d),
+      guidesFor: typeof layer.guidesFor === 'string' ? layer.guidesFor : null,
     }));
+  // A guide layer only stays linked while its background layer exists.
+  const layerIds = new Set(layers.map(layer => layer.id));
+  layers.forEach(layer => { if (layer.guidesFor && !layerIds.has(layer.guidesFor)) layer.guidesFor = null; });
   if (!layers.length) throw new Error('레이어가 없는 프로젝트예요');
   const groups = (Array.isArray(doc.groups) ? doc.groups : []).filter(group => group && typeof group.id === 'string');
   const groupIds = new Set(groups.map(group => group.id));
@@ -227,4 +235,18 @@ export function duplicateProjectName(name, existingNames = []) {
   const taken = new Set(existingNames);
   if (!taken.has(base)) return base;
   for (let n = 2; ; n++) if (!taken.has(`${base} ${n}`)) return `${base} ${n}`;
+}
+
+/** Largest 3D scene kept on a layer (the JSON of a scene is a few KB). */
+export const MAX_LINKED_SCENE_CHARS = 400_000;
+
+/**
+ * A 3D scene linked to a layer, or null. Only checks the outer shape (the 3D
+ * studio validates the scene fully when it opens it), so the drawing format
+ * does not depend on the 3D code. Copies, so documents never share it.
+ */
+export function linkedScene(value) {
+  if (!value || typeof value !== 'object' || value.format !== 'frame-3d-scene' || !Array.isArray(value.objects)) return null;
+  const json = JSON.stringify(value);
+  return json.length <= MAX_LINKED_SCENE_CHARS ? JSON.parse(json) : null;
 }
