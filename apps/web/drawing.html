@@ -222,6 +222,9 @@
         <button class="brush-card" data-brush-kind="raster" data-brush="brush"><i class="b-brush"></i>브러시<small>Brush</small></button>
         <button class="brush-card" data-brush-kind="raster" data-brush="chalk"><i class="b-chalk"></i>분필<small>Chalk</small></button>
         <button class="brush-card" data-brush-kind="raster" data-brush="crayon"><i class="b-crayon"></i>크레용<small>Crayon</small></button>
+        <button class="brush-card" data-brush-kind="raster" data-brush="spray"><i class="b-spray"></i>스프레이<small>Spray</small></button>
+        <button class="brush-card" data-brush-kind="raster" data-brush="sparkle"><i class="b-sparkle"></i>반짝이<small>Sparkle</small></button>
+        <button class="brush-card" data-brush-kind="raster" data-brush="stipple"><i class="b-stipple"></i>점묘<small>Stipple</small></button>
       </div>
       <h4>크기 빠른 선택</h4>
       <div class="size-presets" id="sizePresets" aria-label="선 굵기 빠른 선택"></div>
@@ -241,9 +244,11 @@
           <div class="field"><label for="vectorMotionStrength">움직임 강도</label><input id="vectorMotionStrength" type="range" min="0" max="12" value="3"><output id="vectorMotionStrengthOut">3px</output></div>
           <div class="field"><label for="vectorMotionStep">움직임 리듬</label><select id="vectorMotionStep"><option value="0">부드럽게</option><option value="12">손그림 · 초당 12장</option><option value="8">손그림 · 초당 8장</option><option value="6">손그림 · 초당 6장</option><option value="4">손그림 · 초당 4장</option></select></div>
           <div class="field"><label for="vectorMotionSpeed">움직임 속도</label><input id="vectorMotionSpeed" type="range" min="0.25" max="4" step="0.25" value="1"><output id="vectorMotionSpeedOut">1×</output></div>
+          <div class="field"><label for="vectorMotionPulse" title="선이 숨 쉬듯 굵어졌다 가늘어져요. 움직임 리듬과 속도를 따라가요">굵기 변화</label><input id="vectorMotionPulse" type="range" min="0" max="100" step="5" value="0"><output id="vectorMotionPulseOut">0%</output></div>
+          <div class="field"><label for="vectorSmoothing" title="선이 펜을 살짝 늦게 따라와서 손떨림이 줄어요. 펜을 떼면 끝까지 이어져요">손떨림 보정</label><input id="vectorSmoothing" type="range" min="0" max="85" step="5" value="15"><output id="vectorSmoothingOut">15%</output></div>
         </div>
         <div class="raster-settings">
-          <div class="field"><label for="brushPreset">래스터 프리셋</label><select id="brushPreset"><option value="pencil">연필 · Pencil</option><option value="ink" selected>잉크 펜 · Ink</option><option value="marker">마커 · Marker</option><option value="brush">브러시 · Brush</option><option value="chalk">분필 · Chalk</option><option value="crayon">크레용 · Crayon</option></select></div>
+          <div class="field"><label for="brushPreset">래스터 프리셋</label><select id="brushPreset"><option value="pencil">연필 · Pencil</option><option value="ink" selected>잉크 펜 · Ink</option><option value="marker">마커 · Marker</option><option value="brush">브러시 · Brush</option><option value="chalk">분필 · Chalk</option><option value="crayon">크레용 · Crayon</option><option value="spray">스프레이 · Spray</option><option value="sparkle">반짝이 · Sparkle</option><option value="stipple">점묘 · Stipple</option></select></div>
           <div class="field"><label for="brushOpacity">브러시 불투명도</label><input id="brushOpacity" type="range" min="5" max="100" value="100"><output id="brushOpacityOut">100%</output></div>
           <div class="field"><label for="pressureCurve">필압 반응 곡선</label><input id="pressureCurve" type="range" min="50" max="200" value="92"><output id="pressureCurveOut">0.92</output></div>
           <div class="field"><label for="brushSmoothing">획 안정화</label><input id="brushSmoothing" type="range" min="0" max="80" value="28"><output id="brushSmoothingOut">28%</output></div>
@@ -269,6 +274,9 @@
         <button class="brush-card" data-brush-kind="raster" data-brush="brush"><i class="b-brush"></i>브러시<small>Brush</small></button>
         <button class="brush-card" data-brush-kind="raster" data-brush="chalk"><i class="b-chalk"></i>분필<small>Chalk</small></button>
         <button class="brush-card" data-brush-kind="raster" data-brush="crayon"><i class="b-crayon"></i>크레용<small>Crayon</small></button>
+        <button class="brush-card" data-brush-kind="raster" data-brush="spray"><i class="b-spray"></i>스프레이<small>Spray</small></button>
+        <button class="brush-card" data-brush-kind="raster" data-brush="sparkle"><i class="b-sparkle"></i>반짝이<small>Sparkle</small></button>
+        <button class="brush-card" data-brush-kind="raster" data-brush="stipple"><i class="b-stipple"></i>점묘<small>Stipple</small></button>
       </div>
       <p class="note">래스터 레이어의 픽셀을 지웁니다. 벡터 선은 변형 도구로 선택해 삭제하세요.</p>
     </section>

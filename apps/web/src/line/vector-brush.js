@@ -1,4 +1,4 @@
-import { normalizeMotionSpeed, normalizeMotionStep } from './line-boil.js';
+import { normalizeMotionPulse, normalizeMotionSpeed, normalizeMotionStep } from './line-boil.js';
 const VECTOR_BRUSHES = {
   pencil: { opacity: 0.82, pressurePower: 1.35, minWidth: 0.12, texture: 'grain' },
   ink: { opacity: 1, pressurePower: 0.82, minWidth: 0.16, texture: 'solid' },
@@ -47,7 +47,7 @@ export function getVectorPointWidth(stroke, point, index, pointCount = index + 1
   const profile = sampleStrokeWidthProfile(stroke.pressureProfile, progress);
   return Math.max(0.35, stroke.width * Math.max(preset.minWidth, shaped) * profile);
 }
-export function createVectorBrushStyle({ brushPreset = 'ink', pressureCurve = 1, opacity, motionStyle = 'none', motionStrength = 3, motionSpeed = 1, motionStep = 0 } = {}) {
+export function createVectorBrushStyle({ brushPreset = 'ink', pressureCurve = 1, opacity, motionStyle = 'none', motionStrength = 3, motionSpeed = 1, motionStep = 0, motionPulse = 0 } = {}) {
   const preset = getVectorBrushPreset(brushPreset);
   return {
     brushPreset: preset.name,
@@ -57,6 +57,7 @@ export function createVectorBrushStyle({ brushPreset = 'ink', pressureCurve = 1,
     motionStrength: Math.max(0, Math.min(16, Number(motionStrength) || 0)),
     motionSpeed: normalizeMotionSpeed(motionSpeed),
     motionStep: normalizeMotionStep(motionStep),
+    motionPulse: normalizeMotionPulse(motionPulse),
   };
 }
 

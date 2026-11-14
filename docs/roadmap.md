@@ -125,9 +125,10 @@ Next: add non-destructive live previews and transform handles; improve vector hi
 - [x] Animate selected per-stroke styles without requiring the global Line Boil toggle.
 - [x] Use the same animated passes in the in-progress vector preview.
 - [x] Per-line Speed and hand-drawn Rhythm (smooth, or 12/8/6/4 redraws per second); Jiggle = existing strength. (2nd pass)
-- [ ] Per-line Thickness pulse and vector Stabilization controls.
+- [x] Per-line Thickness pulse and vector Stabilization controls. (3rd pass)
 - [x] Deterministic frame capture: export uses the same per-line motion as the screen, also with Line Boil off. (2nd pass)
 - [ ] Add raster animated strokes and project-format migration tests.
 - [x] Chalk and Crayon raster brushes with a canvas-anchored paper tooth. (2nd pass)
-- [ ] Particle-tip brushes; pressure-dependent grain fill.
+- [x] Particle brushes: spray, sparkle, stipple. (3rd pass)
+- [ ] Pressure-dependent grain fill.
 - [ ] Validate interaction and rendering on a physical iPad with Apple Pencil.
