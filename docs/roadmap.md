@@ -59,6 +59,8 @@
 
 ## Phase 5 — 3D Studio
 - Combine primitives into editable figure-like assemblies.
+- [x] Hand-drawn ink styles for 3D renders: 펜선 / 연필 / 붓 with outline/fold weights, distance taper and 손맛 (v1.18).
+- [ ] Line boil over time and camera keyframes for animated backgrounds.
 - Convert 3D geometry into adjustable 2D line art.
 - Keep 3D source geometry editable after line conversion.
 - Evaluate Three.js as an isolated 3D viewport.

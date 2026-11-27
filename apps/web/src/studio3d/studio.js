@@ -12,6 +12,7 @@ import { TransformControls } from 'three/examples/jsm/controls/TransformControls
 import { BACKGROUND_SLOT, EDIT_SLOT, GUIDES_SLOT, putHandoff, takeHandoff } from '../handoff/handoff-store.js';
 import { applyTransform, buildSceneObject } from './builders.js';
 import { MangaRenderer } from './manga-renderer.js';
+import { LINE_STYLES, LINE_STYLE_IDS } from './line-style.js';
 import { openingsKey, snapOpening, snapWall, wallOpenings } from './wall-layout.js';
 import { drawPerspectiveGuides, perspectiveGuides } from './perspective.js';
 import {
@@ -545,7 +546,12 @@ function renderSettingsPanel() {
   $('inkWidth').value = render.inkWidth;
   $('inkWidthOut').value = `${render.inkWidth}px`;
   $('inkDepth').value = Math.round(render.inkDepth * 100);
-  $('inkWidth').disabled = $('inkDepth').disabled = !render.ink;
+  $('lineStyle').value = render.lineStyle;
+  $('lineHand').value = Math.round(render.lineHand * 100);
+  $('lineHandOut').value = `${Math.round(render.lineHand * 100)}%`;
+  $('inkWidth').disabled = $('inkDepth').disabled = $('lineStyle').disabled = !render.ink;
+  // Clean lines have no hand-drawn irregularity to adjust.
+  $('lineHand').disabled = !render.ink || render.lineStyle === 'clean';
   $('tone').checked = render.tone;
   $('toneSize').value = render.toneSize;
   $('toneSizeOut').value = `${render.toneSize}px`;
@@ -579,6 +585,7 @@ function changeCamera(patch) {
 // ── Events ───────────────────────────────────────────────────────────────────
 
 function bindControls() {
+  $('lineStyle').replaceChildren(...LINE_STYLE_IDS.map(id => new Option(LINE_STYLES[id].label, id)));
   for (const button of document.querySelectorAll('[data-preset]')) {
     button.onclick = () => {
       const preset = button.dataset.preset;
@@ -650,6 +657,9 @@ function bindControls() {
   $('inkWidth').onchange = event => changeRender({ inkWidth: Number(event.target.value) });
   $('inkDepth').oninput = event => { liveRender.inkDepth = Number(event.target.value) / 100; requestRender(); };
   $('inkDepth').onchange = event => changeRender({ inkDepth: Number(event.target.value) / 100 });
+  $('lineStyle').onchange = event => changeRender({ lineStyle: event.target.value });
+  $('lineHand').oninput = event => { $('lineHandOut').value = `${event.target.value}%`; liveRender.lineHand = Number(event.target.value) / 100; requestRender(); };
+  $('lineHand').onchange = event => changeRender({ lineHand: Number(event.target.value) / 100 });
   $('tone').onchange = event => changeRender({ tone: event.target.checked });
   $('toneSize').oninput = event => { $('toneSizeOut').value = `${event.target.value}px`; liveRender.toneSize = Number(event.target.value); requestRender(); };
   $('toneSize').onchange = event => changeRender({ toneSize: Number(event.target.value) });

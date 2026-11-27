@@ -4,6 +4,8 @@
 // plus a transform and a color. Geometry is rebuilt from the type when the
 // scene is opened, so a saved scene stays small and portable.
 
+import { DEFAULT_LINE_HAND, normalizeLineHand, normalizeLineStyle } from './line-style.js';
+
 export const SCENE_FORMAT = 'frame-3d-scene';
 export const SCENE_VERSION = 1;
 
@@ -75,7 +77,10 @@ export const EXPORT_RATIOS = Object.freeze({
   '1:1': [1, 1],
 });
 
-const DEFAULT_RENDER = Object.freeze({ toon: true, steps: 4, ink: true, inkWidth: 1.5, inkDepth: 0.5, tone: false, toneSize: 6 });
+// lineStyle/lineHand: hand-drawn ink (line-style.js). New scenes start with
+// pen lines; older scenes have neither field and open with the clean style
+// they were made with (normalizeLineStyle's default).
+const DEFAULT_RENDER = Object.freeze({ toon: true, steps: 4, ink: true, inkWidth: 1.5, inkDepth: 0.5, lineStyle: 'pen', lineHand: DEFAULT_LINE_HAND, tone: false, toneSize: 6 });
 const DEFAULT_CAMERA = Object.freeze({ projection: 'perspective', fov: 50, position: [7, 5, 9], target: [0, 1.2, 0], zoom: 1, ratio: '4:3' });
 const RAD = Math.PI / 180;
 
@@ -337,6 +342,8 @@ export function parseSceneDocument(input) {
         ink: render.ink !== false,
         inkWidth: clamp(finite(render.inkWidth, DEFAULT_RENDER.inkWidth), 0.5, 5),
         inkDepth: clamp(finite(render.inkDepth, DEFAULT_RENDER.inkDepth), 0, 1),
+        lineStyle: normalizeLineStyle(render.lineStyle),
+        lineHand: render.lineHand === undefined ? DEFAULT_LINE_HAND : normalizeLineHand(render.lineHand),
         tone: render.tone === true,
         toneSize: clamp(finite(render.toneSize, DEFAULT_RENDER.toneSize), 3, 16),
       },
