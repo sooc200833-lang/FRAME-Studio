@@ -150,3 +150,26 @@ test('motion settings are clamped', () => {
   assert.equal(normalizeMotionStep(7), 0, 'only the offered rhythms are allowed');
   assert.equal(normalizeMotionStep(12), 12);
 });
+
+import { pulseLineWidth } from '../apps/web/src/line/line-boil.js';
+
+test('thickness pulse changes widths over time, never positions', () => {
+  const line = motionLine({ id: 'pulse', motionStyle: 'none', motionPulse: 0.8, points: Array.from({ length: 12 }, (_, i) => ({ x: i * 10, y: 0, pressure: 0.5 })) });
+  const at = ms => animateLineStrokes([line], { globalBoil: false, elapsedMs: ms })[0];
+  const a = at(0); const b = at(300);
+  assert.deepEqual(a.points.map(p => [p.x, p.y]), line.points.map(p => [p.x, p.y]), 'positions untouched');
+  assert.notDeepEqual(a.points.map(p => p.pressure), b.points.map(p => p.pressure), 'widths move');
+  assert.ok(a.points.some(p => p.pressure > 0.6) && a.points.some(p => p.pressure < 0.4), 'swells and thins along the line');
+  assert.ok(line.points.every(p => p.pressure === 0.5), 'source stroke unchanged');
+  // Without a pulse a static line is returned as is.
+  const still = { ...line, motionPulse: 0 };
+  assert.equal(animateLineStrokes([still], { globalBoil: false, elapsedMs: 300 })[0], still);
+});
+
+test('pulse follows the line rhythm and stays within pressure bounds', () => {
+  const line = motionLine({ id: 'p2', motionPulse: 1, motionStep: 4, points: Array.from({ length: 8 }, (_, i) => ({ x: i, y: 0, pressure: 0.95 })) });
+  const widths = ms => animateLineStrokes([line], { globalBoil: false, elapsedMs: ms })[0].points.map(p => p.pressure);
+  assert.deepEqual(widths(10), widths(200), 'held within one drawing');
+  assert.ok(widths(300).every(p => p >= 0.02 && p <= 1));
+  assert.equal(pulseLineWidth(line, 1, 0), line);
+});

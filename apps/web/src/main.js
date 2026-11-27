@@ -13,7 +13,7 @@ import { StrokeBuffer } from './brush/raster-brush-canvas.js';
 import { createSmudgeSession } from './brush/smudge-engine.js';
 import { normalizeBrushBlendMode } from './brush/blend-modes.js';
 import { expandRegionMask, findConnectedRegion } from './fill/flood-fill.js';
-import { animateLineStrokes, lineBoilPhase, normalizeMotionSpeed, normalizeMotionStep } from './line/line-boil.js';
+import { animateLineStrokes, lineBoilPhase, normalizeMotionPulse, normalizeMotionSpeed, normalizeMotionStep } from './line/line-boil.js';
 import { EXPORT_FORMATS, resolveExportPlan } from './export/export-plan.js';
 import { buildProjectDocument, duplicateProjectName, parseProjectDocument, referencedImageKeys, retargetProjectDocument } from './document/project-format.js';
 import { deleteProjectRecord, duplicateProjectRecord, isProjectStorageAvailable, listProjects, loadImageDataUrls, loadProjectRecord, getMeta, requestPersistentStorage, restoreProjectSnapshot, saveProjectRecord, setMeta } from './document/project-store.js';
@@ -190,6 +190,10 @@ let vectorMotionStyle = 'none';
 let vectorMotionStrength = 3;
 let vectorMotionSpeed = 1;
 let vectorMotionStep = 0;
+let vectorMotionPulse = 0;
+/** Vector stabilization (손떨림 보정) 0–0.85: the line follows the pen with a little lag. */
+let vectorSmoothing = 0.15;
+let vectorStabilized = null;
 let selectedNodeIndex = null;
 let nodeDragging = false;
 let nodeMoveSnapshot = null;
@@ -626,7 +630,7 @@ function render(dirtyIndices = [], displayStrokes = null) {
   for (const stroke of vectorStrokes) {
     if (!stroke.layerId || !layers.some(layer => layer.id === stroke.layerId)) stroke.layerId = layers[active]?.id;
   }
-  displayStrokes ||= (boilEnabled || vectorStrokes.some(stroke => stroke.motionStyle && stroke.motionStyle !== 'none')) ? boiledStrokes() : vectorStrokes;
+  displayStrokes ||= (boilEnabled || hasAnimatedVectorStrokes()) ? boiledStrokes() : vectorStrokes;
   for (const index of dirtyIndices) {
     if (layers[index]) refreshLayerPresentation(layers[index]);
   }
@@ -643,7 +647,7 @@ function render(dirtyIndices = [], displayStrokes = null) {
   drawTimeline();
   scheduleFrameThumbnail();
   scheduleAutosave();
-  if ((boilEnabled || vectorStrokes.some(stroke => stroke.motionStyle && stroke.motionStyle !== 'none')) && !animationFrame) {
+  if ((boilEnabled || hasAnimatedVectorStrokes()) && !animationFrame) {
     boilStartedAt = performance.now();
     lastAnimationPaint = 0;
     animationFrame = requestAnimationFrame(animationTick);
@@ -1374,13 +1378,18 @@ function syncMotionRhythmUi() {
   if (document.activeElement !== speed) speed.value = vectorMotionSpeed;
   document.getElementById('vectorMotionSpeedOut').value = vectorMotionSpeed.toFixed(2).replace(/0$/, '') + '×';
   step.value = String(vectorMotionStep);
-  const moving = vectorMotionStyle !== 'none';
+  const pulse = document.getElementById('vectorMotionPulse');
+  if (pulse && document.activeElement !== pulse) pulse.value = Math.round(vectorMotionPulse * 100);
+  const pulseOut = document.getElementById('vectorMotionPulseOut');
+  if (pulseOut) pulseOut.value = Math.round(vectorMotionPulse * 100) + '%';
+  // Rhythm and speed drive both the motion style and the thickness pulse.
+  const moving = vectorMotionStyle !== 'none' || vectorMotionPulse > 0;
   step.disabled = !moving;
   speed.disabled = !moving || vectorMotionStep > 0;
 }
 
 function hasAnimatedVectorStrokes() {
-  return vectorStrokes.some(stroke => stroke.motionStyle && stroke.motionStyle !== 'none');
+  return vectorStrokes.some(stroke => (stroke.motionStyle && stroke.motionStyle !== 'none') || normalizeMotionPulse(stroke.motionPulse) > 0);
 }
 
 function animationTick(timestamp) {
@@ -1464,6 +1473,7 @@ function updateLineInspector() {
   vectorMotionStrength = stroke.motionStrength ?? 3;
   vectorMotionSpeed = stroke.motionSpeed ?? 1;
   vectorMotionStep = stroke.motionStep ?? 0;
+  vectorMotionPulse = stroke.motionPulse ?? 0;
   const lineColor = document.getElementById('lineColor');
   const lineWidth = document.getElementById('lineWidth');
   if (document.activeElement !== lineColor) lineColor.value = stroke.color;
@@ -1808,6 +1818,20 @@ function bindControls() {
     vectorMotionStep = normalizeMotionStep(event.target.value);
     syncMotionRhythmUi();
     if (selectedStrokeIds.size || selectedStrokeId) applySelectedStyle({ motionStep: vectorMotionStep });
+  };
+  const motionPulseInput = document.getElementById('vectorMotionPulse');
+  motionPulseInput.addEventListener('pointerdown', beginLineStyleEdit);
+  motionPulseInput.addEventListener('pointerup', finishLineStyleEdit);
+  motionPulseInput.addEventListener('pointercancel', finishLineStyleEdit);
+  motionPulseInput.addEventListener('change', finishLineStyleEdit);
+  motionPulseInput.oninput = event => {
+    vectorMotionPulse = normalizeMotionPulse(Number(event.target.value) / 100);
+    syncMotionRhythmUi();
+    if (selectedStrokeIds.size || selectedStrokeId) { beginLineStyleEdit(); applySelectedStyle({ motionPulse: vectorMotionPulse }, false); }
+  };
+  document.getElementById('vectorSmoothing').oninput = event => {
+    vectorSmoothing = Math.min(0.85, Number(event.target.value) / 100);
+    document.getElementById('vectorSmoothingOut').value = event.target.value + '%';
   };
   const motionSpeedInput = document.getElementById('vectorMotionSpeed');
   motionSpeedInput.addEventListener('pointerdown', beginLineStyleEdit);
@@ -2862,10 +2886,11 @@ function previewVectorDrawing() {
     motionStrength: vectorMotionStrength,
     motionSpeed: vectorMotionSpeed,
     motionStep: vectorMotionStep,
+    motionPulse: vectorMotionPulse,
   });
   // Animate the preview only when the committed line will animate too; a static
   // line must not wobble while drawing and then snap straight on pen-up.
-  if (!boilEnabled && vectorMotionStyle === 'none') {
+  if (!boilEnabled && vectorMotionStyle === 'none' && !vectorMotionPulse) {
     renderer.previewVectorStroke(previewStroke);
     return;
   }
@@ -3301,6 +3326,7 @@ function bindCanvasEvents() {
     if (tool === 'vector') {
       down = true;
       lastVectorSampleTime = Number(event.timeStamp) || 0;
+      vectorStabilized = { x: point.x, y: point.y };
       drawingPoints = [{ ...point, pressure: event.pointerType === 'pen' ? normalizePointerPressure(event, pressureEnabled) : 0.5 }];
       previewVectorDrawing();
       return;
@@ -3470,7 +3496,10 @@ function bindCanvasEvents() {
     if (tool === 'vector') {
       const minDistance = vectorSampleSpacing(cssToCanvasUnits(1));
       for (const sample of coalescedPointerEvents(event)) {
-        const samplePoint = position(sample);
+        // Stabilization: the line follows a lagging copy of the pen; pen-up
+        // (finishVectorPoints) catches up to where the pen really is.
+        vectorStabilized = stabilizePoint(vectorStabilized, position(sample), vectorSmoothing);
+        const samplePoint = { x: vectorStabilized.x, y: vectorStabilized.y };
         const previous = drawingPoints[drawingPoints.length - 1];
         const sampleTime = Number(sample.timeStamp ?? event.timeStamp) || lastVectorSampleTime + 16;
         const pressure = sample.pointerType === 'pen'
@@ -3747,7 +3776,7 @@ function bindCanvasEvents() {
     if (tool === 'shape') {
       const points = createShapePoints(shapeKind, lineStartPoint, point);
       commitLineHistory(lineSnapshot());
-      const created = createLineStroke({ id: 'line-' + nextLineId++, points: points.map(p => ({ ...p, pressure: 0.5 })), color, width: size, brushPreset: vectorBrushPreset, pressureCurve: vectorPressureCurve, opacity: vectorBrushOpacity, pressureProfile: vectorPressureProfile, motionStyle: vectorMotionStyle, motionStrength: vectorMotionStrength, motionSpeed: vectorMotionSpeed, motionStep: vectorMotionStep });
+      const created = createLineStroke({ id: 'line-' + nextLineId++, points: points.map(p => ({ ...p, pressure: 0.5 })), color, width: size, brushPreset: vectorBrushPreset, pressureCurve: vectorPressureCurve, opacity: vectorBrushOpacity, pressureProfile: vectorPressureProfile, motionStyle: vectorMotionStyle, motionStrength: vectorMotionStrength, motionSpeed: vectorMotionSpeed, motionStep: vectorMotionStep, motionPulse: vectorMotionPulse });
       vectorStrokes.push(assignStrokeToActiveLayer(created));
       selectedStrokeId = created.id;
       selectedStrokeIds.clear(); selectedStrokeIds.add(created.id);
@@ -3773,6 +3802,7 @@ function bindCanvasEvents() {
         motionStrength: vectorMotionStrength,
         motionSpeed: vectorMotionSpeed,
         motionStep: vectorMotionStep,
+        motionPulse: vectorMotionPulse,
       });
       vectorStrokes.push(assignStrokeToActiveLayer(created));
       // Freehand drawing should not leave the new line selected; otherwise the
@@ -3788,7 +3818,7 @@ function bindCanvasEvents() {
 
     if (tool === 'line') {
       commitLineHistory(lineSnapshot());
-      const created = createLineStroke({ id: 'line-' + nextLineId++, points: [{ ...lineStartPoint, pressure: 0.5 }, { ...point, pressure: 0.5 }], color, width: size, brushPreset: vectorBrushPreset, pressureCurve: vectorPressureCurve, opacity: vectorBrushOpacity, pressureProfile: vectorPressureProfile, motionStyle: vectorMotionStyle, motionStrength: vectorMotionStrength, motionSpeed: vectorMotionSpeed, motionStep: vectorMotionStep });
+      const created = createLineStroke({ id: 'line-' + nextLineId++, points: [{ ...lineStartPoint, pressure: 0.5 }, { ...point, pressure: 0.5 }], color, width: size, brushPreset: vectorBrushPreset, pressureCurve: vectorPressureCurve, opacity: vectorBrushOpacity, pressureProfile: vectorPressureProfile, motionStyle: vectorMotionStyle, motionStrength: vectorMotionStrength, motionSpeed: vectorMotionSpeed, motionStep: vectorMotionStep, motionPulse: vectorMotionPulse });
       vectorStrokes.push(assignStrokeToActiveLayer(created));
       selectedStrokeId = created.id;
       selectedStrokeIds.clear(); selectedStrokeIds.add(created.id);
@@ -4395,7 +4425,11 @@ async function runExport() {
     return;
   }
   if (playbackActive) setPlaybackEnabled(false);
-  if (loadingFrame || down) return;
+  if (loadingFrame || down) {
+    // Never fail silently: say why nothing happened.
+    showToast(down ? '그리는 중에는 내보낼 수 없어요' : '프레임을 불러오는 중이에요. 잠시 뒤 다시 눌러 주세요');
+    return;
+  }
   saveActiveFrame();
   closePopovers();
   exporting = true;

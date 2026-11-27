@@ -44,6 +44,13 @@ Always distinguish code-level tests from visual browser checks and physical iPad
 - Freehand vector strokes are no longer left selected after drawing, so brush/color changes apply to the next stroke rather than restyling the previous one.
 - Verified in headless Chrome (layout at 1180×820 and 390×844, synthetic touch pinch/undo, eyedropper). Not yet verified on a physical iPad.
 
+### Doodraw-style brushes, 3rd pass (v1.16)
+- **굵기 변화** (`motionPulse` 0–1 per line): the line swells and thins in a travelling wave. Only pressures change, never positions. It uses the line's rhythm and speed, works with or without a motion style, and exports like the screen.
+- **손떨림 보정** for vector lines (0–85 %, default 15 %): samples follow a lagging copy of the pen (`stabilizePoint`); pen-up still ends at the real pen position.
+- Particle raster brushes **스프레이 / 반짝이 / 점묘**: each spacing step scatters `count` seeded particles within `scatter` × size (`createRasterStroke`), so preview and result are identical. 반짝이 uses a four-point star tip (`tipAlpha`).
+- Export no longer returns silently while a frame is loading; it says why.
+- Not yet: raster strokes that animate after being drawn.
+
 ### Re-editable 3D layers (v1.15)
 - A layer made by 그리기로 보내기 keeps its scene (`layer.source3d`, optional in the project format, ≤ 400 000 chars). A guide layer remembers its background (`guidesFor`).
 - In the drawing, select such a layer → **3D로 다시 편집**. The studio opens that scene with a banner, and the send button becomes **레이어 업데이트**.

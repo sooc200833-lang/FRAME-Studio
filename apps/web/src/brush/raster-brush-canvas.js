@@ -3,7 +3,7 @@
 // commit. Both use the same buffer and the same composite settings, so the
 // picture while drawing equals the picture after release.
 
-import { PAPER_TILE, paperGrain, tipFalloff } from './raster-brush.js';
+import { PAPER_TILE, paperGrain, tipAlpha } from './raster-brush.js';
 
 const TIP_SIZE = 128;
 const baseTips = new Map();
@@ -24,7 +24,7 @@ function grainNoise(x, y) {
 
 /** White brush tip with alpha from hardness (and grain), cached per preset. */
 function baseTip(brush) {
-  const key = `${brush.id}:${brush.hardness}:${brush.grain}`;
+  const key = `${brush.id}:${brush.hardness}:${brush.grain}:${brush.tip || 'round'}`;
   if (baseTips.has(key)) return baseTips.get(key);
   const canvas = makeCanvas(TIP_SIZE, TIP_SIZE);
   const context = canvas.getContext('2d');
@@ -32,8 +32,7 @@ function baseTip(brush) {
   const half = TIP_SIZE / 2;
   for (let y = 0; y < TIP_SIZE; y++) {
     for (let x = 0; x < TIP_SIZE; x++) {
-      const distance = Math.hypot(x + 0.5 - half, y + 0.5 - half) / half;
-      let alpha = tipFalloff(distance, brush.hardness);
+      let alpha = tipAlpha((x + 0.5 - half) / half, (y + 0.5 - half) / half, brush);
       if (brush.grain) alpha *= 1 - brush.grain + brush.grain * grainNoise(x, y);
       const index = (y * TIP_SIZE + x) * 4;
       image.data[index] = 255;
@@ -49,7 +48,7 @@ function baseTip(brush) {
 
 /** Brush tip in the paint color, cached per preset + color. */
 export function tintedTip(brush, color) {
-  const key = `${brush.id}:${brush.hardness}:${brush.grain}:${color}`;
+  const key = `${brush.id}:${brush.hardness}:${brush.grain}:${brush.tip || 'round'}:${color}`;
   if (tintedTips.has(key)) return tintedTips.get(key);
   if (tintedTips.size > 48) tintedTips.clear();
   const canvas = makeCanvas(TIP_SIZE, TIP_SIZE);

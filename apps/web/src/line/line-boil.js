@@ -99,6 +99,30 @@ export function normalizeMotionSpeed(value) {
   return Number.isFinite(speed) ? Math.max(0.25, Math.min(4, speed)) : 1;
 }
 
+export function normalizeMotionPulse(value) {
+  const amount = Number(value);
+  return Number.isFinite(amount) ? Math.max(0, Math.min(1, amount)) : 0;
+}
+
+/**
+ * Thickness pulse: the line swells and thins in a wave that travels along it.
+ * Changes only point pressures (so widths), never positions. `amount` 0–1.
+ */
+export function pulseLineWidth(stroke, phase, amount) {
+  const points = stroke.points || [];
+  if (!amount || points.length < 2) return stroke;
+  const seed = (hashId(stroke.id) % 97) / 97 * Math.PI * 2;
+  const last = points.length - 1;
+  return {
+    ...stroke,
+    points: points.map((point, index) => {
+      const along = index / last;
+      const factor = 1 + 0.5 * amount * Math.sin(phase + along * Math.PI * 3 + seed);
+      return { ...point, pressure: Math.max(0.02, Math.min(1, (point.pressure ?? 0.5) * factor)) };
+    }),
+  };
+}
+
 export function normalizeMotionStep(value) {
   const step = Math.round(Number(value) || 0);
   return LINE_MOTION_STEPS.includes(step) ? step : 0;
@@ -129,7 +153,7 @@ export function animateLineStrokes(strokes, settings = {}) {
   const globalPhase = Number(settings.phase) || 0;
   const globalBoil = settings.globalBoil !== false;
   const hasClock = Number.isFinite(Number(settings.elapsedMs)) && settings.elapsedMs !== null;
-  return strokes.map(stroke => {
+  const moveOne = stroke => {
     // A line's own motion style works without the global switch. Lines left at
     // "고정" (none) only move when the global Line Boil is on.
     const ownStyle = stroke.motionStyle && stroke.motionStyle !== 'none' ? stroke.motionStyle : null;
@@ -172,6 +196,16 @@ export function animateLineStrokes(strokes, settings = {}) {
       passes.push({ points: passPoints, alpha: mode === 'redraw' ? [0.28, 0.42, 0.28][pass] : 0.32 });
     }
     return { ...stroke, motionPasses: passes };
+  };
+  return strokes.map(stroke => {
+    const pulse = normalizeMotionPulse(stroke.motionPulse);
+    if (!pulse) return moveOne(stroke);
+    // Thickness pulse runs on the line's own clock (speed/rhythm), with or
+    // without a motion style, and never changes the source stroke.
+    const pulsePhase = hasClock
+      ? lineMotionPhase(settings.elapsedMs, { speed: stroke.motionSpeed, step: stroke.motionStep })
+      : globalPhase;
+    return pulseLineWidth(moveOne(stroke), pulsePhase, pulse);
   });
 }
 export function lineBoilPhase(elapsedMs, speed = 1) {

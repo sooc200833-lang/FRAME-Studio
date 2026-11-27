@@ -157,6 +157,9 @@ output{color:var(--accent);min-width:38px;text-align:right;font-size:12px;font-v
 .brush-card .b-marker::after{height:9px;opacity:.55;border-radius:2px}
 .brush-card .b-chalk::after{height:9px;border-radius:3px;opacity:.85;background:radial-gradient(circle,#ece7dd 0.9px,#24242a 1.3px) 0 0/3px 3px}
 .brush-card .b-crayon::after{height:8px;border-radius:2px;opacity:.9;background:repeating-linear-gradient(90deg,#24242a 0 3px,#24242a66 3px 4px)}
+.brush-card .b-spray::after{height:12px;border-radius:6px;background:radial-gradient(circle,#24242a 0.8px,transparent 1.2px) 0 0/4px 4px,radial-gradient(circle,#24242a 0.6px,transparent 1px) 2px 2px/5px 5px}
+.brush-card .b-sparkle::after{height:12px;background:radial-gradient(circle,#24242a 1.6px,transparent 2px) 0 50%/12px 12px repeat-x}
+.brush-card .b-stipple::after{height:9px;border-radius:4px;background:radial-gradient(circle,#24242a 1.2px,transparent 1.6px) 0 0/5px 4px}
 .brush-card .b-nib::after{height:5px;clip-path:polygon(0 50%,40% 0,100% 40%,100% 60%,40% 100%)}
 .brush-card .b-dry::after{height:7px;opacity:.7;background:repeating-linear-gradient(0deg,#24242a 0 1px,transparent 1px 2.5px)}
 .brush-card.active{background:var(--accent-soft);border-color:var(--accent);color:var(--accent-text)}
