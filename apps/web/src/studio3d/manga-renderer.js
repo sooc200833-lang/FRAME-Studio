@@ -76,6 +76,15 @@ const fragmentShader = /* glsl */ `
   uniform float lineBreakup;
   uniform float lineSketch;
   uniform float lineOpacity;
+  // Line re-draw (boil) step: each step shifts every noise field, so the
+  // same lines come out drawn a little differently.
+  uniform float lineSeed;
+
+  vec2 boilShift() {
+    // Small offsets keep the hash precise (large coordinates lose bits).
+    float s = mod(lineSeed, 97.0);
+    return vec2(fract(s * 0.618034) * 61.0, fract(s * 0.414214) * 47.0);
+  }
 
   float hash(vec2 p) {
     p = fract(p * vec2(123.34, 456.21));
@@ -99,7 +108,7 @@ const fragmentShader = /* glsl */ `
   // Where to look for the edge: a little off the exact spot, so lines wander.
   vec2 wobbled(vec2 uv, float seed) {
     if (lineWobble <= 0.0) return uv;
-    vec2 q = cssPosition(uv) / lineWobbleSize + seed;
+    vec2 q = cssPosition(uv) / lineWobbleSize + seed + boilShift();
     vec2 shift = vec2(noise(q), noise(q + 17.3)) * 2.0 - 1.0;
     return uv + shift * lineWobble * pixelScale / resolution;
   }
@@ -113,7 +122,7 @@ const fragmentShader = /* glsl */ `
     bool centreEmpty = texture2D(tColor, uv).a < 0.01;
     float taper = mix(1.0, clamp(8.0 / max(centre, 1e-3), 0.35, 1.0), lineTaper);
     float jitter = lineJitter > 0.0
-      ? max(0.25, 1.0 + lineJitter * (noise(cssPosition(uv) / (lineWobbleSize * 0.6) + 31.7) * 2.0 - 1.0))
+      ? max(0.25, 1.0 + lineJitter * (noise(cssPosition(uv) / (lineWobbleSize * 0.6) + 31.7 + boilShift()) * 2.0 - 1.0))
       : 1.0;
     float base = inkWidth * widthScale * taper * jitter;
     // Never thinner than the old minimum width (0.5 CSS px).
@@ -166,11 +175,11 @@ const fragmentShader = /* glsl */ `
       // Dry brush: the brush skips in patches.
       float threshold = lineBreakup * 0.75;
       // Small patches, so gaps read as short scratches rather than blots.
-      line *= smoothstep(threshold, threshold + 0.12, noise(css / 5.0 + 5.1));
+      line *= smoothstep(threshold, threshold + 0.12, noise(css / 5.0 + 5.1 + boilShift()));
     }
     if (lineGrain > 0.0) {
       // Pencil tooth: paper grain breaks the line's opacity.
-      line *= mix(1.0, 0.35 + 0.65 * noise(css / 1.3 + 91.7), lineGrain);
+      line *= mix(1.0, 0.35 + 0.65 * noise(css / 1.3 + 91.7 + boilShift()), lineGrain);
     }
     return line * lineOpacity;
   }
@@ -256,6 +265,7 @@ export class MangaRenderer {
         lineBreakup: { value: 0 },
         lineSketch: { value: 0 },
         lineOpacity: { value: 1 },
+        lineSeed: { value: 0 },
       },
     });
     this.quadScene = new Scene();
@@ -317,6 +327,7 @@ export class MangaRenderer {
     uniforms.lineBreakup.value = style.breakup;
     uniforms.lineSketch.value = style.sketch;
     uniforms.lineOpacity.value = style.opacity;
+    uniforms.lineSeed.value = Number(options.lineSeed) || 0;
     uniforms.tone.value = Boolean(options.tone);
     uniforms.toneSize.value = (options.toneSize || 6) * scale;
     uniforms.transparent.value = Boolean(options.transparent);

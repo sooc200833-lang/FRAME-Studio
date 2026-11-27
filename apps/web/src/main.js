@@ -17,7 +17,8 @@ import { animateLineStrokes, lineBoilPhase, normalizeMotionPulse, normalizeMotio
 import { EXPORT_FORMATS, resolveExportPlan } from './export/export-plan.js';
 import { buildProjectDocument, duplicateProjectName, parseProjectDocument, referencedImageKeys, retargetProjectDocument } from './document/project-format.js';
 import { deleteProjectRecord, duplicateProjectRecord, isProjectStorageAvailable, listProjects, loadImageDataUrls, loadProjectRecord, getMeta, requestPersistentStorage, restoreProjectSnapshot, saveProjectRecord, setMeta } from './document/project-store.js';
-import { clipAt, createTimelineDocument, deleteClip, duplicateTrack, ensureClipAt, ensureTrack, insertClipAfter, neighborClipStart, normalizeHold, setClipHold, timelineLength } from './animation/tracks.js';
+import { clipAt, createTimelineDocument, deleteClip, duplicateTrack, ensureClipAt, ensureTrack, insertClipAfter, makeClip, neighborClipStart, normalizeHold, setClipHold, timelineLength } from './animation/tracks.js';
+import { retimeHolds } from './studio3d/camera-animation.js';
 import { applyMatrix, evaluateMotionTrack, invertMatrix, isIdentityMotion, keyframeAt, motionMatrix, removeKeyframe, setKeyframe } from './animation/motion.js';
 import { cloneRasterTransformRecords, composeRasterTransformStack, createTranslationMatrix, createRotationMatrix, rasterizeRasterTransformStack } from './selection/raster-transform.js';
 import { containsSelectionPoint, hitTestSelectionHandle, moveSelectionRect, normalizeSelectionRect, lineStrokeIntersectsPolygon, pointInPolygon, resizeSelectionRectFromHandle, resolveSelectionTargets, transformLineStrokes, transformLineStrokesByMatrix, transformPolygon, translatePolygon, getSelectionPreviewTransform, getPolygonBounds, getPolygonCentroid, hitTestPolygonTransformHandle, resizePolygonFromHandle } from './selection/selection.js';
@@ -4506,6 +4507,10 @@ async function importPendingBackground() {
   });
   const background = await take(BACKGROUND_SLOT);
   const guides = await take(GUIDES_SLOT);
+  if (background?.frames?.length) {
+    await importAnimatedBackground(background);
+    return;
+  }
   if (!background?.blob && !guides?.blob) return;
   try {
     if (playbackActive) setPlaybackEnabled(false);
@@ -4520,6 +4525,46 @@ async function importPendingBackground() {
   } catch (error) {
     console.error('Background import failed:', error);
     showToast('3D 배경을 가져오지 못했어요');
+  }
+}
+
+/**
+ * An animated background (camera keys and/or line re-draw) arrives as frames
+ * with holds. It becomes a new bottom layer whose track holds one clip per
+ * frame, timed for this project's frame rate. Existing layers are untouched.
+ */
+async function importAnimatedBackground(background) {
+  try {
+    if (playbackActive) setPlaybackEnabled(false);
+    const activeLayer = layers[active];
+    saveActiveFrame();
+    const layer = makeLayer(background.name ? `3D 애니메이션 · ${background.name}`.slice(0, 40) : '3D 애니메이션');
+    layer.source3d = linkedScene(background.scene);
+    const timing = retimeHolds(background.frames.map(frame => frame.hold), Number(background.fps) || timeline.fps, timeline.fps);
+    const canvas = document.createElement('canvas');
+    canvas.width = W;
+    canvas.height = H;
+    const context = canvas.getContext('2d');
+    const clips = [];
+    for (const { index, hold } of timing) {
+      const bitmap = await createImageBitmap(background.frames[index].blob);
+      context.clearRect(0, 0, W, H);
+      const rect = containRect(bitmap.width, bitmap.height, W, H);
+      context.drawImage(bitmap, rect.x, rect.y, rect.width, rect.height);
+      bitmap.close?.();
+      clips.push(makeClip(timeline, { hold, cel: canvas.toDataURL('image/png'), strokes: [] }));
+    }
+    timeline.tracks[layer.id] = { id: layer.id, clips };
+    layers.unshift(layer);
+    active = Math.max(0, layers.indexOf(activeLayer));
+    // Loads this layer's clip at the playhead (and leaves other layers as they are).
+    await syncClipsToPlayhead();
+    render(layers.map((_, index) => index));
+    const ticks = clips.reduce((sum, clip) => sum + clip.hold, 0);
+    showToast(`3D 애니메이션을 맨 아래 레이어로 가져왔어요 · 그림 ${clips.length}장, ${ticks}프레임${background.wasEditing ? ' · 원래 레이어는 그대로 있어요' : ''}`);
+  } catch (error) {
+    console.error('Animated background import failed:', error);
+    showToast('3D 애니메이션을 가져오지 못했어요');
   }
 }
 

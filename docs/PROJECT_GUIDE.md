@@ -44,6 +44,15 @@ Always distinguish code-level tests from visual browser checks and physical iPad
 - Freehand vector strokes are no longer left selected after drawing, so brush/color changes apply to the next stroke rather than restyling the previous one.
 - Verified in headless Chrome (layout at 1180×820 and 390×844, synthetic touch pinch/undo, eyedropper). Not yet verified on a physical iPad.
 
+### 3D camera animation and line re-draw (v1.19)
+- 3D studio → **카메라 애니메이션**: frame slider with key markers, ▶ playback, 키 저장 / 키 바꾸기 / 키 삭제, 키 사이 (부드럽게 / 일정하게), 길이 (1–240 frames), 초당 프레임 (8 / 12 / 24), **선 다시 그리기** (끄기, 초당 12 / 8 / 6 / 4장).
+  - A key stores the view on screen at that frame (position, target, FOV, zoom). Between keys values ease with the drawing timeline's curves (`animation/motion.js` `ease`); zoom changes on a log scale.
+  - Line re-draw: the boil step (`boilStep`) seeds the ink noise (`lineSeed` → `boilShift()` in the shader), so each step draws the same lines slightly differently. Same step = identical pixels; preview and sent frames agree. Clean lines don't change.
+  - Camera controls (FOV, projection, ratio, view buttons) start from the view on screen and stay visible until a key is saved; undo, scene open and presets show the keyed frame.
+- `studio3d/camera-animation.js` (pure, tested): keys, `cameraAt`, `boilStep`, `animationFrames` (consecutive identical frames merged into one held frame), `retimeHolds` (fits holds to another fps, same moments in time). Stored as `doc.animation`; older scenes open without keys.
+- 그리기로 보내기 with two or more keys or re-draw on (and 애니메이션으로 보내기 checked): every distinct frame is rendered at 1200 px and handed off as `{ frames: [{ blob, hold }], fps }`. The drawing adds a **new** bottom layer "3D 애니메이션 · …" whose track holds one clip per frame (timed for the project fps), with the scene attached for 3D로 다시 편집.
+- Limits: an animated send never replaces a layer (whole-track replacement can't be undone yet); no perspective guide layer for animations; every frame is a full PNG clip (memory grows with length).
+
 ### Hand-drawn 3D lines (v1.18)
 - 3D studio → 만화 렌더 → **선 스타일**: 깔끔 / 펜선 / 연필 / 붓, plus **손맛** (0–100 %, default 60 %).
   - Outlines (depth jumps) are drawn heavier than folds (normal creases), and distant lines thin out (`taper`, full width within 8 m).

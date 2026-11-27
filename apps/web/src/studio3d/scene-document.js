@@ -5,6 +5,7 @@
 // scene is opened, so a saved scene stays small and portable.
 
 import { DEFAULT_LINE_HAND, normalizeLineHand, normalizeLineStyle } from './line-style.js';
+import { createCameraAnimation, normalizeCameraAnimation } from './camera-animation.js';
 
 export const SCENE_FORMAT = 'frame-3d-scene';
 export const SCENE_VERSION = 1;
@@ -275,6 +276,7 @@ export function createSceneDocument(preset = 'room', { name } = {}) {
     preset: safePreset,
     camera: presetCamera(safePreset),
     render: { ...DEFAULT_RENDER },
+    animation: createCameraAnimation(),
     objects,
     nextId: objects.length + 1,
   };
@@ -347,6 +349,8 @@ export function parseSceneDocument(input) {
         tone: render.tone === true,
         toneSize: clamp(finite(render.toneSize, DEFAULT_RENDER.toneSize), 3, 16),
       },
+      // Optional: scenes from before camera animation open without keys.
+      animation: normalizeCameraAnimation(raw.animation),
       objects,
       nextId: Math.max(finite(raw.nextId, 1), ...numericIds.map(id => id + 1), objects.length + 1),
     },
