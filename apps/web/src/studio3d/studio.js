@@ -13,6 +13,9 @@ import { BACKGROUND_SLOT, EDIT_SLOT, GUIDES_SLOT, putHandoff, takeHandoff } from
 import { applyTransform, buildSceneObject } from './builders.js';
 import { MangaRenderer } from './manga-renderer.js';
 import { LINE_STYLES, LINE_STYLE_IDS } from './line-style.js';
+import {
+  BOIL_RATES, CAMERA_FPS, animationFrames, boilStep, cameraAt, isAnimated, removeCameraKey, setAnimationLength, setCameraKey,
+} from './camera-animation.js';
 import { openingsKey, snapOpening, snapWall, wallOpenings } from './wall-layout.js';
 import { drawPerspectiveGuides, perspectiveGuides } from './perspective.js';
 import {
@@ -43,6 +46,11 @@ let saveTimer = 0;
 // are shared with the undo history, so they are never mutated in place.
 let liveRender = {};
 const objectsById = new Map();
+// Camera animation playhead (frame) and playback; not part of the document.
+let animTick = 0;
+let playing = false;
+let playStartedAt = 0;
+let playStartTick = 0;
 
 // ── Three.js setup ───────────────────────────────────────────────────────────
 
@@ -195,7 +203,12 @@ function syncOrthoFromPerspective() {
   orthographic.updateProjectionMatrix();
 }
 
-function applyCamera() {
+/**
+ * Puts the scene camera on screen. With camera keys (and `animated`), the
+ * view at the animation playhead is shown instead; camera controls pass
+ * `animated: false` so their change stays visible until a key is saved.
+ */
+function applyCamera({ animated = true } = {}) {
   const settings = doc.camera;
   perspective.fov = settings.fov;
   perspective.position.fromArray(settings.position);
@@ -205,7 +218,24 @@ function applyCamera() {
   camera = settings.projection === 'orthographic' ? orthographic : perspective;
   gizmo.camera = camera;
   syncOrthoFromPerspective();
+  if (animated && doc.animation.keys.length) applyView(cameraAt(doc.animation, doc.camera, animTick));
   requestRender();
+}
+
+/** Shows a camera view ({ position, target, fov }) without changing the document. */
+function applyView(view) {
+  perspective.fov = view.fov;
+  perspective.position.fromArray(view.position);
+  orbit.target.fromArray(view.target);
+  perspective.updateProjectionMatrix();
+  orbit.update();
+  syncOrthoFromPerspective();
+  requestRender();
+}
+
+/** The camera as it is on screen now (what 키 저장 stores). */
+function currentView() {
+  return { position: perspective.position.toArray(), target: orbit.target.toArray(), fov: perspective.fov, zoom: doc.camera.zoom };
 }
 
 function storeCamera() {
@@ -227,7 +257,7 @@ function setView(kind) {
   if (kind === 'reset') {
     const fresh = createSceneDocument(doc.preset).camera;
     doc = { ...doc, camera: { ...doc.camera, position: fresh.position, target: fresh.target } };
-    applyCamera();
+    applyCamera({ animated: false });
   } else {
     perspective.position.copy(target).addScaledVector(directions[kind].normalize(), distance);
     orbit.update();
@@ -264,7 +294,9 @@ function requestRender() {
 }
 
 function renderOptions(extra = {}) {
-  return { ...doc.render, ...liveRender, transparent: false, ...extra };
+  const animation = doc.animation;
+  const lineSeed = boilStep(animTick, animation.fps, animation.boil);
+  return { ...doc.render, ...liveRender, transparent: false, lineSeed, ...extra };
 }
 
 function draw() {
@@ -307,7 +339,12 @@ async function renderGuidesPng(width, height) {
   return new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
 }
 
-function loop() {
+function loop(now = performance.now()) {
+  if (playing) {
+    const animation = doc.animation;
+    const tick = Math.floor(playStartTick + ((now - playStartedAt) * animation.fps) / 1000) % animation.length;
+    if (tick !== animTick) showFrame(tick);
+  }
   if (needsRender) {
     needsRender = false;
     draw();
@@ -316,13 +353,17 @@ function loop() {
 }
 
 /** Renders the scene at export size and returns a PNG Blob (no grid, no gizmo). */
-async function renderPng({ longSide, transparent }) {
+async function renderPng({ longSide, transparent, frame = null }) {
   const maxSize = renderer.capabilities.maxTextureSize || 4096;
   const { width, height } = exportSize(doc.camera.ratio, Math.min(longSide, maxSize));
   const target = new WebGLRenderTarget(width, height);
   const viewportWidth = manga.material.uniforms.resolution.value.x;
+  // An animation frame ({ camera, step }) is rendered from its own camera
+  // view and line re-draw step, exactly as the preview shows that frame.
+  if (frame) applyView(frame.camera);
+  const extra = frame ? { lineSeed: frame.step } : {};
   manga.setSize(width, height);
-  manga.render(scene, camera, renderOptions({ transparent, pixelScale: width / Math.max(1, viewportWidth) * renderer.getPixelRatio() }), target);
+  manga.render(scene, camera, renderOptions({ transparent, pixelScale: width / Math.max(1, viewportWidth) * renderer.getPixelRatio(), ...extra }), target);
   const pixels = new Uint8Array(width * height * 4);
   renderer.readRenderTargetPixels(target, 0, 0, width, height, pixels);
   target.dispose();
@@ -535,8 +576,10 @@ function renderSettingsPanel() {
   const { camera: cam, render } = doc;
   $('sceneName').value = doc.name;
   $('projection').value = cam.projection;
-  $('fov').value = cam.fov;
-  $('fovOut').value = `${Math.round(cam.fov)}°`;
+  // With camera keys the view on screen is the animated frame; show its FOV.
+  const shownFov = doc.animation.keys.length ? Math.round(perspective.fov * 10) / 10 : cam.fov;
+  $('fov').value = shownFov;
+  $('fovOut').value = `${Math.round(shownFov)}°`;
   $('fov').disabled = cam.projection === 'orthographic';
   $('ratio').value = cam.ratio;
   $('toon').checked = render.toon;
@@ -556,6 +599,7 @@ function renderSettingsPanel() {
   $('toneSize').value = render.toneSize;
   $('toneSizeOut').value = `${render.toneSize}px`;
   $('toneSize').disabled = !render.tone;
+  renderAnimationPanel();
   $('undo3d').disabled = !history.canUndo;
   $('redo3d').disabled = !history.canRedo;
   for (const button of document.querySelectorAll('[data-mode]')) button.classList.toggle('active', button.dataset.mode === gizmo.mode);
@@ -574,17 +618,132 @@ function changeRender(patch, { rebuildMaterials = false } = {}) {
 
 function changeCamera(patch) {
   const before = doc;
-  doc = { ...doc, camera: { ...doc.camera, ...patch } };
+  // Start from the view on screen (it may be an animated frame), so a
+  // projection/FOV/ratio change does not make the camera jump.
+  const view = currentView();
+  const round = value => Number(value.toFixed(4));
+  doc = { ...doc, camera: { ...doc.camera, position: view.position.map(round), target: view.target.map(round), ...patch } };
   history.record(before);
-  applyCamera();
+  applyCamera({ animated: false });
   layout();
   renderPanels();
   scheduleSave();
 }
 
+// ── Camera animation ─────────────────────────────────────────────────────────
+
+const BOIL_LABELS = { 0: '끄기', 12: '초당 12장', 8: '초당 8장', 6: '초당 6장', 4: '초당 4장' };
+
+/** Moves the animation playhead: camera keys and line re-draw follow. */
+function showFrame(tick) {
+  const animation = doc.animation;
+  animTick = Math.max(0, Math.min(animation.length - 1, Math.round(tick)));
+  if (animation.keys.length) {
+    const view = cameraAt(animation, doc.camera, animTick);
+    applyView(view);
+    if (document.activeElement !== $('fov')) {
+      $('fov').value = Math.round(view.fov * 10) / 10;
+      $('fovOut').value = `${Math.round(view.fov)}°`;
+    }
+  }
+  requestRender();
+  renderAnimationPanel();
+}
+
+function changeAnimation(next) {
+  commit({ ...doc, animation: next });
+  showFrame(animTick);
+}
+
+function setPlaying(on) {
+  playing = on && doc.animation.length > 1;
+  playStartedAt = performance.now();
+  playStartTick = animTick;
+  $('animPlay').textContent = playing ? '■' : '▶';
+  $('animPlay').setAttribute('aria-label', playing ? '정지' : '재생');
+}
+
+function renderAnimationPanel() {
+  const animation = doc.animation;
+  if (animTick > animation.length - 1) animTick = animation.length - 1;
+  const tickInput = $('animTick');
+  tickInput.max = String(Math.max(0, animation.length - 1));
+  tickInput.value = String(animTick);
+  tickInput.disabled = animation.length < 2;
+  $('animTickOut').value = `${animTick + 1} / ${animation.length}`;
+  const key = animation.keys.find(item => item.tick === animTick);
+  const span = Math.max(1, animation.length - 1);
+  // Markers line up with the slider thumb (about 16 px wide).
+  $('animKeys').replaceChildren(...animation.keys.map(item => {
+    const marker = document.createElement('i');
+    marker.style.left = `calc(8px + (100% - 16px) * ${item.tick / span})`;
+    if (item.tick === animTick) marker.className = 'current';
+    return marker;
+  }));
+  $('animKeySave').textContent = key ? '키 바꾸기' : '키 저장';
+  $('animKeyDelete').disabled = !key;
+  if (key && document.activeElement !== $('animEasing')) $('animEasing').value = key.easing;
+  if (document.activeElement !== $('animLength')) $('animLength').value = String(animation.length);
+  $('animFps').value = String(animation.fps);
+  $('animBoil').value = String(animation.boil);
+  const seconds = (animation.length / animation.fps).toFixed(1).replace(/\.0$/, '');
+  $('animHint').textContent = isAnimated(animation)
+    ? `${seconds}초 · 키 ${animation.keys.length}개 · 그리기로 보내면 프레임마다 그려서 배경 트랙에 넣어요`
+    : animation.keys.length === 1
+      ? '키를 하나 더 저장하면 카메라가 그 사이를 움직여요'
+      : '프레임을 고르고 카메라를 맞춘 뒤 키 저장을 누르세요';
+}
+
+function bindAnimationControls() {
+  $('animFps').replaceChildren(...CAMERA_FPS.map(fps => new Option(`${fps}`, String(fps))));
+  $('animBoil').replaceChildren(...BOIL_RATES.map(rate => new Option(BOIL_LABELS[rate], String(rate))));
+  $('animTick').oninput = event => { if (playing) setPlaying(false); showFrame(Number(event.target.value)); };
+  $('animPlay').onclick = () => setPlaying(!playing);
+  $('animKeySave').onclick = () => {
+    const existing = doc.animation.keys.find(item => item.tick === animTick);
+    changeAnimation(setCameraKey(doc.animation, animTick, currentView(), existing ? undefined : $('animEasing').value));
+    toast(existing ? `${animTick + 1}프레임 키를 바꿨어요` : `${animTick + 1}프레임에 키를 저장했어요`);
+  };
+  $('animKeyDelete').onclick = () => changeAnimation(removeCameraKey(doc.animation, animTick));
+  $('animEasing').onchange = event => {
+    // Applies to the key at this frame; otherwise it is used for the next key saved.
+    const key = doc.animation.keys.find(item => item.tick === animTick);
+    if (key) changeAnimation({ ...doc.animation, keys: doc.animation.keys.map(item => (item === key ? { ...item, easing: event.target.value } : item)) });
+  };
+  $('animLength').onchange = event => {
+    const next = setAnimationLength(doc.animation, Number(event.target.value));
+    const dropped = doc.animation.keys.length - next.keys.length;
+    changeAnimation(next);
+    if (dropped) toast(`길이 밖의 키 ${dropped}개를 지웠어요 · 되돌리기 가능`);
+  };
+  $('animFps').onchange = event => changeAnimation({ ...doc.animation, fps: Number(event.target.value) });
+  $('animBoil').onchange = event => changeAnimation({ ...doc.animation, boil: Number(event.target.value) });
+}
+
+/**
+ * Renders every distinct animation frame at the drawing size.
+ * Returns [{ blob, hold }] and the size; `onProgress(done, total)`.
+ */
+async function renderAnimationFrames({ transparent, onProgress }) {
+  const frames = animationFrames(doc.animation, doc.camera);
+  const rendered = [];
+  let size = null;
+  for (let index = 0; index < frames.length; index++) {
+    onProgress?.(index, frames.length);
+    // Let the toast paint between frames.
+    await new Promise(resolve => setTimeout(resolve, 0));
+    const { blob, width, height } = await renderPng({ longSide: 1200, transparent, frame: frames[index] });
+    size = { width, height };
+    rendered.push({ blob, hold: frames[index].hold });
+  }
+  showFrame(animTick);
+  return { frames: rendered, ...size };
+}
+
 // ── Events ───────────────────────────────────────────────────────────────────
 
 function bindControls() {
+  bindAnimationControls();
   $('lineStyle').replaceChildren(...LINE_STYLE_IDS.map(id => new Option(LINE_STYLES[id].label, id)));
   for (const button of document.querySelectorAll('[data-preset]')) {
     button.onclick = () => {
@@ -601,7 +760,8 @@ function bindControls() {
       button.textContent = SCENE_PRESETS[preset];
       selectedId = null;
       const fresh = createSceneDocument(preset);
-      commit({ ...fresh, render: doc.render, camera: { ...fresh.camera, projection: doc.camera.projection, ratio: doc.camera.ratio, fov: doc.camera.fov } });
+      // Keep the look and the animation settings; camera keys belonged to the old scene.
+      commit({ ...fresh, render: doc.render, animation: { ...doc.animation, keys: [] }, camera: { ...fresh.camera, projection: doc.camera.projection, ratio: doc.camera.ratio, fov: doc.camera.fov } });
       applyCamera();
       layout();
       toast(`${SCENE_PRESETS[preset]} 장면으로 새로 시작했어요 · 되돌리기 가능`);
@@ -706,13 +866,25 @@ function bindControls() {
     button.disabled = true;
     try {
       saveNow();
-      // The drawing canvas is 1200×900; render at that long side.
-      const { blob, width, height } = await renderPng({ longSide: 1200, transparent: $('transparent').checked });
-      // The scene travels with the image, so the drawing layer can be re-edited.
-      const replace = editTarget ? { projectId: editTarget.projectId, layerId: editTarget.layerId } : null;
-      await putHandoff(BACKGROUND_SLOT, { blob, width, height, name: doc.name, scene: doc, replace });
-      if ($('sendGuides').checked) {
-        await putHandoff(GUIDES_SLOT, { blob: await renderGuidesPng(width, height), width, height, name: doc.name });
+      setPlaying(false);
+      const transparent = $('transparent').checked;
+      if (isAnimated(doc.animation) && $('sendAnimation').checked) {
+        // Every distinct frame becomes a clip of one new background layer.
+        // Always a new layer: replacing a whole track can't be undone yet.
+        const { frames, width, height } = await renderAnimationFrames({
+          transparent,
+          onProgress: (done, total) => toast(`프레임 그리는 중 ${done + 1} / ${total}`),
+        });
+        await putHandoff(BACKGROUND_SLOT, { frames, fps: doc.animation.fps, width, height, name: doc.name, scene: doc, replace: null, wasEditing: Boolean(editTarget) });
+      } else {
+        // The drawing canvas is 1200×900; render at that long side.
+        const { blob, width, height } = await renderPng({ longSide: 1200, transparent });
+        // The scene travels with the image, so the drawing layer can be re-edited.
+        const replace = editTarget ? { projectId: editTarget.projectId, layerId: editTarget.layerId } : null;
+        await putHandoff(BACKGROUND_SLOT, { blob, width, height, name: doc.name, scene: doc, replace });
+        if ($('sendGuides').checked) {
+          await putHandoff(GUIDES_SLOT, { blob: await renderGuidesPng(width, height), width, height, name: doc.name });
+        }
       }
       if (editTarget) {
         // The layer edit is finished; the studio's own scene stays untouched.

@@ -114,8 +114,29 @@
       <div class="field"><label for="toneSize">톤 간격</label><input id="toneSize" type="range" min="3" max="16" step="1"><output id="toneSizeOut"></output></div>
     </section>
     <section>
+      <h2>카메라 애니메이션</h2>
+      <div class="s3-anim-bar">
+        <button id="animPlay" aria-label="재생">▶</button>
+        <div class="s3-anim-track">
+          <input id="animTick" type="range" min="0" max="23" step="1" aria-label="프레임">
+          <div class="s3-anim-keys" id="animKeys" aria-hidden="true"></div>
+        </div>
+        <output id="animTickOut"></output>
+      </div>
+      <div class="button-grid two">
+        <button id="animKeySave" title="지금 보이는 카메라를 이 프레임의 키로 저장해요">키 저장</button>
+        <button id="animKeyDelete" class="danger">키 삭제</button>
+      </div>
+      <div class="field"><label for="animEasing">키 사이</label><select id="animEasing"><option value="easeInOut">부드럽게</option><option value="linear">일정하게</option></select></div>
+      <div class="field"><label for="animLength">길이</label><input id="animLength" type="number" min="1" max="240" step="1" inputmode="numeric"><output>프레임</output></div>
+      <div class="field"><label for="animFps">초당 프레임</label><select id="animFps"></select></div>
+      <div class="field"><label for="animBoil" title="같은 선을 이 리듬으로 조금씩 다르게 다시 그려요. 선 스타일이 깔끔이면 바뀌지 않아요">선 다시 그리기</label><select id="animBoil"></select></div>
+      <p class="hint" id="animHint"></p>
+    </section>
+    <section>
       <h2>내보내기</h2>
       <label class="check"><input id="transparent" type="checkbox"> 투명 배경</label>
+      <label class="check" title="키가 2개 이상이거나 선 다시 그리기가 켜져 있으면 프레임마다 그려서 보내요"><input id="sendAnimation" type="checkbox" checked> 애니메이션으로 보내기</label>
       <label class="check" title="그리기로 보낼 때 배경 위에 투시선 레이어를 하나 더 만들어요"><input id="sendGuides" type="checkbox" checked> 투시선 레이어도 보내기</label>
       <div class="field"><label for="exportSize">PNG 크기 (긴 변)</label><select id="exportSize"><option value="1200">1200px</option><option value="2400" selected>2400px</option><option value="4000">4000px</option></select></div>
       <p class="hint">PNG는 그림에 쓰고, 장면 파일은 나중에 3D를 다시 고칠 때 써요. 그리기로 보내면 1200px로 맨 아래 레이어에 들어가요.</p>
