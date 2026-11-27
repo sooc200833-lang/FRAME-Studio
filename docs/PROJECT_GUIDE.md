@@ -44,6 +44,12 @@ Always distinguish code-level tests from visual browser checks and physical iPad
 - Freehand vector strokes are no longer left selected after drawing, so brush/color changes apply to the next stroke rather than restyling the previous one.
 - Verified in headless Chrome (layout at 1180×820 and 390×844, synthetic touch pinch/undo, eyedropper). Not yet verified on a physical iPad.
 
+### Webtoon background set (v1.17)
+- 3D studio: 16 more object types (소파, 모니터, 화분, 칠판, 학생 책상, 사물함, 카운터, 진열대, 스툴, 간판, 차양, 자판기, 전봇대, 난간, 벤치, 횡단보도; 32 in total) in new 학교 / 가게 groups.
+- 6 more scenes: 교실, 카페, 사무실, 가게 앞, 골목, 옥상 (10 in total), each with its own starting camera.
+- All shapes are original and built from boxes, cylinders, spheres and cones; no external models.
+- Known: very thin, distant details can ink as dashed lines.
+
 ### Doodraw-style brushes, 3rd pass (v1.16)
 - **굵기 변화** (`motionPulse` 0–1 per line): the line swells and thins in a travelling wave. Only pressures change, never positions. It uses the line's rhythm and speed, works with or without a motion style, and exports like the screen.
 - **손떨림 보정** for vector lines (0–85 %, default 15 %): samples follow a lagging copy of the pen (`stabilizePoint`); pen-up still ends at the real pen position.
