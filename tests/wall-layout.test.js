@@ -22,13 +22,31 @@ test('room preset: the door notches its wall and the window cuts a hole', () => 
   const windowHoles = wallOpenings(doc, back);
   assert.equal(windowHoles.length, 1);
   assert.equal(windowHoles[0].notch, false);
-  // Window is 1.4 m wide on a wall scaled ×2 → 0.7 base units wide.
-  near(windowHoles[0].w, 0.7, 1e-3);
+  // Window is 1.4 m wide on a wall scaled ×2; the hole is 2 cm smaller per
+  // side (the frame overlaps the wall) → 1.36 m → 0.68 base units wide.
+  near(windowHoles[0].w, 0.68, 1e-3);
   near(windowHoles[0].x, 0.4, 1e-3);
   const doorCuts = wallOpenings(doc, side);
   assert.equal(doorCuts.length, 1);
   assert.equal(doorCuts[0].notch, true, 'a door standing on the floor becomes a notch');
   near(doorCuts[0].y - doorCuts[0].h / 2, -1.5, 1e-3);
+});
+
+test('holes are slightly smaller than their frames, so no faces coincide', () => {
+  const doc = createSceneDocument('storefront');
+  const [facade] = wallsOf(doc);
+  const holes = wallOpenings(doc, facade);
+  assert.equal(holes.length, 3, 'two windows and the door');
+  // Facade wall is 4 m × 3 scaled to 12 m: 1 base unit = 3 m along the wall.
+  const unit = 1 / facade.scale[0];
+  const door = holes.find(hole => hole.notch);
+  const windows = holes.filter(hole => !hole.notch);
+  // Door 0.9 m, windows 1.4 × 1.6 = 2.24 m wide: each hole is 4 cm narrower.
+  near(door.w, (0.9 - 0.04) * unit, 1e-3);
+  assert.equal(windows.length, 2);
+  windows.forEach(hole => near(hole.w, (2.24 - 0.04) * unit, 1e-3));
+  // A door on the floor still reaches the wall bottom (no sliver under it).
+  near(door.y - door.h / 2, -1.5, 1e-3);
 });
 
 test('openings ignore walls they do not face or touch, and tilted walls', () => {

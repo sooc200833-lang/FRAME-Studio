@@ -169,12 +169,18 @@ function presetObjects(preset) {
       return [
         object('road', [0, -0.025, 5.5], { rotation: [0, 90 * RAD, 0] }),
         object('floor', [0, 0.05, 0.5], { scale: [1.75, 1, 0.375], color: '#bdb6a9' }),
-        object('box', [0, 3, -4], { scale: [12, 6, 6], color: '#e3ddd2' }),
+        // The facade is a wall, so the door and windows cut real openings and
+        // their outlines ink as solid lines. The building body starts 1.5 m
+        // behind it; the gap is the shop inside.
+        object('wall', [0, 3.1, -1], { scale: [3, 2, 1], color: '#e3ddd2' }),
+        object('box', [0, 3, -5.5], { scale: [12, 6, 6], color: '#e3ddd2' }),
+        object('floor', [0, 0.05, -2], { scale: [1.5, 1, 0.25], color: '#cbbfae' }),
+        object('shopShelf', [-2.5, 0.9, -2.2]),
         object('awning', [0, 2.75, -0.4], { scale: [1.7, 1, 1] }),
-        object('sign', [0, 3.9, -0.93], { scale: [3.2, 1.3, 1], color: '#8a6f55' }),
-        object('door', [0, 1.15, -0.95]),
-        object('window', [-2.5, 1.6, -0.95], { scale: [1.6, 1.3, 1] }),
-        object('window', [2.5, 1.6, -0.95], { scale: [1.6, 1.3, 1] }),
+        object('sign', [0, 3.9, -0.87], { scale: [3.2, 1.3, 1], color: '#8a6f55' }),
+        object('door', [0, 1.15, -1]),
+        object('window', [-2.5, 1.6, -1], { scale: [1.6, 1.3, 1] }),
+        object('window', [2.5, 1.6, -1], { scale: [1.6, 1.3, 1] }),
         object('vendingMachine', [4.9, 1.025, -0.55]),
         object('bench', [-4.8, 0.525, -0.6]),
         object('plant', [1.1, 0.6, -0.6]),
