@@ -49,6 +49,7 @@ Always distinguish code-level tests from visual browser checks and physical iPad
 - 6 more scenes: 교실, 카페, 사무실, 가게 앞, 골목, 옥상 (10 in total), each with its own starting camera.
 - All shapes are original and built from boxes, cylinders, spheres and cones; no external models.
 - Known: very thin, distant details can ink as dashed lines.
+- Fix: the 가게 앞 facade is a `wall` with the door and windows centred in it, so they cut real openings (with a shelf visible inside). Before, they sat on a box face and their outlines inked as dashes.
 
 ### Doodraw-style brushes, 3rd pass (v1.16)
 - **굵기 변화** (`motionPulse` 0–1 per line): the line swells and thins in a travelling wave. Only pressures change, never positions. It uses the line's rhythm and speed, works with or without a motion style, and exports like the screen.
@@ -70,6 +71,7 @@ Always distinguish code-level tests from visual browser checks and physical iPad
 ### 3D studio: walls, openings, perspective guides (v1.14)
 - Doors and windows cut their wall. A door or window that faces along a level wall (within 5°) and sits in it gets an opening.
   - A door standing on the floor becomes a notch in the wall outline; other openings are holes.
+  - Holes are 2 cm smaller per side than the door/window (`FRAME_OVERLAP`), so the frame's outer sides are hidden in the wall instead of lying on the hole's sides (coplanar faces z-fight and ink as dashes).
   - `wallOpenings` is pure and tested. The wall rebuilds as an extruded shape only when its openings change.
 - **벽에 붙이기** (on by default), applied when a drag ends or an object is added:
   - A wall end joins the nearest other wall end within 0.5 m.

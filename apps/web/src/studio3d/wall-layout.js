@@ -10,6 +10,7 @@ const LEVEL = 1e-3; // radians: "not tilted"
 const ALIGN = 5 * Math.PI / 180; // an opening must face the wall within 5°
 const EDGE = 0.01; // m: openings this close to the wall bottom become notches
 const LINTEL = 0.02; // m of wall kept above an opening that reaches the top
+const FRAME_OVERLAP = 0.02; // m of frame hidden in the wall on each cut side
 
 const isLevel = item => Math.abs(item.rotation[0]) < LEVEL && Math.abs(item.rotation[2]) < LEVEL;
 
@@ -60,16 +61,18 @@ export function wallOpenings(doc, wall) {
     const [lx, ly, lz] = toWallLocal(wall, item.position);
     if (Math.abs(lz) > wallD / 2 + 0.25) continue;
     const [ow, oh] = worldSize(item);
-    let left = Math.max(lx - ow / 2, -wallW / 2);
-    let right = Math.min(lx + ow / 2, wallW / 2);
-    let bottom = Math.max(ly - oh / 2, -wallH / 2);
-    let top = Math.min(ly + oh / 2, wallH / 2 - LINTEL);
+    const notch = ly - oh / 2 - -wallH / 2 < EDGE;
+    // The hole is a little smaller than the frame, so the frame's outer sides
+    // sit inside the wall instead of on the hole's sides (coplanar faces
+    // z-fight and ink as dashed lines at an angle).
+    let left = Math.max(lx - ow / 2 + FRAME_OVERLAP, -wallW / 2);
+    let right = Math.min(lx + ow / 2 - FRAME_OVERLAP, wallW / 2);
+    let bottom = notch ? -wallH / 2 : Math.max(ly - oh / 2 + FRAME_OVERLAP, -wallH / 2);
+    let top = Math.min(ly + oh / 2 - FRAME_OVERLAP, wallH / 2 - LINTEL);
     // Keep a sliver of wall at the sides so the outline stays one piece.
     left = Math.max(left, -wallW / 2 + LINTEL);
     right = Math.min(right, wallW / 2 - LINTEL);
     if (right - left < 0.05 || top - bottom < 0.05) continue;
-    const notch = bottom - -wallH / 2 < EDGE;
-    if (notch) bottom = -wallH / 2;
     const rect = { left, right, bottom, top };
     if (accepted.some(other => rect.left < other.right && rect.right > other.left && rect.bottom < other.top && rect.top > other.bottom)) continue;
     accepted.push({ ...rect, notch });
