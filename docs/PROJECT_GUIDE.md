@@ -44,6 +44,16 @@ Always distinguish code-level tests from visual browser checks and physical iPad
 - Freehand vector strokes are no longer left selected after drawing, so brush/color changes apply to the next stroke rather than restyling the previous one.
 - Verified in headless Chrome (layout at 1180×820 and 390×844, synthetic touch pinch/undo, eyedropper). Not yet verified on a physical iPad.
 
+### Hand-drawn 3D lines (v1.18)
+- 3D studio → 만화 렌더 → **선 스타일**: 깔끔 / 펜선 / 연필 / 붓, plus **손맛** (0–100 %, default 60 %).
+  - Outlines (depth jumps) are drawn heavier than folds (normal creases), and distant lines thin out (`taper`, full width within 8 m).
+  - 펜선: lines wander a little and swell/thin along their length. 연필: grey, paper tooth, a second faint sketch line. 붓: heavy, thick–thin, dry-brush gaps.
+  - 손맛 scales only the irregular parts (wobble, thickness change, grain, gaps, sketch line); weights and taper stay.
+- `studio3d/line-style.js` (pure, tested) holds the presets and the shader numbers. The shader in `manga-renderer.js` samples the edge at a noise-shifted position; all noise is in viewport CSS pixels, so a 2400 px PNG matches the screen.
+- With a wider line the depth test compares points further apart, so the jump is divided by the extra width (`spread`); tilted flat surfaces stay clean.
+- New scenes start with 펜선. Saved scenes without `lineStyle` open as 깔끔, exactly as before.
+- Not yet: lines that re-draw over time (boil) for animation, and lines as editable vector strokes.
+
 ### Webtoon background set (v1.17)
 - 3D studio: 16 more object types (소파, 모니터, 화분, 칠판, 학생 책상, 사물함, 카운터, 진열대, 스툴, 간판, 차양, 자판기, 전봇대, 난간, 벤치, 횡단보도; 32 in total) in new 학교 / 가게 groups.
 - 6 more scenes: 교실, 카페, 사무실, 가게 앞, 골목, 옥상 (10 in total), each with its own starting camera.
